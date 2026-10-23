@@ -1,0 +1,11 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Hearth.Application/Hearth.Application.csproj" />
+    <Project Path="src/Hearth.Domain/Hearth.Domain.csproj" />
+    <Project Path="src/Hearth.Infrastructure/Hearth.Infrastructure.csproj" />
+    <Project Path="src/Hearth.Web/Hearth.Web.csproj" />
+  </Folder>
+  <Folder Name="/test/">
+    <Project Path="test/Hearth.Tests/Hearth.Tests.csproj" />
+  </Folder>
+</Solution>
