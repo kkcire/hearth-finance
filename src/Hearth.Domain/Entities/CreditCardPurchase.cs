@@ -18,7 +18,7 @@ public sealed class CreditCardPurchase
         CardBillingRule rule,
         PurchaseCondition condition,
         string description,
-        PurchaseCategory category)
+        ExpenseCategory category)
     {
         Id = id;
         AccountId = accountId;
@@ -57,7 +57,7 @@ public sealed class CreditCardPurchase
 
     public string Description { get; private set; }
 
-    public PurchaseCategory Category { get; private set; }
+    public ExpenseCategory Category { get; private set; }
 
     /// <summary>The cycle of the first installment, according to the purchase date.</summary>
     public BillingCycle FirstCycle => BillingCycle.ForPurchase(Date, Rule);
@@ -72,7 +72,7 @@ public sealed class CreditCardPurchase
         CardBillingRule rule,
         PurchaseCondition condition,
         string description,
-        PurchaseCategory category)
+        ExpenseCategory category)
     {
         if (id == Guid.Empty)
         {
@@ -171,7 +171,7 @@ public sealed class CreditCardPurchase
         Description = ValidateDescription(description);
     }
 
-    public void UpdateCategory(PurchaseCategory category)
+    public void UpdateCategory(ExpenseCategory category)
     {
         ValidateCategory(category);
 
@@ -208,7 +208,7 @@ public sealed class CreditCardPurchase
         return description.Trim();
     }
 
-    private static void ValidateCategory(PurchaseCategory category)
+    private static void ValidateCategory(ExpenseCategory category)
     {
         if (!Enum.IsDefined(category))
         {

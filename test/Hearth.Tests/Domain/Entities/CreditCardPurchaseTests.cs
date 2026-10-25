@@ -19,7 +19,7 @@ public class CreditCardPurchaseTests
     CardBillingRule? rule = null,
     PurchaseCondition? condition = null,
     string description = "Notebook",
-    PurchaseCategory category = PurchaseCategory.Shopping,
+    ExpenseCategory category = ExpenseCategory.Shopping,
     Guid? accountId = null) =>
     CreditCardPurchase.Create(
         Guid.NewGuid(),
@@ -51,7 +51,7 @@ public class CreditCardPurchaseTests
             Rule3,
             PurchaseCondition.Others,
             "  Tênis  ",
-            PurchaseCategory.Personal);
+            ExpenseCategory.Personal);
 
         Assert.Equal(id, purchase.Id);
         Assert.Equal(accountId, purchase.AccountId);
@@ -62,7 +62,7 @@ public class CreditCardPurchaseTests
         Assert.Equal(Rule3, purchase.Rule);
         Assert.Equal(PurchaseCondition.Others, purchase.Condition);
         Assert.Equal("Tênis", purchase.Description);
-        Assert.Equal(PurchaseCategory.Personal, purchase.Category);
+        Assert.Equal(ExpenseCategory.Personal, purchase.Category);
     }
 
     [Fact]
@@ -70,7 +70,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
             Guid.Empty, Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
-            PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
+            PurchaseCondition.Own, "x", ExpenseCategory.Shopping));
     }
 
     [Fact]
@@ -78,7 +78,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, null!,
-            PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
+            PurchaseCondition.Own, "x", ExpenseCategory.Shopping));
     }
 
     [Fact]
@@ -86,7 +86,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
-            null!, "x", PurchaseCategory.Shopping));
+            null!, "x", ExpenseCategory.Shopping));
     }
 
     [Theory]
@@ -147,13 +147,13 @@ public class CreditCardPurchaseTests
     [InlineData(99)]
     public void Create_UnknownCategory_Throws(int category)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => NewPurchase(category: (PurchaseCategory)category));
+        Assert.Throws<ArgumentOutOfRangeException>(() => NewPurchase(category: (ExpenseCategory)category));
     }
 
     [Fact]
     public void Create_AcceptsEveryKnownCategory()
     {
-        foreach (var category in Enum.GetValues<PurchaseCategory>())
+        foreach (var category in Enum.GetValues<ExpenseCategory>())
         {
             var purchase = NewPurchase(category: category);
 
@@ -448,11 +448,11 @@ public class CreditCardPurchaseTests
     [Fact]
     public void UpdateCategory_Changes()
     {
-        var purchase = NewPurchase(category: PurchaseCategory.Shopping);
+        var purchase = NewPurchase(category: ExpenseCategory.Shopping);
 
-        purchase.UpdateCategory(PurchaseCategory.Education);
+        purchase.UpdateCategory(ExpenseCategory.Education);
 
-        Assert.Equal(PurchaseCategory.Education, purchase.Category);
+        Assert.Equal(ExpenseCategory.Education, purchase.Category);
     }
 
     [Theory]
@@ -460,12 +460,12 @@ public class CreditCardPurchaseTests
     [InlineData(99)]
     public void UpdateCategory_Unknown_ThrowsAndKeepsTheCategory(int category)
     {
-        var purchase = NewPurchase(category: PurchaseCategory.Shopping);
+        var purchase = NewPurchase(category: ExpenseCategory.Shopping);
 
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => purchase.UpdateCategory((PurchaseCategory)category));
+            () => purchase.UpdateCategory((ExpenseCategory)category));
 
-        Assert.Equal(PurchaseCategory.Shopping, purchase.Category);
+        Assert.Equal(ExpenseCategory.Shopping, purchase.Category);
     }
 
     [Fact]
@@ -475,10 +475,10 @@ public class CreditCardPurchaseTests
         Assert.True(purchase.IsLockedAt(new DateOnly(2026, 12, 1)));
 
         purchase.UpdateDescription("Notebook Dell");
-        purchase.UpdateCategory(PurchaseCategory.Services);
+        purchase.UpdateCategory(ExpenseCategory.Services);
 
         Assert.Equal("Notebook Dell", purchase.Description);
-        Assert.Equal(PurchaseCategory.Services, purchase.Category);
+        Assert.Equal(ExpenseCategory.Services, purchase.Category);
     }
 
     // ---------- Main invariants ----------

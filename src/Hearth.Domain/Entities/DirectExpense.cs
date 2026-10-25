@@ -14,7 +14,7 @@ public sealed class DirectExpense
         DateOnly date,
         Money amount,
         string description,
-        PurchaseCategory category)
+        ExpenseCategory category)
     {
         Id = id;
         AccountId = accountId;
@@ -35,7 +35,7 @@ public sealed class DirectExpense
 
     public string Description { get; private set; }
 
-    public PurchaseCategory Category { get; private set; }
+    public ExpenseCategory Category { get; private set; }
 
     /// <summary>The calendar month this expense counts toward.</summary>
     public YearMonth Month => YearMonth.From(Date);
@@ -46,7 +46,7 @@ public sealed class DirectExpense
         DateOnly date,
         Money amount,
         string description,
-        PurchaseCategory category)
+        ExpenseCategory category)
     {
         ValidateId(id, nameof(id));
         ValidateId(accountId, nameof(accountId));
@@ -74,7 +74,7 @@ public sealed class DirectExpense
         Description = ValidateDescription(description);
     }
 
-    public void UpdateCategory(PurchaseCategory category)
+    public void UpdateCategory(ExpenseCategory category)
     {
         ValidateCategory(category);
 
@@ -105,7 +105,7 @@ public sealed class DirectExpense
         return description.Trim();
     }
 
-    private static void ValidateCategory(PurchaseCategory category)
+    private static void ValidateCategory(ExpenseCategory category)
     {
         if (!Enum.IsDefined(category))
         {

@@ -3,7 +3,7 @@ namespace Hearth.Domain.ValueObjects;
 /// <summary>
 /// Fixed purchase categories. Values start at 1 so that <c>default</c> (0) is never a valid category.
 /// </summary>
-public enum PurchaseCategory
+public enum ExpenseCategory
 {
     Transport = 1,      // Transporte
     Food = 2,           // Alimentação

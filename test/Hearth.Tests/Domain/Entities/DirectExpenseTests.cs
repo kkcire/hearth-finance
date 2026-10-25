@@ -14,7 +14,7 @@ public class DirectExpenseTests
         DateOnly? date = null,
         decimal amount = 45.90m,
         string description = "Mercado",
-        PurchaseCategory category = PurchaseCategory.Food) =>
+        ExpenseCategory category = ExpenseCategory.Food) =>
         DirectExpense.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -37,28 +37,28 @@ public class DirectExpenseTests
             DefaultDate,
             M(45.90m),
             "  Mercado  ",
-            PurchaseCategory.Food);
+            ExpenseCategory.Food);
 
         Assert.Equal(id, expense.Id);
         Assert.Equal(accountId, expense.AccountId);
         Assert.Equal(DefaultDate, expense.Date);
         Assert.Equal(M(45.90m), expense.Amount);
         Assert.Equal("Mercado", expense.Description);
-        Assert.Equal(PurchaseCategory.Food, expense.Category);
+        Assert.Equal(ExpenseCategory.Food, expense.Category);
     }
 
     [Fact]
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => DirectExpense.Create(
-            Guid.Empty, Guid.NewGuid(), DefaultDate, M(10m), "x", PurchaseCategory.Food));
+            Guid.Empty, Guid.NewGuid(), DefaultDate, M(10m), "x", ExpenseCategory.Food));
     }
 
     [Fact]
     public void Create_EmptyAccountId_Throws()
     {
         Assert.Throws<ArgumentException>(() => DirectExpense.Create(
-            Guid.NewGuid(), Guid.Empty, DefaultDate, M(10m), "x", PurchaseCategory.Food));
+            Guid.NewGuid(), Guid.Empty, DefaultDate, M(10m), "x", ExpenseCategory.Food));
     }
 
     [Theory]
@@ -94,13 +94,13 @@ public class DirectExpenseTests
     public void Create_UnknownCategory_Throws(int category)
     {
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => NewExpense(category: (PurchaseCategory)category));
+            () => NewExpense(category: (ExpenseCategory)category));
     }
 
     [Fact]
     public void Create_AcceptsEveryKnownCategory()
     {
-        foreach (var category in Enum.GetValues<PurchaseCategory>())
+        foreach (var category in Enum.GetValues<ExpenseCategory>())
         {
             var expense = NewExpense(category: category);
 
@@ -212,11 +212,11 @@ public class DirectExpenseTests
     [Fact]
     public void UpdateCategory_Changes()
     {
-        var expense = NewExpense(category: PurchaseCategory.Food);
+        var expense = NewExpense(category: ExpenseCategory.Food);
 
-        expense.UpdateCategory(PurchaseCategory.Transport);
+        expense.UpdateCategory(ExpenseCategory.Transport);
 
-        Assert.Equal(PurchaseCategory.Transport, expense.Category);
+        Assert.Equal(ExpenseCategory.Transport, expense.Category);
     }
 
     [Theory]
@@ -224,12 +224,12 @@ public class DirectExpenseTests
     [InlineData(99)]
     public void UpdateCategory_Unknown_ThrowsAndKeepsTheCategory(int category)
     {
-        var expense = NewExpense(category: PurchaseCategory.Food);
+        var expense = NewExpense(category: ExpenseCategory.Food);
 
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => expense.UpdateCategory((PurchaseCategory)category));
+            () => expense.UpdateCategory((ExpenseCategory)category));
 
-        Assert.Equal(PurchaseCategory.Food, expense.Category);
+        Assert.Equal(ExpenseCategory.Food, expense.Category);
     }
 
     // ---------- Independence between fields ----------
@@ -242,14 +242,14 @@ public class DirectExpenseTests
         var accountId = expense.AccountId;
 
         expense.UpdateAmount(M(10.00m));
-        expense.UpdateCategory(PurchaseCategory.Health);
+        expense.UpdateCategory(ExpenseCategory.Health);
         expense.UpdateDescription("Farmácia");
         expense.UpdateDate(new DateOnly(2026, 11, 20));
 
         Assert.Equal(id, expense.Id);
         Assert.Equal(accountId, expense.AccountId);
         Assert.Equal(M(10.00m), expense.Amount);
-        Assert.Equal(PurchaseCategory.Health, expense.Category);
+        Assert.Equal(ExpenseCategory.Health, expense.Category);
         Assert.Equal("Farmácia", expense.Description);
         Assert.Equal(new DateOnly(2026, 11, 20), expense.Date);
     }
