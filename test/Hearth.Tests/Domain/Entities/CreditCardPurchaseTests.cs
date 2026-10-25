@@ -12,24 +12,26 @@ public class CreditCardPurchaseTests
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
     private static CreditCardPurchase NewPurchase(
-        DateOnly? date = null,
-        decimal amount = 100.00m,
-        int count = 3,
-        int initial = 1,
-        CardBillingRule? rule = null,
-        PurchaseCondition? condition = null,
-        string description = "Notebook",
-        PurchaseCategory category = PurchaseCategory.Shopping) =>
-        CreditCardPurchase.Create(
-            Guid.NewGuid(),
-            date ?? DefaultDate,
-            M(amount),
-            count,
-            initial,
-            rule ?? Rule3,
-            condition ?? PurchaseCondition.Own,
-            description,
-            category);
+    DateOnly? date = null,
+    decimal amount = 100.00m,
+    int count = 3,
+    int initial = 1,
+    CardBillingRule? rule = null,
+    PurchaseCondition? condition = null,
+    string description = "Notebook",
+    PurchaseCategory category = PurchaseCategory.Shopping,
+    Guid? accountId = null) =>
+    CreditCardPurchase.Create(
+        Guid.NewGuid(),
+        accountId ?? Guid.NewGuid(),
+        date ?? DefaultDate,
+        M(amount),
+        count,
+        initial,
+        rule ?? Rule3,
+        condition ?? PurchaseCondition.Own,
+        description,
+        category);
 
     // ---------- Create ----------
 
@@ -37,9 +39,11 @@ public class CreditCardPurchaseTests
     public void Create_StoresTheGivenValues_AndTrimsTheDescription()
     {
         var id = Guid.NewGuid();
+        var accountId = Guid.NewGuid();
 
         var purchase = CreditCardPurchase.Create(
             id,
+            accountId,
             DefaultDate,
             M(250.00m),
             5,
@@ -50,6 +54,7 @@ public class CreditCardPurchaseTests
             PurchaseCategory.Personal);
 
         Assert.Equal(id, purchase.Id);
+        Assert.Equal(accountId, purchase.AccountId);
         Assert.Equal(DefaultDate, purchase.Date);
         Assert.Equal(M(250.00m), purchase.Amount);
         Assert.Equal(5, purchase.InstallmentCount);
@@ -64,21 +69,24 @@ public class CreditCardPurchaseTests
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
-            Guid.Empty, DefaultDate, M(100m), 3, 1, Rule3, PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
+            Guid.Empty, Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
+            PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
     }
 
     [Fact]
     public void Create_NullRule_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
-            Guid.NewGuid(), DefaultDate, M(100m), 3, 1, null!, PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
+            Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, null!,
+            PurchaseCondition.Own, "x", PurchaseCategory.Shopping));
     }
 
     [Fact]
     public void Create_NullCondition_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
-            Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3, null!, "x", PurchaseCategory.Shopping));
+            Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
+            null!, "x", PurchaseCategory.Shopping));
     }
 
     [Theory]
@@ -164,6 +172,12 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentOutOfRangeException>(
             () => NewPurchase(date: new DateOnly(9999, 11, 10), count: 3));
+    }
+
+    [Fact]
+    public void Create_EmptyAccountId_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => NewPurchase(accountId: Guid.Empty));
     }
 
     // ---------- FirstCycle ----------

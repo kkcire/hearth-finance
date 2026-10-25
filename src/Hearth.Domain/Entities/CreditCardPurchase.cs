@@ -10,6 +10,7 @@ public sealed class CreditCardPurchase
 {
     private CreditCardPurchase(
         Guid id,
+        Guid accountId,
         DateOnly date,
         Money amount,
         int installmentCount,
@@ -20,6 +21,7 @@ public sealed class CreditCardPurchase
         PurchaseCategory category)
     {
         Id = id;
+        AccountId = accountId;
         Date = date;
         Amount = amount;
         InstallmentCount = installmentCount;
@@ -31,6 +33,9 @@ public sealed class CreditCardPurchase
     }
 
     public Guid Id { get; }
+
+    /// <summary>The account this purchase belongs to. Prepares the model for multiple accounts.</summary>
+    public Guid AccountId { get; }
 
     /// <summary>The original purchase date. It decides the cycle of the first installment.</summary>
     public DateOnly Date { get; private set; }
@@ -59,6 +64,7 @@ public sealed class CreditCardPurchase
 
     public static CreditCardPurchase Create(
         Guid id,
+        Guid accountId,
         DateOnly date,
         Money amount,
         int installmentCount,
@@ -71,6 +77,11 @@ public sealed class CreditCardPurchase
         if (id == Guid.Empty)
         {
             throw new ArgumentException("The id must not be empty.", nameof(id));
+        }
+
+        if (accountId == Guid.Empty)
+        {
+            throw new ArgumentException("The account id must not be empty.", nameof(accountId));
         }
 
         ArgumentNullException.ThrowIfNull(rule);
@@ -95,7 +106,16 @@ public sealed class CreditCardPurchase
         EnsureConsistent(date, amount, installmentCount, rule);
 
         return new CreditCardPurchase(
-            id, date, amount, installmentCount, initialInstallment, rule, condition, validDescription, category);
+            id,
+            accountId,
+            date,
+            amount,
+            installmentCount,
+            initialInstallment,
+            rule,
+            condition,
+            validDescription,
+            category);
     }
 
     /// <summary>
