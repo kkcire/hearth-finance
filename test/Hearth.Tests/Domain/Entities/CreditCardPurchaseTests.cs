@@ -6,7 +6,7 @@ namespace Hearth.Tests.Domain.Entities;
 
 public class CreditCardPurchaseTests
 {
-    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3);
+    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
     private static readonly DateOnly DefaultDate = new(2026, 10, 10);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);

@@ -34,9 +34,24 @@ public sealed record BillingCycle
     /// <summary>The last day covered by this cycle: the day before the closing date.</summary>
     public DateOnly EndDate => ClosingDate.AddDays(-1);
 
+    /// <summary>
+    /// The date the invoice is due: the first occurrence of the due day after the closing date.
+    /// It is in the closing month when the due day comes after the closing day, and in the
+    /// following month otherwise (including when both days are equal).
+    /// </summary>
+    public DateOnly DueDate
+    {
+        get
+        {
+            var dueMonth = Rule.DueDay > Rule.ClosingDay ? ClosingMonth : ClosingMonth.AddMonths(1);
+            return new DateOnly(dueMonth.Year, dueMonth.Month, Rule.DueDay);
+        }
+    }
+
     /// <summary>Returns the cycle that closes in the given month.</summary>
     /// <exception cref="ArgumentOutOfRangeException">
-    /// The month is the first supported month, which has no previous month to start the cycle in.
+    /// The month is the first supported month, which has no previous month to start the cycle in,
+    /// or the last supported month with a due day that would fall in the year after it.
     /// </exception>
     public static BillingCycle Closing(YearMonth closingMonth, CardBillingRule rule)
     {
@@ -49,6 +64,15 @@ public sealed record BillingCycle
                 nameof(closingMonth),
                 closingMonth,
                 "A cycle needs a previous month to start in, so the first supported month cannot be a closing month.");
+        }
+
+        var isLastSupportedMonth = closingMonth.Year == YearMonth.MaxYear && closingMonth.Month == 12;
+        if (isLastSupportedMonth && rule.DueDay <= rule.ClosingDay)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(closingMonth),
+                closingMonth,
+                "The due date of the last supported month would fall outside the supported years.");
         }
 
         return new BillingCycle(closingMonth, rule);

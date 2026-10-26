@@ -7,7 +7,7 @@ namespace Hearth.Tests.Domain.Entities;
 public class AccountTests
 {
     private static readonly DateOnly DefaultDate = new(2026, 10, 1);
-    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3);
+    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
@@ -191,9 +191,9 @@ public class AccountTests
         var account = NewAccount();
         var id = account.Id;
 
-        account.ChangeBillingRule(CardBillingRule.Of(15));
+        account.ChangeBillingRule(CardBillingRule.Of(15, 15));
 
-        Assert.Equal(CardBillingRule.Of(15), account.BillingRule);
+        Assert.Equal(CardBillingRule.Of(15, 15), account.BillingRule);
         Assert.Equal(id, account.Id);
         Assert.Equal("Conta principal", account.Name);
         Assert.Equal(M(1500.00m), account.InitialBalance);
@@ -214,11 +214,11 @@ public class AccountTests
     public void ChangeBillingRule_MovesTheFreezeDayOfFixedExpenses()
     {
         // The freeze day of fixed expenses is the closing day of the account's card.
-        var account = NewAccount(rule: CardBillingRule.Of(3));
+        var account = NewAccount(rule: CardBillingRule.Of(3, 3));
         var today = new DateOnly(2026, 10, 10);
 
         var before = FixedExpense.FirstOpenMonth(today, account.BillingRule);
-        account.ChangeBillingRule(CardBillingRule.Of(15));
+        account.ChangeBillingRule(CardBillingRule.Of(15, 15));
         var after = FixedExpense.FirstOpenMonth(today, account.BillingRule);
 
         Assert.Equal(YearMonth.Of(2026, 11), before);
@@ -288,7 +288,7 @@ public class AccountTests
                     account.UpdateInitialBalance(modelBalance);
                     break;
                 default:
-                    modelRule = CardBillingRule.Of(random.Next(1, 29));
+                    modelRule = CardBillingRule.Of(random.Next(1, 29), random.Next(1, 29));
                     account.ChangeBillingRule(modelRule);
                     break;
             }

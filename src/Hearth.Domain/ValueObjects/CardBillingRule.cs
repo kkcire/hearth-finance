@@ -8,10 +8,13 @@ public sealed record CardBillingRule
 {
     public const int MinClosingDay = 1;
     public const int MaxClosingDay = 28;
+    public const int MinDueDay = 1;
+    public const int MaxDueDay = 28;
 
-    private CardBillingRule(int closingDay)
+    private CardBillingRule(int closingDay, int dueDay)
     {
         ClosingDay = closingDay;
+        DueDay = dueDay;
     }
 
     /// <summary>
@@ -22,11 +25,18 @@ public sealed record CardBillingRule
     public int ClosingDay { get; }
 
     /// <summary>
-    /// Creates a billing rule. The closing day must exist in every month of the year,
-    /// so it is limited to 1 through 28.
+    /// Day of the month on which the invoice is due. It is the first occurrence of this day
+    /// after the closing date, so a due day that is not after the closing day falls in the
+    /// following month.
     /// </summary>
-    /// <exception cref="ArgumentOutOfRangeException">The closing day is outside 1 to 28.</exception>
-    public static CardBillingRule Of(int closingDay)
+    public int DueDay { get; }
+
+    /// <summary>
+    /// Creates a billing rule. Both days must exist in every month of the year,
+    /// so they are limited to 1 through 28.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A day is outside 1 to 28.</exception>
+    public static CardBillingRule Of(int closingDay, int dueDay)
     {
         if (closingDay < MinClosingDay || closingDay > MaxClosingDay)
         {
@@ -36,6 +46,14 @@ public sealed record CardBillingRule
                 $"The closing day must be between {MinClosingDay} and {MaxClosingDay}.");
         }
 
-        return new CardBillingRule(closingDay);
+        if (dueDay < MinDueDay || dueDay > MaxDueDay)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(dueDay),
+                dueDay,
+                $"The due day must be between {MinDueDay} and {MaxDueDay}.");
+        }
+
+        return new CardBillingRule(closingDay, dueDay);
     }
 }

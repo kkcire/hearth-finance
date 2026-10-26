@@ -6,7 +6,7 @@ namespace Hearth.Tests.Domain.Entities;
 
 public class FixedExpenseTests
 {
-    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3);
+    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
     private static readonly YearMonth DefaultStart = YearMonth.Of(2026, 1);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
@@ -167,7 +167,7 @@ public class FixedExpenseTests
     public void FirstOpenMonth_FollowsTheClosingDayOfTheGivenRule(
         int closingDay, int year, int month, int day, int expectedYear, int expectedMonth)
     {
-        var result = FixedExpense.FirstOpenMonth(Day(year, month, day), CardBillingRule.Of(closingDay));
+        var result = FixedExpense.FirstOpenMonth(Day(year, month, day), CardBillingRule.Of(closingDay, closingDay));
 
         Assert.Equal(YM(expectedYear, expectedMonth), result);
     }
@@ -290,7 +290,7 @@ public class FixedExpenseTests
     [Fact]
     public void ChangeAmount_FollowsTheClosingDayOfTheGivenRule()
     {
-        var rule15 = CardBillingRule.Of(15);
+        var rule15 = CardBillingRule.Of(15, 15);
         var expense = NewExpense(start: YM(2026, 1));
 
         // With closing day 3 this would already apply from November.
@@ -824,7 +824,7 @@ public class FixedExpenseTests
     [InlineData(28)]
     public void ChangeAmount_EffectiveMonthIsTheFirstOpenMonth_ForEveryDayOfThreeYears(int closingDay)
     {
-        var rule = CardBillingRule.Of(closingDay);
+        var rule = CardBillingRule.Of(closingDay, closingDay);
         var lastDate = Day(2028, 12, 31);
 
         for (var today = Day(2026, 1, 1); today <= lastDate; today = today.AddDays(1))
@@ -850,7 +850,7 @@ public class FixedExpenseTests
     [InlineData(28)]
     public void FrozenMonths_NeverChange_UnderRandomOperations(int closingDay)
     {
-        var rule = CardBillingRule.Of(closingDay);
+        var rule = CardBillingRule.Of(closingDay, closingDay);
         var random = new Random(20261025 + closingDay);
         var start = YM(2026, 1);
         var expense = NewExpense(start: start, amount: 1000.00m);

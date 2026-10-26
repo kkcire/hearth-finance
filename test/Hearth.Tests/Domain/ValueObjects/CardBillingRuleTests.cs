@@ -14,7 +14,7 @@ public class CardBillingRuleTests
     [InlineData(28)]
     public void Of_AcceptsClosingDayFromOneToTwentyEight(int closingDay)
     {
-        var rule = CardBillingRule.Of(closingDay);
+        var rule = CardBillingRule.Of(closingDay, closingDay);
 
         Assert.Equal(closingDay, rule.ClosingDay);
     }
@@ -28,7 +28,7 @@ public class CardBillingRuleTests
     [InlineData(int.MaxValue)]
     public void Of_RejectsClosingDayOutsideOneToTwentyEight(int closingDay)
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(closingDay));
+        Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(closingDay, closingDay));
     }
 
     [Fact]
@@ -43,8 +43,8 @@ public class CardBillingRuleTests
     [Fact]
     public void Equality_SameClosingDay_AreEqualWithSameHash()
     {
-        var a = CardBillingRule.Of(3);
-        var b = CardBillingRule.Of(3);
+        var a = CardBillingRule.Of(3, 3);
+        var b = CardBillingRule.Of(3, 3);
 
         Assert.Equal(a, b);
         Assert.True(a == b);
@@ -54,8 +54,8 @@ public class CardBillingRuleTests
     [Fact]
     public void Equality_DifferentClosingDay_AreNotEqual()
     {
-        Assert.NotEqual(CardBillingRule.Of(3), CardBillingRule.Of(4));
-        Assert.True(CardBillingRule.Of(3) != CardBillingRule.Of(4));
+        Assert.NotEqual(CardBillingRule.Of(3, 3), CardBillingRule.Of(4, 4));
+        Assert.True(CardBillingRule.Of(3, 3) != CardBillingRule.Of(4, 4));
     }
 
     // ---------- Main invariant ----------
@@ -65,7 +65,7 @@ public class CardBillingRuleTests
     {
         for (var day = CardBillingRule.MinClosingDay; day <= CardBillingRule.MaxClosingDay; day++)
         {
-            var rule = CardBillingRule.Of(day);
+            var rule = CardBillingRule.Of(day, day);
 
             Assert.True(rule.ClosingDay == day, $"Closing day {day} was not preserved");
         }
@@ -73,13 +73,13 @@ public class CardBillingRuleTests
         for (var day = -100; day < CardBillingRule.MinClosingDay; day++)
         {
             var invalid = day;
-            Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(invalid));
+            Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(invalid, invalid));
         }
 
         for (var day = CardBillingRule.MaxClosingDay + 1; day <= 100; day++)
         {
             var invalid = day;
-            Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(invalid));
+            Assert.Throws<ArgumentOutOfRangeException>(() => CardBillingRule.Of(invalid, invalid));
         }
     }
 
@@ -91,7 +91,7 @@ public class CardBillingRuleTests
         {
             for (var month = 1; month <= 12; month++)
             {
-                var rule = CardBillingRule.Of(CardBillingRule.MaxClosingDay);
+                var rule = CardBillingRule.Of(CardBillingRule.MaxClosingDay, CardBillingRule.MaxClosingDay);
 
                 var exception = Record.Exception(() => new DateOnly(year, month, rule.ClosingDay));
 
