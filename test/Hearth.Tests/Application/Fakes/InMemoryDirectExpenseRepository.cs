@@ -39,6 +39,12 @@ internal sealed class InMemoryDirectExpenseRepository : IDirectExpenseRepository
         return Task.FromResult(result);
     }
 
+    public Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        LastCancellationToken = cancellationToken;
+        return Task.FromResult(_expenses.Values.Any(expense => expense.CategoryId == categoryId));
+    }
+
     public Task UpdateAsync(DirectExpense expense, CancellationToken cancellationToken = default)
     {
         LastCancellationToken = cancellationToken;

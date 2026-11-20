@@ -27,7 +27,7 @@ public class RevertFixedExpensePaymentHandlerTests
             null,
             Money.FromDecimal(1000.00m),
             "Aluguel",
-            ExpenseCategory.Services);
+            Guid.NewGuid());
 
         if (paid)
         {

@@ -23,12 +23,12 @@ public class ProjectedResultCalculatorTests
 
     private static DirectExpense NewDirect(DateOnly date, decimal amount, Guid? accountId = null) =>
         DirectExpense.Create(
-            Guid.NewGuid(), accountId ?? AccountId, date, M(amount), "Mercado", ExpenseCategory.Food);
+            Guid.NewGuid(), accountId ?? AccountId, date, M(amount), "Mercado", Guid.NewGuid());
 
     private static FixedExpense NewFixed(
         YearMonth start, YearMonth? end, decimal amount, Guid? accountId = null) =>
         FixedExpense.Create(
-            Guid.NewGuid(), accountId ?? AccountId, start, end, M(amount), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), accountId ?? AccountId, start, end, M(amount), "Aluguel", Guid.NewGuid());
 
     private static CreditCardPurchase NewPurchase(
         DateOnly date,
@@ -47,7 +47,7 @@ public class ProjectedResultCalculatorTests
             rule ?? Rule3,
             PurchaseCondition.Own,
             "Compra",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
     private static ProjectedResult Calc(
         YearMonth month,

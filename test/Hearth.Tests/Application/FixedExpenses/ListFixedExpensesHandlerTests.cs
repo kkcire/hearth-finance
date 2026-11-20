@@ -37,16 +37,16 @@ public class ListFixedExpensesHandlerTests
         var otherAccount = await SeedAccountAsync("Outra");
 
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", Guid.NewGuid());
         rent.ChangeAmount(Money.FromDecimal(1200.00m), new DateOnly(2026, 6, 10), CardBillingRule.Of(3, 12));
         rent.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 5));
         rent.MarkAsPaid(YearMonth.Of(2026, 6), new DateOnly(2026, 6, 5));
 
         var internet = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 5), YearMonth.Of(2026, 12), Money.FromDecimal(99.90m), "Internet", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 5), YearMonth.Of(2026, 12), Money.FromDecimal(99.90m), "Internet", Guid.NewGuid());
 
         var other = FixedExpense.Create(
-            Guid.NewGuid(), otherAccount.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(500.00m), "Outro", ExpenseCategory.Personal);
+            Guid.NewGuid(), otherAccount.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(500.00m), "Outro", Guid.NewGuid());
 
         await _fixedExpenses.AddAsync(rent);
         await _fixedExpenses.AddAsync(internet);

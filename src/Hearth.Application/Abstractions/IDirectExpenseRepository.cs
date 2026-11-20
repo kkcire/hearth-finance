@@ -12,6 +12,8 @@ public interface IDirectExpenseRepository
         Guid accountId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
     Task UpdateAsync(DirectExpense expense, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(DirectExpense expense, CancellationToken cancellationToken = default);

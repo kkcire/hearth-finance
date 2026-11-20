@@ -34,7 +34,7 @@ public class InvoiceCalculatorTests
             rule ?? Rule3,
             condition ?? PurchaseCondition.Own,
             "Compra",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
     private static Money Calc(YearMonth closingMonth, params CreditCardPurchase[] purchases) =>
         InvoiceCalculator.Calculate(AccountId, closingMonth, purchases);

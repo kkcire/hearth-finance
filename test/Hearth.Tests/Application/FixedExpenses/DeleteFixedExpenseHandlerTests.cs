@@ -30,7 +30,7 @@ public class DeleteFixedExpenseHandlerTests
             null,
             Money.FromDecimal(1000.00m),
             "Aluguel",
-            ExpenseCategory.Services);
+            Guid.NewGuid());
 
         if (withPayment)
         {

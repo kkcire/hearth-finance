@@ -50,7 +50,7 @@ public sealed class Account
         CardBillingRule billingRule)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
-        var validName = DomainValidation.ValidateRequiredText(name, nameof(name));
+        var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
         ArgumentNullException.ThrowIfNull(billingRule);
 
         return new Account(id, validName, initialBalance, initialBalanceDate, billingRule);
@@ -71,7 +71,7 @@ public sealed class Account
 
     public void Rename(string name)
     {
-        Name = DomainValidation.ValidateRequiredText(name, nameof(name));
+        Name = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
     }
 
     /// <summary>

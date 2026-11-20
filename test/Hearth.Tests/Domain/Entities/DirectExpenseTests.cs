@@ -7,6 +7,7 @@ namespace Hearth.Tests.Domain.Entities;
 public class DirectExpenseTests
 {
     private static readonly DateOnly DefaultDate = new(2026, 10, 10);
+    private static readonly Guid DefaultCategoryId = Guid.NewGuid();
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
@@ -14,14 +15,14 @@ public class DirectExpenseTests
         DateOnly? date = null,
         decimal amount = 45.90m,
         string description = "Mercado",
-        ExpenseCategory category = ExpenseCategory.Food) =>
+        Guid? categoryId = null) =>
         DirectExpense.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
             date ?? DefaultDate,
             M(amount),
             description,
-            category);
+            categoryId ?? DefaultCategoryId);
 
     // ---------- Create ----------
 
@@ -30,6 +31,7 @@ public class DirectExpenseTests
     {
         var id = Guid.NewGuid();
         var accountId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
 
         var expense = DirectExpense.Create(
             id,
@@ -37,28 +39,28 @@ public class DirectExpenseTests
             DefaultDate,
             M(45.90m),
             "  Mercado  ",
-            ExpenseCategory.Food);
+            categoryId);
 
         Assert.Equal(id, expense.Id);
         Assert.Equal(accountId, expense.AccountId);
         Assert.Equal(DefaultDate, expense.Date);
         Assert.Equal(M(45.90m), expense.Amount);
         Assert.Equal("Mercado", expense.Description);
-        Assert.Equal(ExpenseCategory.Food, expense.Category);
+        Assert.Equal(categoryId, expense.CategoryId);
     }
 
     [Fact]
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => DirectExpense.Create(
-            Guid.Empty, Guid.NewGuid(), DefaultDate, M(10m), "x", ExpenseCategory.Food));
+            Guid.Empty, Guid.NewGuid(), DefaultDate, M(10m), "x", DefaultCategoryId));
     }
 
     [Fact]
     public void Create_EmptyAccountId_Throws()
     {
         Assert.Throws<ArgumentException>(() => DirectExpense.Create(
-            Guid.NewGuid(), Guid.Empty, DefaultDate, M(10m), "x", ExpenseCategory.Food));
+            Guid.NewGuid(), Guid.Empty, DefaultDate, M(10m), "x", DefaultCategoryId));
     }
 
     [Theory]
@@ -87,25 +89,10 @@ public class DirectExpenseTests
         Assert.ThrowsAny<ArgumentException>(() => NewExpense(description: description!));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(99)]
-    public void Create_UnknownCategory_Throws(int category)
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => NewExpense(category: (ExpenseCategory)category));
-    }
-
     [Fact]
-    public void Create_AcceptsEveryKnownCategory()
+    public void Create_EmptyCategoryId_Throws()
     {
-        foreach (var category in Enum.GetValues<ExpenseCategory>())
-        {
-            var expense = NewExpense(category: category);
-
-            Assert.Equal(category, expense.Category);
-        }
+        Assert.Throws<ArgumentException>(() => NewExpense(categoryId: Guid.Empty));
     }
 
     [Fact]
@@ -212,24 +199,24 @@ public class DirectExpenseTests
     [Fact]
     public void UpdateCategory_Changes()
     {
-        var expense = NewExpense(category: ExpenseCategory.Food);
+        var originalCategory = Guid.NewGuid();
+        var newCategory = Guid.NewGuid();
+        var expense = NewExpense(categoryId: originalCategory);
 
-        expense.UpdateCategory(ExpenseCategory.Transport);
+        expense.UpdateCategory(newCategory);
 
-        Assert.Equal(ExpenseCategory.Transport, expense.Category);
+        Assert.Equal(newCategory, expense.CategoryId);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(99)]
-    public void UpdateCategory_Unknown_ThrowsAndKeepsTheCategory(int category)
+    [Fact]
+    public void UpdateCategory_Empty_ThrowsAndKeepsTheCategory()
     {
-        var expense = NewExpense(category: ExpenseCategory.Food);
+        var originalCategory = Guid.NewGuid();
+        var expense = NewExpense(categoryId: originalCategory);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => expense.UpdateCategory((ExpenseCategory)category));
+        Assert.Throws<ArgumentException>(() => expense.UpdateCategory(Guid.Empty));
 
-        Assert.Equal(ExpenseCategory.Food, expense.Category);
+        Assert.Equal(originalCategory, expense.CategoryId);
     }
 
     // ---------- Independence between fields ----------
@@ -237,19 +224,20 @@ public class DirectExpenseTests
     [Fact]
     public void Updates_DoNotAffectTheOtherFields()
     {
+        var newCategory = Guid.NewGuid();
         var expense = NewExpense();
         var id = expense.Id;
         var accountId = expense.AccountId;
 
         expense.UpdateAmount(M(10.00m));
-        expense.UpdateCategory(ExpenseCategory.Health);
+        expense.UpdateCategory(newCategory);
         expense.UpdateDescription("Farmácia");
         expense.UpdateDate(new DateOnly(2026, 11, 20));
 
         Assert.Equal(id, expense.Id);
         Assert.Equal(accountId, expense.AccountId);
         Assert.Equal(M(10.00m), expense.Amount);
-        Assert.Equal(ExpenseCategory.Health, expense.Category);
+        Assert.Equal(newCategory, expense.CategoryId);
         Assert.Equal("Farmácia", expense.Description);
         Assert.Equal(new DateOnly(2026, 11, 20), expense.Date);
     }

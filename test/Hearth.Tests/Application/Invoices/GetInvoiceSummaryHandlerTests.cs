@@ -48,7 +48,7 @@ public class GetInvoiceSummaryHandlerTests
             account.BillingRule,
             PurchaseCondition.Own,
             "Supermercado",
-            ExpenseCategory.Food);
+            Guid.NewGuid());
 
         var p2 = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -60,7 +60,7 @@ public class GetInvoiceSummaryHandlerTests
             account.BillingRule,
             PurchaseCondition.Custom("Viagem"),
             "Passagem",
-            ExpenseCategory.Transport);
+            Guid.NewGuid());
 
         // Purchase in progress: 6x starting at installment 5 -> Nov is installment 4 (previously paid), ignored.
         var previouslyPaid = CreditCardPurchase.Create(
@@ -73,7 +73,7 @@ public class GetInvoiceSummaryHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Antiga",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
         var otherPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -85,7 +85,7 @@ public class GetInvoiceSummaryHandlerTests
             otherAccount.BillingRule,
             PurchaseCondition.Own,
             "Outra conta",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
         await _purchases.AddAsync(p1);
         await _purchases.AddAsync(p2);
@@ -146,7 +146,7 @@ public class GetInvoiceSummaryHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Farmacia",
-            ExpenseCategory.Health);
+            Guid.NewGuid());
         await _purchases.AddAsync(purchase);
 
         var expectedCycle = BillingCycle.Closing(YearMonth.Of(2026, 11), account.BillingRule);

@@ -61,7 +61,8 @@ public sealed class Income
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "income amount");
-        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
+        var validDescription = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
 
         return new Income(id, accountId, expectedDate, amount, validDescription);
     }
@@ -112,6 +113,7 @@ public sealed class Income
 
     public void UpdateDescription(string description)
     {
-        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
+        Description = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
     }
 }

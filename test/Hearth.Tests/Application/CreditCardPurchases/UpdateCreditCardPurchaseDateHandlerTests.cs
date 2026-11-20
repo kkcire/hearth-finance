@@ -43,7 +43,7 @@ public class UpdateCreditCardPurchaseDateHandlerTests
             account.BillingRule,
             PurchaseCondition.Own,
             "Compra",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
         await _purchases.AddAsync(purchase);
 
         return purchase;
@@ -99,6 +99,20 @@ public class UpdateCreditCardPurchaseDateHandlerTests
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 10, 18))));
 
+        Assert.Equal(0, _purchases.UpdateCount);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NewDateMovesIntoClosedCycle_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        // Today is 20/10/2026, closing day 3 -> 02/10/2026 belongs to Oct cycle which closed on 03/10/2026.
+        var purchase = await SeedAsync();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 10, 2))));
+
+        Assert.Equal(new DateOnly(2026, 10, 10), purchase.Date);
         Assert.Equal(0, _purchases.UpdateCount);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }

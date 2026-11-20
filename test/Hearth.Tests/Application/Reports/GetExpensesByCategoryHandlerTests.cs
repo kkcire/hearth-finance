@@ -10,6 +10,7 @@ namespace Hearth.Tests.Application.Reports;
 public class GetExpensesByCategoryHandlerTests
 {
     private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
@@ -19,6 +20,7 @@ public class GetExpensesByCategoryHandlerTests
     {
         _handler = new GetExpensesByCategoryHandler(
             _accounts,
+            _categories,
             _directExpenses,
             _fixedExpenses,
             _purchases);
@@ -36,19 +38,31 @@ public class GetExpensesByCategoryHandlerTests
         return account;
     }
 
+    private async Task<Category> SeedCategoryAsync(Guid accountId, string name)
+    {
+        var category = Category.Create(Guid.NewGuid(), accountId, name);
+        await _categories.AddAsync(category);
+        return category;
+    }
+
     [Fact]
-    public async Task ExecuteAsync_WithDefaultFilters_ReturnsAllSourcesGroupedByCategory()
+    public async Task ExecuteAsync_WithDefaultFilters_ReturnsAllSourcesGroupedByCategoryWithNames()
     {
         var account = await SeedAccountAsync("Minha");
         var otherAccount = await SeedAccountAsync("Outra");
 
+        var food = await SeedCategoryAsync(account.Id, "Alimentação");
+        var services = await SeedCategoryAsync(account.Id, "Serviços");
+        var shopping = await SeedCategoryAsync(account.Id, "Compras");
+        var otherFood = await SeedCategoryAsync(otherAccount.Id, "Alimentação");
+
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(120.00m), "Mercado", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(120.00m), "Mercado", food.Id);
         var otherDirect = DirectExpense.Create(
-            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(900.00m), "Outro", ExpenseCategory.Food);
+            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(900.00m), "Outro", otherFood.Id);
 
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", services.Id);
 
         var ownPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -60,7 +74,7 @@ public class GetExpensesByCategoryHandlerTests
             account.BillingRule,
             PurchaseCondition.Own,
             "Restaurante",
-            ExpenseCategory.Food);
+            food.Id);
 
         var othersPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -72,7 +86,7 @@ public class GetExpensesByCategoryHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Compra de terceiro",
-            ExpenseCategory.Shopping);
+            shopping.Id);
 
         await _directExpenses.AddAsync(direct);
         await _directExpenses.AddAsync(otherDirect);
@@ -91,27 +105,53 @@ public class GetExpensesByCategoryHandlerTests
         Assert.Equal(1500.00m, dto.Total);
 
         Assert.Equal(3, dto.Categories.Count);
-        Assert.Equal(ExpenseCategory.Services, dto.Categories[0].Category);
+        Assert.Equal(services.Id, dto.Categories[0].CategoryId);
+        Assert.Equal("Serviços", dto.Categories[0].CategoryName);
         Assert.Equal(1000.00m, dto.Categories[0].Total);
 
-        Assert.Equal(ExpenseCategory.Shopping, dto.Categories[1].Category);
+        Assert.Equal(shopping.Id, dto.Categories[1].CategoryId);
+        Assert.Equal("Compras", dto.Categories[1].CategoryName);
         Assert.Equal(300.00m, dto.Categories[1].CardInstallments);
 
-        Assert.Equal(ExpenseCategory.Food, dto.Categories[2].Category);
+        Assert.Equal(food.Id, dto.Categories[2].CategoryId);
+        Assert.Equal("Alimentação", dto.Categories[2].CategoryName);
         Assert.Equal(120.00m, dto.Categories[2].DirectExpenses);
         Assert.Equal(80.00m, dto.Categories[2].CardInstallments);
         Assert.Equal(200.00m, dto.Categories[2].Total);
     }
 
     [Fact]
+    public async Task ExecuteAsync_ArchivedCategoryStillAppearsInHistoricalReport()
+    {
+        var account = await SeedAccountAsync();
+        var college = await SeedCategoryAsync(account.Id, "Faculdade");
+        college.Archive();
+
+        var direct = DirectExpense.Create(
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(150.00m), "Livro", college.Id);
+        await _directExpenses.AddAsync(direct);
+
+        var dto = await _handler.ExecuteAsync(new GetExpensesByCategoryQuery(account.Id, 2026, 11));
+
+        var item = Assert.Single(dto.Categories);
+        Assert.Equal(college.Id, item.CategoryId);
+        Assert.Equal("Faculdade", item.CategoryName);
+        Assert.Equal(150.00m, item.Total);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WithOrthogonalSourceAndConditionFilters_FiltersCardOnlyForOwnAndCustom()
     {
         var account = await SeedAccountAsync();
+        var food = await SeedCategoryAsync(account.Id, "Alimentação");
+        var services = await SeedCategoryAsync(account.Id, "Serviços");
+        var entertainment = await SeedCategoryAsync(account.Id, "Entretenimento");
+        var shopping = await SeedCategoryAsync(account.Id, "Compras");
 
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(50.00m), "Pix", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(50.00m), "Pix", food.Id);
         var fixedExpense = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(100.00m), "Internet", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(100.00m), "Internet", services.Id);
 
         var own = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -123,7 +163,7 @@ public class GetExpensesByCategoryHandlerTests
             account.BillingRule,
             PurchaseCondition.Own,
             "Propria",
-            ExpenseCategory.Food);
+            food.Id);
         var trip = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
@@ -134,7 +174,7 @@ public class GetExpensesByCategoryHandlerTests
             account.BillingRule,
             PurchaseCondition.Custom("Viagem"),
             "Hotel",
-            ExpenseCategory.Entertainment);
+            entertainment.Id);
         var others = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
@@ -145,7 +185,7 @@ public class GetExpensesByCategoryHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Terceiro",
-            ExpenseCategory.Shopping);
+            shopping.Id);
 
         await _directExpenses.AddAsync(direct);
         await _fixedExpenses.AddAsync(fixedExpense);
@@ -171,8 +211,8 @@ public class GetExpensesByCategoryHandlerTests
         Assert.Equal(350.00m, dto.CardInstallments);
         Assert.Equal(350.00m, dto.Total);
         Assert.Equal(2, dto.Categories.Count);
-        Assert.Equal(ExpenseCategory.Food, dto.Categories[0].Category);
-        Assert.Equal(ExpenseCategory.Entertainment, dto.Categories[1].Category);
+        Assert.Equal(food.Id, dto.Categories[0].CategoryId);
+        Assert.Equal(entertainment.Id, dto.Categories[1].CategoryId);
     }
 
     [Fact]
@@ -180,7 +220,6 @@ public class GetExpensesByCategoryHandlerTests
     {
         var account = await SeedAccountAsync();
 
-        // Own with a non-empty name is invalid.
         await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
             new GetExpensesByCategoryQuery(
                 account.Id,
@@ -191,7 +230,6 @@ public class GetExpensesByCategoryHandlerTests
                     new PurchaseConditionFilter(PurchaseConditionKind.Own, "ShouldNotHaveName"),
                 })));
 
-        // Custom with null/blank name is invalid.
         await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
             new GetExpensesByCategoryQuery(
                 account.Id,
@@ -202,7 +240,6 @@ public class GetExpensesByCategoryHandlerTests
                     new PurchaseConditionFilter(PurchaseConditionKind.Custom, "   "),
                 })));
 
-        // Null entry in condition filter list is invalid.
         await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
             new GetExpensesByCategoryQuery(
                 account.Id,
@@ -242,12 +279,14 @@ public class GetExpensesByCategoryHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(null!, _directExpenses, _fixedExpenses, _purchases));
+            new GetExpensesByCategoryHandler(null!, _categories, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, null!, _fixedExpenses, _purchases));
+            new GetExpensesByCategoryHandler(_accounts, null!, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, _directExpenses, null!, _purchases));
+            new GetExpensesByCategoryHandler(_accounts, _categories, null!, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, _directExpenses, _fixedExpenses, null!));
+            new GetExpensesByCategoryHandler(_accounts, _categories, _directExpenses, null!, _purchases));
+        Assert.Throws<ArgumentNullException>(() =>
+            new GetExpensesByCategoryHandler(_accounts, _categories, _directExpenses, _fixedExpenses, null!));
     }
 }

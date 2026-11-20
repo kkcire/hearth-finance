@@ -4,7 +4,7 @@ using Hearth.Domain.ValueObjects;
 namespace Hearth.Domain.Services;
 
 /// <summary>
-/// Calculates the spending of an account in a month grouped by <see cref="ExpenseCategory"/>,
+/// Calculates the spending of an account in a month grouped by category id,
 /// using the same accrual rules as <see cref="ProjectedResultCalculator"/>.
 /// </summary>
 public static class CategorySpendingCalculator
@@ -56,10 +56,10 @@ public static class CategorySpendingCalculator
             }
         }
 
-        var directByCategory = new Dictionary<ExpenseCategory, Money>();
-        var fixedByCategory = new Dictionary<ExpenseCategory, Money>();
-        var cardByCategory = new Dictionary<ExpenseCategory, Money>();
-        var seenCategories = new HashSet<ExpenseCategory>();
+        var directByCategory = new Dictionary<Guid, Money>();
+        var fixedByCategory = new Dictionary<Guid, Money>();
+        var cardByCategory = new Dictionary<Guid, Money>();
+        var seenCategories = new HashSet<Guid>();
 
         if (includeDirectExpenses)
         {
@@ -67,7 +67,7 @@ public static class CategorySpendingCalculator
             {
                 if (expense.AccountId == accountId && expense.Month == month)
                 {
-                    AddAmount(directByCategory, seenCategories, expense.Category, expense.Amount);
+                    AddAmount(directByCategory, seenCategories, expense.CategoryId, expense.Amount);
                 }
             }
         }
@@ -78,7 +78,7 @@ public static class CategorySpendingCalculator
             {
                 if (expense.AccountId == accountId && expense.AmountIn(month) is { } amount)
                 {
-                    AddAmount(fixedByCategory, seenCategories, expense.Category, amount);
+                    AddAmount(fixedByCategory, seenCategories, expense.CategoryId, amount);
                 }
             }
         }
@@ -101,21 +101,21 @@ public static class CategorySpendingCalculator
                 {
                     if (!installment.IsPreviouslyPaid && installment.Cycle.ClosingMonth == month)
                     {
-                        AddAmount(cardByCategory, seenCategories, purchase.Category, installment.Amount);
+                        AddAmount(cardByCategory, seenCategories, purchase.CategoryId, installment.Amount);
                     }
                 }
             }
         }
 
         var items = seenCategories
-            .Select(category => new CategorySpendingItem(
-                category,
-                directByCategory.GetValueOrDefault(category),
-                fixedByCategory.GetValueOrDefault(category),
-                cardByCategory.GetValueOrDefault(category)))
+            .Select(categoryId => new CategorySpendingItem(
+                categoryId,
+                directByCategory.GetValueOrDefault(categoryId),
+                fixedByCategory.GetValueOrDefault(categoryId),
+                cardByCategory.GetValueOrDefault(categoryId)))
             .Where(item => item.Total > Money.Zero)
             .OrderByDescending(item => item.Total)
-            .ThenBy(item => item.Category)
+            .ThenBy(item => item.CategoryId)
             .ToList();
 
         var totalDirect = Money.Sum(items.Select(item => item.DirectExpenses));
@@ -126,12 +126,12 @@ public static class CategorySpendingCalculator
     }
 
     private static void AddAmount(
-        Dictionary<ExpenseCategory, Money> totals,
-        HashSet<ExpenseCategory> seenCategories,
-        ExpenseCategory category,
+        Dictionary<Guid, Money> totals,
+        HashSet<Guid> seenCategories,
+        Guid categoryId,
         Money amount)
     {
-        seenCategories.Add(category);
-        totals[category] = totals.GetValueOrDefault(category) + amount;
+        seenCategories.Add(categoryId);
+        totals[categoryId] = totals.GetValueOrDefault(categoryId) + amount;
     }
 }

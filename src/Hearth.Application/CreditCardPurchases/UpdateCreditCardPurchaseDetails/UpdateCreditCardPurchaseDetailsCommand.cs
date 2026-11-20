@@ -5,6 +5,6 @@ namespace Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails
 public sealed record UpdateCreditCardPurchaseDetailsCommand(
     Guid PurchaseId,
     string Description,
-    ExpenseCategory Category,
+    Guid CategoryId,
     PurchaseConditionKind ConditionKind,
     string? ConditionName);

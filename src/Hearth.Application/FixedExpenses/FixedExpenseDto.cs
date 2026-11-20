@@ -1,5 +1,4 @@
 using Hearth.Domain.Entities;
-using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Application.FixedExpenses;
 
@@ -21,7 +20,7 @@ public sealed record FixedExpenseDto(
     int? EndYear,
     int? EndMonth,
     string Description,
-    ExpenseCategory Category,
+    Guid CategoryId,
     IReadOnlyList<FixedExpenseAmountChangeDto> AmountHistory,
     IReadOnlyList<FixedExpensePaymentDto> Payments)
 {
@@ -34,7 +33,7 @@ public sealed record FixedExpenseDto(
             expense.EndMonth?.Year,
             expense.EndMonth?.Month,
             expense.Description,
-            expense.Category,
+            expense.CategoryId,
             expense.AmountHistory
                 .Select(change => new FixedExpenseAmountChangeDto(
                     change.EffectiveFrom.Year,

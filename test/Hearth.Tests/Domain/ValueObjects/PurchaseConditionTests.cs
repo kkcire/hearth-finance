@@ -44,6 +44,14 @@ public class PurchaseConditionTests
     }
 
     [Fact]
+    public void Custom_NameExceedingMaxLength_Throws()
+    {
+        var tooLong = new string('a', Hearth.Domain.DomainValidation.MaxNameLength + 1);
+
+        Assert.Throws<ArgumentException>(() => PurchaseCondition.Custom(tooLong));
+    }
+
+    [Fact]
     public void Equality_SameCustomName_AreEqualWithSameHash()
     {
         var a = PurchaseCondition.Custom("Ana");

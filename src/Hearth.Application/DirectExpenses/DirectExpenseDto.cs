@@ -1,5 +1,4 @@
 using Hearth.Domain.Entities;
-using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Application.DirectExpenses;
 
@@ -9,7 +8,7 @@ public sealed record DirectExpenseDto(
     DateOnly Date,
     decimal Amount,
     string Description,
-    ExpenseCategory Category)
+    Guid CategoryId)
 {
     internal static DirectExpenseDto FromEntity(DirectExpense expense) =>
         new(
@@ -18,5 +17,5 @@ public sealed record DirectExpenseDto(
             expense.Date,
             expense.Amount.Amount,
             expense.Description,
-            expense.Category);
+            expense.CategoryId);
 }

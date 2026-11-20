@@ -12,6 +12,8 @@ public interface IFixedExpenseRepository
         Guid accountId,
         CancellationToken cancellationToken = default);
 
+    Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
     Task UpdateAsync(FixedExpense expense, CancellationToken cancellationToken = default);
 
     Task DeleteAsync(FixedExpense expense, CancellationToken cancellationToken = default);

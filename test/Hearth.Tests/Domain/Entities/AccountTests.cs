@@ -70,6 +70,24 @@ public class AccountTests
     }
 
     [Fact]
+    public void Create_NameExceedingMaxLength_Throws()
+    {
+        var tooLong = new string('a', Hearth.Domain.DomainValidation.MaxNameLength + 1);
+
+        Assert.Throws<ArgumentException>(() => NewAccount(name: tooLong));
+    }
+
+    [Fact]
+    public void Create_NameAtMaxLengthWithSurroundingSpaces_IsAccepted()
+    {
+        var maxName = new string('a', Hearth.Domain.DomainValidation.MaxNameLength);
+
+        var account = NewAccount(name: $"  {maxName}  ");
+
+        Assert.Equal(maxName, account.Name);
+    }
+
+    [Fact]
     public void Create_NullBillingRule_Throws()
     {
         Assert.Throws<ArgumentNullException>(
@@ -153,6 +171,17 @@ public class AccountTests
         var account = NewAccount(name: "Conta principal");
 
         Assert.ThrowsAny<ArgumentException>(() => account.Rename(name!));
+
+        Assert.Equal("Conta principal", account.Name);
+    }
+
+    [Fact]
+    public void Rename_ExceedingMaxLength_ThrowsAndKeepsTheName()
+    {
+        var account = NewAccount(name: "Conta principal");
+        var tooLong = new string('a', Hearth.Domain.DomainValidation.MaxNameLength + 1);
+
+        Assert.Throws<ArgumentException>(() => account.Rename(tooLong));
 
         Assert.Equal("Conta principal", account.Name);
     }

@@ -34,8 +34,8 @@ public sealed record PurchaseCondition
     /// <exception cref="ArgumentException">The name is null, empty or whitespace.</exception>
     public static PurchaseCondition Custom(string name)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
+        var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
 
-        return new PurchaseCondition(PurchaseConditionKind.Custom, name.Trim());
+        return new PurchaseCondition(PurchaseConditionKind.Custom, validName);
     }
 }

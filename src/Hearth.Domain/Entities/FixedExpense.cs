@@ -21,14 +21,14 @@ public sealed class FixedExpense
         YearMonth? endMonth,
         Money amount,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         Id = id;
         AccountId = accountId;
         StartMonth = startMonth;
         EndMonth = endMonth;
         Description = description;
-        Category = category;
+        CategoryId = categoryId;
         _amountHistory = [new AmountChange(startMonth, amount)];
     }
 
@@ -45,7 +45,7 @@ public sealed class FixedExpense
 
     public string Description { get; private set; }
 
-    public ExpenseCategory Category { get; private set; }
+    public Guid CategoryId { get; private set; }
 
     /// <summary>Amounts in order of effective month. The first entry always starts at <see cref="StartMonth"/>.</summary>
     public IReadOnlyList<AmountChange> AmountHistory => _amountHistory.AsReadOnly();
@@ -60,7 +60,7 @@ public sealed class FixedExpense
         YearMonth? endMonth,
         Money amount,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
@@ -73,10 +73,11 @@ public sealed class FixedExpense
         }
 
         DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "expense amount");
-        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        var validDescription = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
-        return new FixedExpense(id, accountId, startMonth, endMonth, amount, validDescription, category);
+        return new FixedExpense(id, accountId, startMonth, endMonth, amount, validDescription, categoryId);
     }
 
     /// <summary>
@@ -245,13 +246,14 @@ public sealed class FixedExpense
 
     public void UpdateDescription(string description)
     {
-        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
+        Description = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
     }
 
-    public void UpdateCategory(ExpenseCategory category)
+    public void UpdateCategory(Guid categoryId)
     {
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
-        Category = category;
+        CategoryId = categoryId;
     }
 }

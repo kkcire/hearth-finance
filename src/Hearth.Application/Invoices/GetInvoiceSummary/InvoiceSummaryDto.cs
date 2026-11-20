@@ -6,7 +6,7 @@ public sealed record InvoiceInstallmentDto(
     Guid PurchaseId,
     DateOnly PurchaseDate,
     string Description,
-    ExpenseCategory Category,
+    Guid CategoryId,
     PurchaseConditionKind ConditionKind,
     string? ConditionName,
     int InstallmentNumber,

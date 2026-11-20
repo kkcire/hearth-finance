@@ -54,7 +54,7 @@ public sealed class GetInvoiceSummaryHandler
                     purchase.Id,
                     purchase.Date,
                     purchase.Description,
-                    purchase.Category,
+                    purchase.CategoryId,
                     purchase.Condition.Kind,
                     purchase.Condition.Name,
                     installment.Number,

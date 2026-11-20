@@ -38,7 +38,7 @@ public class EndFixedExpenseHandlerTests
             null,
             Money.FromDecimal(1000.00m),
             "Aluguel",
-            ExpenseCategory.Services);
+            Guid.NewGuid());
         await _fixedExpenses.AddAsync(expense);
 
         return expense;

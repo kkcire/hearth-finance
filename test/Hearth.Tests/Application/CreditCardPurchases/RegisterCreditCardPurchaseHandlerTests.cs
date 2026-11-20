@@ -13,16 +13,17 @@ public class RegisterCreditCardPurchaseHandlerTests
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
     private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RegisterCreditCardPurchaseHandler _handler;
 
     public RegisterCreditCardPurchaseHandlerTests()
     {
-        _handler = new RegisterCreditCardPurchaseHandler(_accounts, _purchases, _unitOfWork);
+        _handler = new RegisterCreditCardPurchaseHandler(_accounts, _categories, _purchases, _unitOfWork);
     }
 
-    private async Task<Account> SeedAccountAsync()
+    private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
             Guid.NewGuid(),
@@ -31,13 +32,17 @@ public class RegisterCreditCardPurchaseHandlerTests
             InitialDate,
             CardBillingRule.Of(3, 12));
         await _accounts.AddAsync(account);
-        return account;
+
+        var category = Category.Create(Guid.NewGuid(), account.Id, "Compras");
+        await _categories.AddAsync(category);
+
+        return (account, category);
     }
 
     [Fact]
     public async Task ExecuteAsync_NewPurchase_UsesAccountBillingRuleAndPersists()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         var id = await _handler.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
             account.Id,
@@ -48,7 +53,7 @@ public class RegisterCreditCardPurchaseHandlerTests
             PurchaseConditionKind.Custom,
             "Ana",
             "  Tênis  ",
-            ExpenseCategory.Shopping));
+            category.Id));
 
         Assert.NotEqual(Guid.Empty, id);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
@@ -59,12 +64,35 @@ public class RegisterCreditCardPurchaseHandlerTests
         Assert.Equal(account.BillingRule, saved.Rule);
         Assert.Equal(PurchaseCondition.Custom("Ana"), saved.Condition);
         Assert.Equal("Tênis", saved.Description);
+        Assert.Equal(category.Id, saved.CategoryId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ArchivedCategory_ThrowsDomainException()
+    {
+        var (account, category) = await SeedAccountAndCategoryAsync();
+        category.Archive();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new RegisterCreditCardPurchaseCommand(
+                account.Id,
+                new DateOnly(2026, 10, 10),
+                100.00m,
+                1,
+                1,
+                PurchaseConditionKind.Own,
+                null,
+                "Compra",
+                category.Id)));
+
+        Assert.Empty(_purchases.Purchases);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
     [Fact]
     public async Task ExecuteAsync_NewPurchaseBeforeInitialBalanceDate_ThrowsDomainException()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new RegisterCreditCardPurchaseCommand(
@@ -76,7 +104,7 @@ public class RegisterCreditCardPurchaseHandlerTests
                 PurchaseConditionKind.Own,
                 null,
                 "Compra",
-                ExpenseCategory.Shopping)));
+                category.Id)));
 
         Assert.Empty(_purchases.Purchases);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -85,9 +113,7 @@ public class RegisterCreditCardPurchaseHandlerTests
     [Fact]
     public async Task ExecuteAsync_PurchaseInProgress_FirstCountingCycleClosesOnOrAfterInitialDate_IsAccepted()
     {
-        // Bought 01/07/2026 (before closing day 3): installment 4 closes on 03/10/2026 >= 01/10/2026,
-        // even though the cycle started on 03/09/2026.
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         var id = await _handler.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
             account.Id,
@@ -98,7 +124,7 @@ public class RegisterCreditCardPurchaseHandlerTests
             PurchaseConditionKind.Own,
             null,
             "Notebook",
-            ExpenseCategory.Shopping));
+            category.Id));
 
         Assert.NotNull(await _purchases.GetByIdAsync(id));
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
@@ -107,8 +133,7 @@ public class RegisterCreditCardPurchaseHandlerTests
     [Fact]
     public async Task ExecuteAsync_PurchaseInProgress_FirstCountingCycleClosedBeforeInitialDate_ThrowsDomainException()
     {
-        // Bought 01/07/2026: installment 3 closed on 03/09/2026 < 01/10/2026.
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new RegisterCreditCardPurchaseCommand(
@@ -120,7 +145,7 @@ public class RegisterCreditCardPurchaseHandlerTests
                 PurchaseConditionKind.Own,
                 null,
                 "Notebook",
-                ExpenseCategory.Shopping)));
+                category.Id)));
 
         Assert.Empty(_purchases.Purchases);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -129,7 +154,7 @@ public class RegisterCreditCardPurchaseHandlerTests
     [Fact]
     public async Task ExecuteAsync_ConditionNameWithNonCustomKind_ThrowsArgumentException()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
             new RegisterCreditCardPurchaseCommand(
@@ -141,7 +166,7 @@ public class RegisterCreditCardPurchaseHandlerTests
                 PurchaseConditionKind.Own,
                 "Ana",
                 "Compra",
-                ExpenseCategory.Shopping)));
+                category.Id)));
 
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
@@ -161,7 +186,7 @@ public class RegisterCreditCardPurchaseHandlerTests
                 PurchaseConditionKind.Own,
                 null,
                 "Compra",
-                ExpenseCategory.Shopping)));
+                Guid.NewGuid())));
 
         Assert.Equal(nameof(Account), exception.ResourceName);
         Assert.Equal(unknownId, exception.ResourceId);
@@ -178,10 +203,12 @@ public class RegisterCreditCardPurchaseHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(null!, _purchases, _unitOfWork));
+            () => new RegisterCreditCardPurchaseHandler(null!, _categories, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(_accounts, null!, _unitOfWork));
+            () => new RegisterCreditCardPurchaseHandler(_accounts, null!, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(_accounts, _purchases, null!));
+            () => new RegisterCreditCardPurchaseHandler(_accounts, _categories, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(
+            () => new RegisterCreditCardPurchaseHandler(_accounts, _categories, _purchases, null!));
     }
 }

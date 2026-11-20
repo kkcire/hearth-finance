@@ -2,9 +2,12 @@ using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain;
 
-internal static class DomainValidation
+public static class DomainValidation
 {
-    public static void EnsureNotEmpty(Guid id, string paramName, string label = "id")
+    public const int MaxNameLength = 100;
+    public const int MaxDescriptionLength = 200;
+
+    internal static void EnsureNotEmpty(Guid id, string paramName, string label = "id")
     {
         if (id == Guid.Empty)
         {
@@ -12,7 +15,7 @@ internal static class DomainValidation
         }
     }
 
-    public static void EnsurePositiveAmount(Money amount, string paramName, string label = "amount")
+    internal static void EnsurePositiveAmount(Money amount, string paramName, string label = "amount")
     {
         if (amount <= Money.Zero)
         {
@@ -21,19 +24,18 @@ internal static class DomainValidation
         }
     }
 
-    public static string ValidateRequiredText(string value, string paramName)
+    internal static string ValidateRequiredText(string value, string paramName, int maxLength)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(value, paramName);
 
-        return value.Trim();
-    }
+        var trimmed = value.Trim();
 
-    public static void EnsureDefinedCategory(ExpenseCategory category, string paramName)
-    {
-        if (!Enum.IsDefined(category))
+        if (trimmed.Length > maxLength)
         {
-            throw new ArgumentOutOfRangeException(
-                paramName, category, "The category is not a known category.");
+            throw new ArgumentException(
+                $"The text must not exceed {maxLength} characters.", paramName);
         }
+
+        return trimmed;
     }
 }

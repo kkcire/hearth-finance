@@ -1,5 +1,3 @@
-using Hearth.Domain.ValueObjects;
-
 namespace Hearth.Application.FixedExpenses.RegisterFixedExpense;
 
 public sealed record RegisterFixedExpenseCommand(
@@ -10,4 +8,4 @@ public sealed record RegisterFixedExpenseCommand(
     int? EndMonth,
     decimal Amount,
     string Description,
-    ExpenseCategory Category);
+    Guid CategoryId);

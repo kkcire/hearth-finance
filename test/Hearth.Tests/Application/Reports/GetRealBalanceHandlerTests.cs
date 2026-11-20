@@ -56,10 +56,10 @@ public class GetRealBalanceHandlerTests
         futureReceived.MarkAsReceived(new DateOnly(2026, 11, 25));
 
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200.00m), "Mercado", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200.00m), "Mercado", Guid.NewGuid());
 
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(1200.00m), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(1200.00m), "Aluguel", Guid.NewGuid());
         rent.MarkAsPaid(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5));
 
         var invoice = Invoice.Create(
@@ -95,7 +95,7 @@ public class GetRealBalanceHandlerTests
         income.MarkAsReceived(new DateOnly(2026, 11, 5));
 
         var laterExpense = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 15), Money.FromDecimal(100.00m), "Jantar", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 15), Money.FromDecimal(100.00m), "Jantar", Guid.NewGuid());
 
         await _incomes.AddAsync(income);
         await _directExpenses.AddAsync(laterExpense);

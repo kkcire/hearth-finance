@@ -10,22 +10,26 @@ namespace Hearth.Application.Reports.GetExpensesByCategory;
 public sealed class GetExpensesByCategoryHandler
 {
     private readonly IAccountRepository _accounts;
+    private readonly ICategoryRepository _categories;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IFixedExpenseRepository _fixedExpenses;
     private readonly ICreditCardPurchaseRepository _purchases;
 
     public GetExpensesByCategoryHandler(
         IAccountRepository accounts,
+        ICategoryRepository categories,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
         ICreditCardPurchaseRepository purchases)
     {
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
 
         _accounts = accounts;
+        _categories = categories;
         _directExpenses = directExpenses;
         _fixedExpenses = fixedExpenses;
         _purchases = purchases;
@@ -61,6 +65,9 @@ public sealed class GetExpensesByCategoryHandler
         var account = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), query.AccountId);
 
+        var categories = await _categories.GetByAccountAsync(account.Id, cancellationToken);
+        var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);
+
         var directExpenses = await _directExpenses.GetByAccountAsync(account.Id, cancellationToken);
         var fixedExpenses = await _fixedExpenses.GetByAccountAsync(account.Id, cancellationToken);
         var purchases = await _purchases.GetByAccountAsync(account.Id, cancellationToken);
@@ -76,6 +83,6 @@ public sealed class GetExpensesByCategoryHandler
             query.IncludeCardInstallments,
             includedConditions);
 
-        return CategorySpendingDto.FromDomain(account.Id, spending);
+        return CategorySpendingDto.FromDomain(account.Id, spending, categoryNames);
     }
 }

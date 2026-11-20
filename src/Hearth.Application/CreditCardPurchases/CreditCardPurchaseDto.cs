@@ -21,7 +21,7 @@ public sealed record CreditCardPurchaseDto(
     PurchaseConditionKind ConditionKind,
     string? ConditionName,
     string Description,
-    ExpenseCategory Category,
+    Guid CategoryId,
     bool IsLocked,
     IReadOnlyList<InstallmentDto> Installments)
 {
@@ -36,7 +36,7 @@ public sealed record CreditCardPurchaseDto(
             purchase.Condition.Kind,
             purchase.Condition.Name,
             purchase.Description,
-            purchase.Category,
+            purchase.CategoryId,
             purchase.IsLockedAt(today),
             purchase.GetInstallments()
                 .Select(installment => new InstallmentDto(

@@ -37,11 +37,11 @@ public class ListDirectExpensesHandlerTests
         var otherAccount = await SeedAccountAsync("Outra");
 
         var older = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 5), Money.FromDecimal(20.00m), "Café", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 5), Money.FromDecimal(20.00m), "Café", Guid.NewGuid());
         var newer = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 20), Money.FromDecimal(100.00m), "Mercado", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 20), Money.FromDecimal(100.00m), "Mercado", Guid.NewGuid());
         var other = DirectExpense.Create(
-            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 10, 25), Money.FromDecimal(500.00m), "Outro", ExpenseCategory.Shopping);
+            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 10, 25), Money.FromDecimal(500.00m), "Outro", Guid.NewGuid());
 
         await _directExpenses.AddAsync(older);
         await _directExpenses.AddAsync(newer);

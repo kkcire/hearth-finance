@@ -33,7 +33,7 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
             CardBillingRule.Of(3, 12),
             PurchaseCondition.Own,
             "Compra",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
         await _purchases.AddAsync(purchase);
         return purchase;
     }

@@ -13,16 +13,17 @@ public class RegisterDirectExpenseHandlerTests
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
     private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RegisterDirectExpenseHandler _handler;
 
     public RegisterDirectExpenseHandlerTests()
     {
-        _handler = new RegisterDirectExpenseHandler(_accounts, _directExpenses, _unitOfWork);
+        _handler = new RegisterDirectExpenseHandler(_accounts, _categories, _directExpenses, _unitOfWork);
     }
 
-    private async Task<Account> SeedAccountAsync()
+    private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
             Guid.NewGuid(),
@@ -31,20 +32,24 @@ public class RegisterDirectExpenseHandlerTests
             InitialDate,
             CardBillingRule.Of(3, 12));
         await _accounts.AddAsync(account);
-        return account;
+
+        var category = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
+        await _categories.AddAsync(category);
+
+        return (account, category);
     }
 
     [Fact]
     public async Task ExecuteAsync_ValidCommand_CreatesPersistsAndReturnsId()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         var id = await _handler.ExecuteAsync(new RegisterDirectExpenseCommand(
             account.Id,
             new DateOnly(2026, 10, 15),
             85.40m,
             "  Mercado  ",
-            ExpenseCategory.Food));
+            category.Id));
 
         Assert.NotEqual(Guid.Empty, id);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
@@ -55,16 +60,16 @@ public class RegisterDirectExpenseHandlerTests
         Assert.Equal(new DateOnly(2026, 10, 15), saved.Date);
         Assert.Equal(Money.FromDecimal(85.40m), saved.Amount);
         Assert.Equal("Mercado", saved.Description);
-        Assert.Equal(ExpenseCategory.Food, saved.Category);
+        Assert.Equal(category.Id, saved.CategoryId);
     }
 
     [Fact]
     public async Task ExecuteAsync_OnInitialBalanceDate_IsAccepted()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         var id = await _handler.ExecuteAsync(new RegisterDirectExpenseCommand(
-            account.Id, InitialDate, 20.00m, "Café", ExpenseCategory.Food));
+            account.Id, InitialDate, 20.00m, "Café", category.Id));
 
         Assert.NotNull(await _directExpenses.GetByIdAsync(id));
     }
@@ -72,11 +77,40 @@ public class RegisterDirectExpenseHandlerTests
     [Fact]
     public async Task ExecuteAsync_BeforeInitialBalanceDate_ThrowsDomainExceptionAndDoesNotSave()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new RegisterDirectExpenseCommand(
-                account.Id, InitialDate.AddDays(-1), 20.00m, "Café", ExpenseCategory.Food)));
+                account.Id, InitialDate.AddDays(-1), 20.00m, "Café", category.Id)));
+
+        Assert.Empty(_directExpenses.Expenses);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ArchivedCategory_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        var (account, category) = await SeedAccountAndCategoryAsync();
+        category.Archive();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new RegisterDirectExpenseCommand(
+                account.Id, InitialDate, 20.00m, "Café", category.Id)));
+
+        Assert.Empty(_directExpenses.Expenses);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CategoryFromAnotherAccount_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        var (account, _) = await SeedAccountAndCategoryAsync();
+        var otherCategory = Category.Create(Guid.NewGuid(), Guid.NewGuid(), "Outra");
+        await _categories.AddAsync(otherCategory);
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new RegisterDirectExpenseCommand(
+                account.Id, InitialDate, 20.00m, "Café", otherCategory.Id)));
 
         Assert.Empty(_directExpenses.Expenses);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -89,11 +123,26 @@ public class RegisterDirectExpenseHandlerTests
 
         var exception = await Assert.ThrowsAsync<NotFoundException>(() => _handler.ExecuteAsync(
             new RegisterDirectExpenseCommand(
-                unknownId, InitialDate, 20.00m, "Café", ExpenseCategory.Food)));
+                unknownId, InitialDate, 20.00m, "Café", Guid.NewGuid())));
 
         Assert.Equal(nameof(Account), exception.ResourceName);
         Assert.Equal(unknownId, exception.ResourceId);
         Assert.Empty(_directExpenses.Expenses);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownCategory_ThrowsNotFoundAndDoesNotSave()
+    {
+        var (account, _) = await SeedAccountAndCategoryAsync();
+        var unknownCategoryId = Guid.NewGuid();
+
+        var exception = await Assert.ThrowsAsync<NotFoundException>(() => _handler.ExecuteAsync(
+            new RegisterDirectExpenseCommand(
+                account.Id, InitialDate, 20.00m, "Café", unknownCategoryId)));
+
+        Assert.Equal(nameof(Category), exception.ResourceName);
+        Assert.Equal(unknownCategoryId, exception.ResourceId);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
@@ -102,11 +151,11 @@ public class RegisterDirectExpenseHandlerTests
     [InlineData(-10)]
     public async Task ExecuteAsync_NonPositiveAmount_ThrowsAndDoesNotSave(double raw)
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => _handler.ExecuteAsync(
             new RegisterDirectExpenseCommand(
-                account.Id, InitialDate, (decimal)raw, "Café", ExpenseCategory.Food)));
+                account.Id, InitialDate, (decimal)raw, "Café", category.Id)));
 
         Assert.Empty(_directExpenses.Expenses);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -115,11 +164,11 @@ public class RegisterDirectExpenseHandlerTests
     [Fact]
     public async Task ExecuteAsync_AmountWithMoreThanTwoDecimalPlaces_ThrowsAndDoesNotSave()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
 
         await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
             new RegisterDirectExpenseCommand(
-                account.Id, InitialDate, 10.005m, "Café", ExpenseCategory.Food)));
+                account.Id, InitialDate, 10.005m, "Café", category.Id)));
 
         Assert.Empty(_directExpenses.Expenses);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -128,14 +177,15 @@ public class RegisterDirectExpenseHandlerTests
     [Fact]
     public async Task ExecuteAsync_ForwardsCancellationToken()
     {
-        var account = await SeedAccountAsync();
+        var (account, category) = await SeedAccountAndCategoryAsync();
         using var cts = new CancellationTokenSource();
 
         await _handler.ExecuteAsync(
-            new RegisterDirectExpenseCommand(account.Id, InitialDate, 15.00m, "Café", ExpenseCategory.Food),
+            new RegisterDirectExpenseCommand(account.Id, InitialDate, 15.00m, "Café", category.Id),
             cts.Token);
 
         Assert.Equal(cts.Token, _accounts.LastCancellationToken);
+        Assert.Equal(cts.Token, _categories.LastCancellationToken);
         Assert.Equal(cts.Token, _directExpenses.LastCancellationToken);
         Assert.Equal(cts.Token, _unitOfWork.LastCancellationToken);
     }
@@ -150,10 +200,12 @@ public class RegisterDirectExpenseHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(null!, _directExpenses, _unitOfWork));
+            () => new RegisterDirectExpenseHandler(null!, _categories, _directExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(_accounts, null!, _unitOfWork));
+            () => new RegisterDirectExpenseHandler(_accounts, null!, _directExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(_accounts, _directExpenses, null!));
+            () => new RegisterDirectExpenseHandler(_accounts, _categories, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(
+            () => new RegisterDirectExpenseHandler(_accounts, _categories, _directExpenses, null!));
     }
 }

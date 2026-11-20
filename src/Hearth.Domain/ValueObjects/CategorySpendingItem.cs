@@ -7,18 +7,18 @@ namespace Hearth.Domain.ValueObjects;
 public sealed record CategorySpendingItem
 {
     internal CategorySpendingItem(
-        ExpenseCategory category,
+        Guid categoryId,
         Money directExpenses,
         Money fixedExpenses,
         Money cardInstallments)
     {
-        Category = category;
+        CategoryId = categoryId;
         DirectExpenses = directExpenses;
         FixedExpenses = fixedExpenses;
         CardInstallments = cardInstallments;
     }
 
-    public ExpenseCategory Category { get; }
+    public Guid CategoryId { get; }
 
     /// <summary>Direct expenses dated in the month for this category.</summary>
     public Money DirectExpenses { get; }

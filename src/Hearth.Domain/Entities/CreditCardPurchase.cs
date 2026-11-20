@@ -19,7 +19,7 @@ public sealed class CreditCardPurchase
         CardBillingRule rule,
         PurchaseCondition condition,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         Id = id;
         AccountId = accountId;
@@ -30,7 +30,7 @@ public sealed class CreditCardPurchase
         Rule = rule;
         Condition = condition;
         Description = description;
-        Category = category;
+        CategoryId = categoryId;
     }
 
     public Guid Id { get; }
@@ -58,7 +58,7 @@ public sealed class CreditCardPurchase
 
     public string Description { get; private set; }
 
-    public ExpenseCategory Category { get; private set; }
+    public Guid CategoryId { get; private set; }
 
     /// <summary>The cycle of the first installment, according to the purchase date.</summary>
     public BillingCycle FirstCycle => BillingCycle.ForPurchase(Date, Rule);
@@ -73,7 +73,7 @@ public sealed class CreditCardPurchase
         CardBillingRule rule,
         PurchaseCondition condition,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
@@ -94,8 +94,9 @@ public sealed class CreditCardPurchase
                 "The initial installment must be between 1 and the number of installments.");
         }
 
-        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        var validDescription = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
         EnsureConsistent(date, amount, installmentCount, rule);
 
         return new CreditCardPurchase(
@@ -108,7 +109,7 @@ public sealed class CreditCardPurchase
             rule,
             condition,
             validDescription,
-            category);
+            categoryId);
     }
 
     /// <summary>
@@ -150,11 +151,23 @@ public sealed class CreditCardPurchase
         Amount = newAmount;
     }
 
-    /// <exception cref="DomainException">The invoice has already closed.</exception>
+    /// <exception cref="DomainException">
+    /// The invoice has already closed, or the new date moves the first counting installment into an already closed cycle.
+    /// </exception>
     public void UpdateDate(DateOnly newDate, DateOnly today)
     {
         EnsureEditable(today);
         EnsureConsistent(newDate, Amount, InstallmentCount, Rule);
+
+        var targetClosingDate = BillingCycle.ForPurchase(newDate, Rule)
+            .AddCycles(InitialInstallment - 1)
+            .ClosingDate;
+
+        if (today >= targetClosingDate)
+        {
+            throw new DomainException(
+                "The purchase date cannot be moved to a cycle whose invoice has already closed.");
+        }
 
         Date = newDate;
     }
@@ -168,14 +181,15 @@ public sealed class CreditCardPurchase
 
     public void UpdateDescription(string description)
     {
-        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
+        Description = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
     }
 
-    public void UpdateCategory(ExpenseCategory category)
+    public void UpdateCategory(Guid categoryId)
     {
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
-        Category = category;
+        CategoryId = categoryId;
     }
 
     private void EnsureEditable(DateOnly today)

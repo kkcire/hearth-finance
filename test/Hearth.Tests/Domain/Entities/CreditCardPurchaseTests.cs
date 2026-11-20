@@ -10,6 +10,8 @@ public class CreditCardPurchaseTests
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
     private static readonly DateOnly DefaultDate = new(2026, 10, 10);
 
+    private static readonly Guid DefaultCategoryId = Guid.NewGuid();
+
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
     private static CreditCardPurchase NewPurchase(
@@ -20,7 +22,7 @@ public class CreditCardPurchaseTests
     CardBillingRule? rule = null,
     PurchaseCondition? condition = null,
     string description = "Notebook",
-    ExpenseCategory category = ExpenseCategory.Shopping,
+    Guid? categoryId = null,
     Guid? accountId = null) =>
     CreditCardPurchase.Create(
         Guid.NewGuid(),
@@ -32,7 +34,7 @@ public class CreditCardPurchaseTests
         rule ?? Rule3,
         condition ?? PurchaseCondition.Own,
         description,
-        category);
+        categoryId ?? DefaultCategoryId);
 
     // ---------- Create ----------
 
@@ -41,6 +43,7 @@ public class CreditCardPurchaseTests
     {
         var id = Guid.NewGuid();
         var accountId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
 
         var purchase = CreditCardPurchase.Create(
             id,
@@ -52,7 +55,7 @@ public class CreditCardPurchaseTests
             Rule3,
             PurchaseCondition.Others,
             "  Tênis  ",
-            ExpenseCategory.Personal);
+            categoryId);
 
         Assert.Equal(id, purchase.Id);
         Assert.Equal(accountId, purchase.AccountId);
@@ -63,7 +66,7 @@ public class CreditCardPurchaseTests
         Assert.Equal(Rule3, purchase.Rule);
         Assert.Equal(PurchaseCondition.Others, purchase.Condition);
         Assert.Equal("Tênis", purchase.Description);
-        Assert.Equal(ExpenseCategory.Personal, purchase.Category);
+        Assert.Equal(categoryId, purchase.CategoryId);
     }
 
     [Fact]
@@ -71,7 +74,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
             Guid.Empty, Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
-            PurchaseCondition.Own, "x", ExpenseCategory.Shopping));
+            PurchaseCondition.Own, "x", DefaultCategoryId));
     }
 
     [Fact]
@@ -79,7 +82,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, null!,
-            PurchaseCondition.Own, "x", ExpenseCategory.Shopping));
+            PurchaseCondition.Own, "x", DefaultCategoryId));
     }
 
     [Fact]
@@ -87,7 +90,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
-            null!, "x", ExpenseCategory.Shopping));
+            null!, "x", DefaultCategoryId));
     }
 
     [Theory]
@@ -142,24 +145,18 @@ public class CreditCardPurchaseTests
         Assert.ThrowsAny<ArgumentException>(() => NewPurchase(description: description!));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(99)]
-    public void Create_UnknownCategory_Throws(int category)
+    [Fact]
+    public void Create_DescriptionExceedingMaxLength_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => NewPurchase(category: (ExpenseCategory)category));
+        var tooLong = new string('a', Hearth.Domain.DomainValidation.MaxDescriptionLength + 1);
+
+        Assert.Throws<ArgumentException>(() => NewPurchase(description: tooLong));
     }
 
     [Fact]
-    public void Create_AcceptsEveryKnownCategory()
+    public void Create_EmptyCategoryId_Throws()
     {
-        foreach (var category in Enum.GetValues<ExpenseCategory>())
-        {
-            var purchase = NewPurchase(category: category);
-
-            Assert.Equal(category, purchase.Category);
-        }
+        Assert.Throws<ArgumentException>(() => NewPurchase(categoryId: Guid.Empty));
     }
 
     [Fact]
@@ -411,6 +408,44 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
+    public void UpdateDate_MovingIntoAlreadyClosedCycle_ThrowsAndKeepsTheDate()
+    {
+        // Today is 20/10/2026, closing day 3 -> October cycle already closed on 03/10/2026.
+        // Moving from 10/10/2026 (Nov cycle, open) to 02/10/2026 (Oct cycle, closed) must fail.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+
+        Assert.Throws<DomainException>(
+            () => purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 20)));
+
+        Assert.Equal(new DateOnly(2026, 10, 10), purchase.Date);
+    }
+
+    [Fact]
+    public void UpdateDate_PurchaseInProgress_MovingFirstCountingCycleIntoClosedCycle_ThrowsAndKeepsTheDate()
+    {
+        // Purchase on 10/07/2026, 6x, initial 4 -> installment 4 closes on 03/11/2026 (open on 20/10/2026).
+        // Moving to 10/06/2026 shifts installment 4 to close on 03/10/2026 (already closed on 20/10/2026).
+        var purchase = NewPurchase(date: new DateOnly(2026, 7, 10), amount: 600.00m, count: 6, initial: 4);
+
+        Assert.Throws<DomainException>(
+            () => purchase.UpdateDate(new DateOnly(2026, 6, 10), new DateOnly(2026, 10, 20)));
+
+        Assert.Equal(new DateOnly(2026, 7, 10), purchase.Date);
+    }
+
+    [Fact]
+    public void UpdateDate_MovingEarlierWithinOpenCycle_IsAccepted()
+    {
+        // Today is 20/10/2026, closing day 3 -> 03/10/2026 goes to Nov cycle (closes 03/11/2026, still open).
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+
+        purchase.UpdateDate(new DateOnly(2026, 10, 3), new DateOnly(2026, 10, 20));
+
+        Assert.Equal(new DateOnly(2026, 10, 3), purchase.Date);
+        Assert.Equal(YearMonth.Of(2026, 11), purchase.FirstCycle.ClosingMonth);
+    }
+
+    [Fact]
     public void UpdateDate_CycleOutsideTheSupportedYears_ThrowsAndKeepsTheDate()
     {
         var purchase = NewPurchase();
@@ -447,26 +482,37 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
-    public void UpdateCategory_Changes()
+    public void UpdateDescription_ExceedingMaxLength_ThrowsAndKeepsTheDescription()
     {
-        var purchase = NewPurchase(category: ExpenseCategory.Shopping);
+        var purchase = NewPurchase(description: "Notebook");
+        var tooLong = new string('a', Hearth.Domain.DomainValidation.MaxDescriptionLength + 1);
 
-        purchase.UpdateCategory(ExpenseCategory.Education);
+        Assert.Throws<ArgumentException>(() => purchase.UpdateDescription(tooLong));
 
-        Assert.Equal(ExpenseCategory.Education, purchase.Category);
+        Assert.Equal("Notebook", purchase.Description);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(99)]
-    public void UpdateCategory_Unknown_ThrowsAndKeepsTheCategory(int category)
+    [Fact]
+    public void UpdateCategory_Changes()
     {
-        var purchase = NewPurchase(category: ExpenseCategory.Shopping);
+        var originalCategory = Guid.NewGuid();
+        var newCategory = Guid.NewGuid();
+        var purchase = NewPurchase(categoryId: originalCategory);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => purchase.UpdateCategory((ExpenseCategory)category));
+        purchase.UpdateCategory(newCategory);
 
-        Assert.Equal(ExpenseCategory.Shopping, purchase.Category);
+        Assert.Equal(newCategory, purchase.CategoryId);
+    }
+
+    [Fact]
+    public void UpdateCategory_Empty_ThrowsAndKeepsTheCategory()
+    {
+        var originalCategory = Guid.NewGuid();
+        var purchase = NewPurchase(categoryId: originalCategory);
+
+        Assert.Throws<ArgumentException>(() => purchase.UpdateCategory(Guid.Empty));
+
+        Assert.Equal(originalCategory, purchase.CategoryId);
     }
 
     [Fact]
@@ -494,15 +540,16 @@ public class CreditCardPurchaseTests
     [Fact]
     public void DescriptionCategoryAndCondition_RemainEditableAfterTheClosing()
     {
+        var newCategory = Guid.NewGuid();
         var purchase = NewPurchase();
         Assert.True(purchase.IsLockedAt(new DateOnly(2026, 12, 1)));
 
         purchase.UpdateDescription("Notebook Dell");
-        purchase.UpdateCategory(ExpenseCategory.Services);
+        purchase.UpdateCategory(newCategory);
         purchase.UpdateCondition(PurchaseCondition.Custom("Mãe"));
 
         Assert.Equal("Notebook Dell", purchase.Description);
-        Assert.Equal(ExpenseCategory.Services, purchase.Category);
+        Assert.Equal(newCategory, purchase.CategoryId);
         Assert.Equal(PurchaseCondition.Custom("Mãe"), purchase.Condition);
     }
 

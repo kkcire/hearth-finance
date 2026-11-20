@@ -24,7 +24,7 @@ public sealed record CategorySpending
 
     /// <summary>
     /// Categories with spending greater than zero, ordered by <see cref="CategorySpendingItem.Total"/>
-    /// descending and then by <see cref="CategorySpendingItem.Category"/> ascending.
+    /// descending and then by <see cref="CategorySpendingItem.CategoryId"/> ascending.
     /// </summary>
     public IReadOnlyList<CategorySpendingItem> Categories { get; }
 

@@ -53,10 +53,10 @@ public class GetProjectedResultHandlerTests
             Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(9000.00m), "Outro");
 
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 15), Money.FromDecimal(150.75m), "Mercado", ExpenseCategory.Food);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 15), Money.FromDecimal(150.75m), "Mercado", Guid.NewGuid());
 
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", Guid.NewGuid());
 
         // Bought 10/10 with closing day 3 -> installment 1 (300.00) closes in November.
         var purchase = CreditCardPurchase.Create(
@@ -69,7 +69,7 @@ public class GetProjectedResultHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Compra",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
         await _incomes.AddAsync(salary);
         await _incomes.AddAsync(otherIncome);
@@ -94,7 +94,7 @@ public class GetProjectedResultHandlerTests
     {
         var account = await SeedAccountAsync();
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1200.00m), "Aluguel", ExpenseCategory.Services);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1200.00m), "Aluguel", Guid.NewGuid());
         await _fixedExpenses.AddAsync(rent);
 
         var dto = await _handler.ExecuteAsync(new GetProjectedResultQuery(account.Id, 2027, 6));

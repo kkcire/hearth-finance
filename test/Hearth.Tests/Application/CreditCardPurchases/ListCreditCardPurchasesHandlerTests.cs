@@ -48,7 +48,7 @@ public class ListCreditCardPurchasesHandlerTests
             account.BillingRule,
             PurchaseCondition.Own,
             "Fechada",
-            ExpenseCategory.Food);
+            Guid.NewGuid());
 
         // Bought 10/10 -> closes on 03/11 -> open on 20/10.
         var open = CreditCardPurchase.Create(
@@ -61,7 +61,7 @@ public class ListCreditCardPurchasesHandlerTests
             account.BillingRule,
             PurchaseCondition.Others,
             "Aberta",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
         var other = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -73,7 +73,7 @@ public class ListCreditCardPurchasesHandlerTests
             otherAccount.BillingRule,
             PurchaseCondition.Own,
             "Outro",
-            ExpenseCategory.Shopping);
+            Guid.NewGuid());
 
         await _purchases.AddAsync(locked);
         await _purchases.AddAsync(open);

@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Categories;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 
@@ -7,14 +8,20 @@ namespace Hearth.Application.Accounts.CreateAccount;
 public sealed class CreateAccountHandler
 {
     private readonly IAccountRepository _accounts;
+    private readonly ICategoryRepository _categories;
     private readonly IUnitOfWork _unitOfWork;
 
-    public CreateAccountHandler(IAccountRepository accounts, IUnitOfWork unitOfWork)
+    public CreateAccountHandler(
+        IAccountRepository accounts,
+        ICategoryRepository categories,
+        IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accounts = accounts;
+        _categories = categories;
         _unitOfWork = unitOfWork;
     }
 
@@ -35,6 +42,13 @@ public sealed class CreateAccountHandler
             billingRule);
 
         await _accounts.AddAsync(account, cancellationToken);
+
+        foreach (var categoryName in DefaultCategories.Names)
+        {
+            var category = Category.Create(Guid.CreateVersion7(), account.Id, categoryName);
+            await _categories.AddAsync(category, cancellationToken);
+        }
+
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return account.Id;

@@ -9,6 +9,7 @@ public class FixedExpenseTests
 {
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
     private static readonly YearMonth DefaultStart = YearMonth.Of(2026, 1);
+    private static readonly Guid DefaultCategoryId = Guid.NewGuid();
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
@@ -25,7 +26,7 @@ public class FixedExpenseTests
         YearMonth? end = null,
         decimal amount = 1000.00m,
         string description = "Aluguel",
-        ExpenseCategory category = ExpenseCategory.Services) =>
+        Guid? categoryId = null) =>
         FixedExpense.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
@@ -33,7 +34,7 @@ public class FixedExpenseTests
             end,
             M(amount),
             description,
-            category);
+            categoryId ?? DefaultCategoryId);
 
     // ---------- Create ----------
 
@@ -42,16 +43,17 @@ public class FixedExpenseTests
     {
         var id = Guid.NewGuid();
         var accountId = Guid.NewGuid();
+        var categoryId = Guid.NewGuid();
 
         var expense = FixedExpense.Create(
-            id, accountId, YM(2026, 10), YM(2027, 3), M(1500.00m), "  Aluguel  ", ExpenseCategory.Services);
+            id, accountId, YM(2026, 10), YM(2027, 3), M(1500.00m), "  Aluguel  ", categoryId);
 
         Assert.Equal(id, expense.Id);
         Assert.Equal(accountId, expense.AccountId);
         Assert.Equal(YM(2026, 10), expense.StartMonth);
         Assert.Equal(YM(2027, 3), expense.EndMonth);
         Assert.Equal("Aluguel", expense.Description);
-        Assert.Equal(ExpenseCategory.Services, expense.Category);
+        Assert.Equal(categoryId, expense.CategoryId);
     }
 
     [Fact]
@@ -86,21 +88,21 @@ public class FixedExpenseTests
     public void Create_NullStartMonth_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => FixedExpense.Create(
-            Guid.NewGuid(), Guid.NewGuid(), null!, null, M(10m), "x", ExpenseCategory.Services));
+            Guid.NewGuid(), Guid.NewGuid(), null!, null, M(10m), "x", DefaultCategoryId));
     }
 
     [Fact]
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => FixedExpense.Create(
-            Guid.Empty, Guid.NewGuid(), DefaultStart, null, M(10m), "x", ExpenseCategory.Services));
+            Guid.Empty, Guid.NewGuid(), DefaultStart, null, M(10m), "x", DefaultCategoryId));
     }
 
     [Fact]
     public void Create_EmptyAccountId_Throws()
     {
         Assert.Throws<ArgumentException>(() => FixedExpense.Create(
-            Guid.NewGuid(), Guid.Empty, DefaultStart, null, M(10m), "x", ExpenseCategory.Services));
+            Guid.NewGuid(), Guid.Empty, DefaultStart, null, M(10m), "x", DefaultCategoryId));
     }
 
     [Theory]
@@ -121,23 +123,10 @@ public class FixedExpenseTests
         Assert.ThrowsAny<ArgumentException>(() => NewExpense(description: description!));
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(-1)]
-    [InlineData(99)]
-    public void Create_UnknownCategory_Throws(int category)
-    {
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => NewExpense(category: (ExpenseCategory)category));
-    }
-
     [Fact]
-    public void Create_AcceptsEveryKnownCategory()
+    public void Create_EmptyCategoryId_Throws()
     {
-        foreach (var category in Enum.GetValues<ExpenseCategory>())
-        {
-            Assert.Equal(category, NewExpense(category: category).Category);
-        }
+        Assert.Throws<ArgumentException>(() => NewExpense(categoryId: Guid.Empty));
     }
 
     // ---------- FirstOpenMonth ----------
@@ -776,37 +765,38 @@ public class FixedExpenseTests
     [Fact]
     public void UpdateCategory_Changes()
     {
-        var expense = NewExpense(category: ExpenseCategory.Services);
+        var originalCategory = Guid.NewGuid();
+        var newCategory = Guid.NewGuid();
+        var expense = NewExpense(categoryId: originalCategory);
 
-        expense.UpdateCategory(ExpenseCategory.Education);
+        expense.UpdateCategory(newCategory);
 
-        Assert.Equal(ExpenseCategory.Education, expense.Category);
+        Assert.Equal(newCategory, expense.CategoryId);
     }
 
-    [Theory]
-    [InlineData(0)]
-    [InlineData(99)]
-    public void UpdateCategory_Unknown_ThrowsAndKeepsTheCategory(int category)
+    [Fact]
+    public void UpdateCategory_Empty_ThrowsAndKeepsTheCategory()
     {
-        var expense = NewExpense(category: ExpenseCategory.Services);
+        var originalCategory = Guid.NewGuid();
+        var expense = NewExpense(categoryId: originalCategory);
 
-        Assert.Throws<ArgumentOutOfRangeException>(
-            () => expense.UpdateCategory((ExpenseCategory)category));
+        Assert.Throws<ArgumentException>(() => expense.UpdateCategory(Guid.Empty));
 
-        Assert.Equal(ExpenseCategory.Services, expense.Category);
+        Assert.Equal(originalCategory, expense.CategoryId);
     }
 
     [Fact]
     public void DescriptionAndCategory_RemainEditable_ForFrozenAndPaidExpenses()
     {
+        var newCategory = Guid.NewGuid();
         var expense = NewExpense(start: YM(2026, 1), end: YM(2026, 3));
         expense.MarkAsPaid(YM(2026, 3), Day(2026, 3, 5));
 
         expense.UpdateDescription("Aluguel antigo");
-        expense.UpdateCategory(ExpenseCategory.Personal);
+        expense.UpdateCategory(newCategory);
 
         Assert.Equal("Aluguel antigo", expense.Description);
-        Assert.Equal(ExpenseCategory.Personal, expense.Category);
+        Assert.Equal(newCategory, expense.CategoryId);
     }
 
     // ---------- Encapsulation ----------

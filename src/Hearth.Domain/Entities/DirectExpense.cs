@@ -14,14 +14,14 @@ public sealed class DirectExpense
         DateOnly date,
         Money amount,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         Id = id;
         AccountId = accountId;
         Date = date;
         Amount = amount;
         Description = description;
-        Category = category;
+        CategoryId = categoryId;
     }
 
     public Guid Id { get; }
@@ -35,7 +35,7 @@ public sealed class DirectExpense
 
     public string Description { get; private set; }
 
-    public ExpenseCategory Category { get; private set; }
+    public Guid CategoryId { get; private set; }
 
     /// <summary>The calendar month this expense counts toward.</summary>
     public YearMonth Month => YearMonth.From(Date);
@@ -46,15 +46,16 @@ public sealed class DirectExpense
         DateOnly date,
         Money amount,
         string description,
-        ExpenseCategory category)
+        Guid categoryId)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "expense amount");
-        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        var validDescription = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
-        return new DirectExpense(id, accountId, date, amount, validDescription, category);
+        return new DirectExpense(id, accountId, date, amount, validDescription, categoryId);
     }
 
     public void UpdateDate(DateOnly newDate)
@@ -71,13 +72,14 @@ public sealed class DirectExpense
 
     public void UpdateDescription(string description)
     {
-        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
+        Description = DomainValidation.ValidateRequiredText(
+            description, nameof(description), DomainValidation.MaxDescriptionLength);
     }
 
-    public void UpdateCategory(ExpenseCategory category)
+    public void UpdateCategory(Guid categoryId)
     {
-        DomainValidation.EnsureDefinedCategory(category, nameof(category));
+        DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
-        Category = category;
+        CategoryId = categoryId;
     }
 }

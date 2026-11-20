@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Categories;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -8,19 +9,23 @@ namespace Hearth.Application.FixedExpenses.RegisterFixedExpense;
 public sealed class RegisterFixedExpenseHandler
 {
     private readonly IAccountRepository _accounts;
+    private readonly ICategoryRepository _categories;
     private readonly IFixedExpenseRepository _fixedExpenses;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterFixedExpenseHandler(
         IAccountRepository accounts,
+        ICategoryRepository categories,
         IFixedExpenseRepository fixedExpenses,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accounts = accounts;
+        _categories = categories;
         _fixedExpenses = fixedExpenses;
         _unitOfWork = unitOfWork;
     }
@@ -46,6 +51,9 @@ public sealed class RegisterFixedExpenseHandler
         var account = await _accounts.GetByIdAsync(command.AccountId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Account), command.AccountId);
 
+        await CategoryValidation.EnsureUsableForAccountAsync(
+            _categories, account.Id, command.CategoryId, cancellationToken);
+
         account.EnsureCanRegisterOn(startMonth.LastDay);
 
         var expense = FixedExpense.Create(
@@ -55,7 +63,7 @@ public sealed class RegisterFixedExpenseHandler
             endMonth,
             amount,
             command.Description,
-            command.Category);
+            command.CategoryId);
 
         await _fixedExpenses.AddAsync(expense, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

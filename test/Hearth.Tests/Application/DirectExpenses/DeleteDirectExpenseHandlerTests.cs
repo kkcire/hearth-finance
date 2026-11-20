@@ -27,7 +27,7 @@ public class DeleteDirectExpenseHandlerTests
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(50.00m),
             "Mercado",
-            ExpenseCategory.Food);
+            Guid.NewGuid());
         await _directExpenses.AddAsync(expense);
 
         await _handler.ExecuteAsync(new DeleteDirectExpenseCommand(expense.Id));
@@ -60,7 +60,7 @@ public class DeleteDirectExpenseHandlerTests
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(50.00m),
             "Mercado",
-            ExpenseCategory.Food);
+            Guid.NewGuid());
         await _directExpenses.AddAsync(expense);
         using var cts = new CancellationTokenSource();
 

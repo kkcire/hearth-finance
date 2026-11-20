@@ -1,4 +1,5 @@
 using Hearth.Application.Accounts.CreateAccount;
+using Hearth.Application.Categories;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
 using Xunit;
@@ -8,12 +9,13 @@ namespace Hearth.Tests.Application.Accounts;
 public class CreateAccountHandlerTests
 {
     private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryCategoryRepository _categories = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly CreateAccountHandler _handler;
 
     public CreateAccountHandlerTests()
     {
-        _handler = new CreateAccountHandler(_accounts, _unitOfWork);
+        _handler = new CreateAccountHandler(_accounts, _categories, _unitOfWork);
     }
 
     private static CreateAccountCommand ValidCommand(
@@ -41,6 +43,13 @@ public class CreateAccountHandlerTests
         Assert.Equal(Money.FromDecimal(2345.67m), saved.InitialBalance);
         Assert.Equal(new DateOnly(2026, 10, 1), saved.InitialBalanceDate);
         Assert.Equal(CardBillingRule.Of(3, 12), saved.BillingRule);
+
+        var seededCategories = await _categories.GetByAccountAsync(id);
+        Assert.Equal(DefaultCategories.Names.Count, seededCategories.Count);
+        Assert.Equal(
+            DefaultCategories.Names.OrderBy(n => n),
+            seededCategories.Select(c => c.Name).OrderBy(n => n));
+        Assert.All(seededCategories, c => Assert.False(c.IsArchived));
     }
 
     [Theory]
@@ -142,7 +151,8 @@ public class CreateAccountHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _categories, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accounts, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accounts, _categories, null!));
     }
 }

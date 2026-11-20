@@ -1,5 +1,3 @@
-using Hearth.Domain.ValueObjects;
-
 namespace Hearth.Application.DirectExpenses.UpdateDirectExpense;
 
 public sealed record UpdateDirectExpenseCommand(
@@ -7,4 +5,4 @@ public sealed record UpdateDirectExpenseCommand(
     DateOnly Date,
     decimal Amount,
     string Description,
-    ExpenseCategory Category);
+    Guid CategoryId);

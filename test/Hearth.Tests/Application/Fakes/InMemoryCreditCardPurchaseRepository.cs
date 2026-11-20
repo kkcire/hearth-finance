@@ -39,6 +39,12 @@ internal sealed class InMemoryCreditCardPurchaseRepository : ICreditCardPurchase
         return Task.FromResult(result);
     }
 
+    public Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default)
+    {
+        LastCancellationToken = cancellationToken;
+        return Task.FromResult(_purchases.Values.Any(purchase => purchase.CategoryId == categoryId));
+    }
+
     public Task UpdateAsync(CreditCardPurchase purchase, CancellationToken cancellationToken = default)
     {
         LastCancellationToken = cancellationToken;

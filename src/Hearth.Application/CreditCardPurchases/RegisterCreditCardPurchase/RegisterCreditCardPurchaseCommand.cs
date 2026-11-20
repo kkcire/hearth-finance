@@ -11,4 +11,4 @@ public sealed record RegisterCreditCardPurchaseCommand(
     PurchaseConditionKind ConditionKind,
     string? ConditionName,
     string Description,
-    ExpenseCategory Category);
+    Guid CategoryId);
