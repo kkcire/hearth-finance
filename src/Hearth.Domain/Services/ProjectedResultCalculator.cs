@@ -27,11 +27,7 @@ public static class ProjectedResultCalculator
         IEnumerable<FixedExpense> fixedExpenses,
         IEnumerable<CreditCardPurchase> purchases)
     {
-        if (accountId == Guid.Empty)
-        {
-            throw new ArgumentException("The account id must not be empty.", nameof(accountId));
-        }
-
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(month);
         ArgumentNullException.ThrowIfNull(incomes);
         ArgumentNullException.ThrowIfNull(directExpenses);

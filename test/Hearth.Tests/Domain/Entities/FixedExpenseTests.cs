@@ -1,4 +1,5 @@
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Xunit;
 
@@ -366,7 +367,7 @@ public class FixedExpenseTests
     {
         var expense = NewExpense(start: YM(2026, 1), end: YM(2026, 8));
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.ChangeAmount(M(1500.00m), Day(2026, 10, 10), Rule3));
 
         Assert.Single(expense.AmountHistory);
@@ -390,7 +391,7 @@ public class FixedExpenseTests
         expense.MarkAsPaid(YM(2026, 10), Day(2026, 10, 1));
 
         // Before the closing day the change would apply from October, which is already paid.
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.ChangeAmount(M(1500.00m), Day(2026, 10, 2), Rule3));
 
         Assert.Single(expense.AmountHistory);
@@ -415,7 +416,7 @@ public class FixedExpenseTests
         var expense = NewExpense(start: YM(2026, 1));
         expense.MarkAsPaid(YM(2026, 12), Day(2026, 10, 5));
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.ChangeAmount(M(1500.00m), Day(2026, 10, 10), Rule3));
     }
 
@@ -467,7 +468,7 @@ public class FixedExpenseTests
         }
         else
         {
-            Assert.Throws<InvalidOperationException>(
+            Assert.Throws<DomainException>(
                 () => expense.End(YM(lastYear, lastMonth), today, Rule3));
 
             Assert.Null(expense.EndMonth);
@@ -507,7 +508,7 @@ public class FixedExpenseTests
         var expense = NewExpense(start: YM(2026, 1), end: YM(2026, 8));
 
         // September and October are already frozen, so they cannot become active again.
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.End(YM(2026, 12), Day(2026, 10, 10), Rule3));
 
         Assert.Equal(YM(2026, 8), expense.EndMonth);
@@ -540,7 +541,7 @@ public class FixedExpenseTests
         var expense = NewExpense(start: YM(2026, 1));
         expense.MarkAsPaid(YM(2026, 12), Day(2026, 10, 5));
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.End(YM(2026, 11), Day(2026, 10, 10), Rule3));
         Assert.Null(expense.EndMonth);
 
@@ -560,6 +561,16 @@ public class FixedExpenseTests
 
         Assert.Equal(YM(2026, 11), expense.EndMonth);
         Assert.True(expense.IsPaid(YM(2026, 11)));
+    }
+
+    [Fact]
+    public void End_AtTheMaxSupportedMonth_IsAccepted()
+    {
+        var expense = NewExpense(start: YM(2026, 1));
+
+        expense.End(YM(YearMonth.MaxYear, 12), Day(2026, 10, 10), Rule3);
+
+        Assert.Equal(YM(YearMonth.MaxYear, 12), expense.EndMonth);
     }
 
     // ---------- MarkAsPaid ----------
@@ -651,9 +662,9 @@ public class FixedExpenseTests
     {
         var expense = NewExpense(start: YM(2026, 10), end: YM(2026, 12));
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.MarkAsPaid(YM(2026, 9), Day(2026, 10, 5)));
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => expense.MarkAsPaid(YM(2027, 1), Day(2026, 10, 5)));
 
         Assert.Empty(expense.Payments);
@@ -887,7 +898,7 @@ public class FixedExpenseTests
                         break;
                 }
             }
-            catch (InvalidOperationException)
+            catch (DomainException)
             {
                 // A refused operation must leave the frozen months untouched as well.
             }

@@ -1,4 +1,5 @@
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Xunit;
 
@@ -118,7 +119,7 @@ public class AccountTests
     {
         var account = NewAccount(initialDate: new DateOnly(2026, 10, 1));
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => account.EnsureCanRegisterOn(new DateOnly(2026, 9, 30)));
     }
 
@@ -254,8 +255,8 @@ public class AccountTests
             else
             {
                 Assert.True(
-                    exception is InvalidOperationException,
-                    $"EnsureCanRegisterOn did not throw InvalidOperationException: {context}");
+                    exception is DomainException,
+                    $"EnsureCanRegisterOn did not throw DomainException: {context}");
             }
         }
     }

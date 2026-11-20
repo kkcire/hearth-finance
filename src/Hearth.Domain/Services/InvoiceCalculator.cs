@@ -21,11 +21,7 @@ public static class InvoiceCalculator
         YearMonth closingMonth,
         IEnumerable<CreditCardPurchase> purchases)
     {
-        if (accountId == Guid.Empty)
-        {
-            throw new ArgumentException("The account id must not be empty.", nameof(accountId));
-        }
-
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(closingMonth);
         ArgumentNullException.ThrowIfNull(purchases);
 

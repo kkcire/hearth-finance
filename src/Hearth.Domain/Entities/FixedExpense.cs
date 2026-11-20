@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain.Entities;
@@ -61,8 +62,8 @@ public sealed class FixedExpense
         string description,
         ExpenseCategory category)
     {
-        ValidateId(id, nameof(id));
-        ValidateId(accountId, nameof(accountId));
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(startMonth);
 
         if (endMonth is not null && endMonth < startMonth)
@@ -71,9 +72,9 @@ public sealed class FixedExpense
                 nameof(endMonth), endMonth, "The end month cannot be before the start month.");
         }
 
-        ValidateAmount(amount, nameof(amount));
-        var validDescription = ValidateDescription(description);
-        ValidateCategory(category);
+        DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "expense amount");
+        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
 
         return new FixedExpense(id, accountId, startMonth, endMonth, amount, validDescription, category);
     }
@@ -122,25 +123,25 @@ public sealed class FixedExpense
     /// A later edit replaces any change already scheduled from that month on.
     /// </summary>
     /// <returns>The month from which the new amount applies.</returns>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="DomainException">
     /// The expense has already ended for the open months, or a month affected by the change is already paid.
     /// </exception>
     public YearMonth ChangeAmount(Money newAmount, DateOnly today, CardBillingRule rule)
     {
-        ValidateAmount(newAmount, nameof(newAmount));
+        DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "expense amount");
 
         var firstOpen = FirstOpenMonth(today, rule);
         var effectiveFrom = firstOpen > StartMonth ? firstOpen : StartMonth;
 
         if (EndMonth is not null && effectiveFrom > EndMonth)
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "The expense has already ended for every month that can still be changed.");
         }
 
         if (_payments.Keys.Any(month => month >= effectiveFrom))
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "A month affected by this change is already paid. Revert the payment first.");
         }
 
@@ -154,7 +155,7 @@ public sealed class FixedExpense
     /// Sets the last active month. Only months that are still open can start or stop being active.
     /// Does nothing if the end month is already the given one.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The change would affect a frozen or paid month.</exception>
+    /// <exception cref="DomainException">The change would affect a frozen or paid month.</exception>
     public void End(YearMonth lastMonth, DateOnly today, CardBillingRule rule)
     {
         ArgumentNullException.ThrowIfNull(lastMonth);
@@ -170,17 +171,22 @@ public sealed class FixedExpense
             return;
         }
 
-        var firstChangedMonth =
-            (EndMonth is { } currentEnd && currentEnd < lastMonth ? currentEnd : lastMonth).AddMonths(1);
+        var lastUnchangedMonth =
+            EndMonth is { } currentEnd && currentEnd < lastMonth ? currentEnd : lastMonth;
 
-        if (firstChangedMonth < FirstOpenMonth(today, rule))
+        if (lastUnchangedMonth < YearMonth.Of(YearMonth.MaxYear, 12))
         {
-            throw new InvalidOperationException("Months that are already frozen cannot be changed.");
+            var firstChangedMonth = lastUnchangedMonth.AddMonths(1);
+
+            if (firstChangedMonth < FirstOpenMonth(today, rule))
+            {
+                throw new DomainException("Months that are already frozen cannot be changed.");
+            }
         }
 
         if (_payments.Keys.Any(month => month > lastMonth))
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "A month after the new last month is already paid. Revert the payment first.");
         }
 
@@ -192,14 +198,14 @@ public sealed class FixedExpense
     /// original date is kept, so repeating the operation never counts it twice.
     /// </summary>
     /// <returns>True if the state changed; false if the month was already paid.</returns>
-    /// <exception cref="InvalidOperationException">The expense is not active in the month.</exception>
+    /// <exception cref="DomainException">The expense is not active in the month.</exception>
     public bool MarkAsPaid(YearMonth month, DateOnly paidOn)
     {
         ArgumentNullException.ThrowIfNull(month);
 
         if (!IsActiveIn(month))
         {
-            throw new InvalidOperationException("The expense is not active in this month.");
+            throw new DomainException("The expense is not active in this month.");
         }
 
         if (_payments.ContainsKey(month))
@@ -239,46 +245,13 @@ public sealed class FixedExpense
 
     public void UpdateDescription(string description)
     {
-        Description = ValidateDescription(description);
+        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
     }
 
     public void UpdateCategory(ExpenseCategory category)
     {
-        ValidateCategory(category);
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
 
         Category = category;
-    }
-
-    private static void ValidateId(Guid id, string paramName)
-    {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", paramName);
-        }
-    }
-
-    private static void ValidateAmount(Money amount, string paramName)
-    {
-        if (amount <= Money.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                paramName, amount, "The expense amount must be greater than zero.");
-        }
-    }
-
-    private static string ValidateDescription(string description)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-
-        return description.Trim();
-    }
-
-    private static void ValidateCategory(ExpenseCategory category)
-    {
-        if (!Enum.IsDefined(category))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(category), category, "The category is not a known category.");
-        }
     }
 }

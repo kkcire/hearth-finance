@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain.Entities;
@@ -48,12 +49,8 @@ public sealed class Account
         DateOnly initialBalanceDate,
         CardBillingRule billingRule)
     {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", nameof(id));
-        }
-
-        var validName = ValidateName(name);
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        var validName = DomainValidation.ValidateRequiredText(name, nameof(name));
         ArgumentNullException.ThrowIfNull(billingRule);
 
         return new Account(id, validName, initialBalance, initialBalanceDate, billingRule);
@@ -62,19 +59,19 @@ public sealed class Account
     /// <summary>True if an entry dated on the given day respects the initial balance date.</summary>
     public bool CanRegisterOn(DateOnly date) => date >= InitialBalanceDate;
 
-    /// <exception cref="InvalidOperationException">The date is before the initial balance date.</exception>
+    /// <exception cref="DomainException">The date is before the initial balance date.</exception>
     public void EnsureCanRegisterOn(DateOnly date)
     {
         if (!CanRegisterOn(date))
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 $"No entry can be registered before the initial balance date ({InitialBalanceDate:yyyy-MM-dd}).");
         }
     }
 
     public void Rename(string name)
     {
-        Name = ValidateName(name);
+        Name = DomainValidation.ValidateRequiredText(name, nameof(name));
     }
 
     /// <summary>
@@ -94,12 +91,5 @@ public sealed class Account
         ArgumentNullException.ThrowIfNull(billingRule);
 
         BillingRule = billingRule;
-    }
-
-    private static string ValidateName(string name)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(name);
-
-        return name.Trim();
     }
 }

@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Xunit;
 
@@ -238,7 +239,7 @@ public class MoneyTests
     {
         var money = M((decimal)raw);
 
-        Assert.Throws<InvalidOperationException>(() => money.Split(2));
+        Assert.Throws<DomainException>(() => money.Split(2));
     }
 
     [Fact]
@@ -246,13 +247,13 @@ public class MoneyTests
     {
         Money money = default;
 
-        Assert.Throws<InvalidOperationException>(() => money.Split(1));
+        Assert.Throws<DomainException>(() => money.Split(1));
     }
 
     [Fact]
     public void Split_AmountTooSmallForEachPartToGetOneCent_Throws()
     {
-        Assert.Throws<InvalidOperationException>(() => M(0.02m).Split(3));
+        Assert.Throws<DomainException>(() => M(0.02m).Split(3));
     }
 
     // ---------- Main invariant ----------

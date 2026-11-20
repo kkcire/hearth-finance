@@ -250,6 +250,34 @@ public class IncomeTests
         Assert.Equal(YearMonth.Of(2026, 11), income.ReceivedMonth);
     }
 
+    // ---------- UpdateExpectedDate ----------
+
+    [Fact]
+    public void UpdateExpectedDate_ChangesTheDateAndTheExpectedMonth()
+    {
+        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
+
+        income.UpdateExpectedDate(new DateOnly(2026, 11, 5));
+
+        Assert.Equal(new DateOnly(2026, 11, 5), income.ExpectedDate);
+        Assert.Equal(YearMonth.Of(2026, 11), income.ExpectedMonth);
+    }
+
+    [Fact]
+    public void UpdateExpectedDate_AfterReceived_KeepsTheReceivedState()
+    {
+        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
+        income.MarkAsReceived(new DateOnly(2026, 10, 30));
+
+        income.UpdateExpectedDate(new DateOnly(2026, 11, 5));
+
+        Assert.Equal(new DateOnly(2026, 11, 5), income.ExpectedDate);
+        Assert.Equal(YearMonth.Of(2026, 11), income.ExpectedMonth);
+        Assert.True(income.IsReceived);
+        Assert.Equal(D(2026, 10, 30), income.ReceivedOn);
+        Assert.Equal(YearMonth.Of(2026, 10), income.ReceivedMonth);
+    }
+
     // ---------- UpdateAmount ----------
 
     [Fact]

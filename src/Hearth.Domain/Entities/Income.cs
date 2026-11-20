@@ -58,10 +58,10 @@ public sealed class Income
         Money amount,
         string description)
     {
-        ValidateId(id, nameof(id));
-        ValidateId(accountId, nameof(accountId));
-        ValidateAmount(amount, nameof(amount));
-        var validDescription = ValidateDescription(description);
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
+        DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "income amount");
+        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
 
         return new Income(id, accountId, expectedDate, amount, validDescription);
     }
@@ -98,39 +98,20 @@ public sealed class Income
         return true;
     }
 
+    public void UpdateExpectedDate(DateOnly newExpectedDate)
+    {
+        ExpectedDate = newExpectedDate;
+    }
+
     public void UpdateAmount(Money newAmount)
     {
-        ValidateAmount(newAmount, nameof(newAmount));
+        DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "income amount");
 
         Amount = newAmount;
     }
 
     public void UpdateDescription(string description)
     {
-        Description = ValidateDescription(description);
-    }
-
-    private static void ValidateId(Guid id, string paramName)
-    {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", paramName);
-        }
-    }
-
-    private static void ValidateAmount(Money amount, string paramName)
-    {
-        if (amount <= Money.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                paramName, amount, "The income amount must be greater than zero.");
-        }
-    }
-
-    private static string ValidateDescription(string description)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-
-        return description.Trim();
+        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
     }
 }

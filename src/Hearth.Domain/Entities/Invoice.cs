@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain.Entities;
@@ -45,16 +46,8 @@ public sealed class Invoice
     /// <summary>Creates an open invoice, with no charged amount yet.</summary>
     public static Invoice Create(Guid id, Guid accountId, BillingCycle cycle)
     {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", nameof(id));
-        }
-
-        if (accountId == Guid.Empty)
-        {
-            throw new ArgumentException("The account id must not be empty.", nameof(accountId));
-        }
-
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(cycle);
 
         return new Invoice(id, accountId, cycle);
@@ -64,7 +57,7 @@ public sealed class Invoice
     /// Informs or corrects the amount the bank charged. Allowed only while the invoice is not paid.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The amount is negative.</exception>
-    /// <exception cref="InvalidOperationException">The invoice is already paid.</exception>
+    /// <exception cref="DomainException">The invoice is already paid.</exception>
     public void InformChargedAmount(Money amount)
     {
         if (amount < Money.Zero)
@@ -75,7 +68,7 @@ public sealed class Invoice
 
         if (IsPaid)
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "The charged amount cannot be changed on a paid invoice. Revert the payment first.");
         }
 
@@ -87,7 +80,7 @@ public sealed class Invoice
     /// original date is kept, so repeating the operation never counts it twice.
     /// </summary>
     /// <returns>True if the state changed; false if the invoice was already paid.</returns>
-    /// <exception cref="InvalidOperationException">The charged amount was not informed yet.</exception>
+    /// <exception cref="DomainException">The charged amount was not informed yet.</exception>
     public bool MarkAsPaid(DateOnly paidOn)
     {
         if (IsPaid)
@@ -97,7 +90,7 @@ public sealed class Invoice
 
         if (ChargedAmount is null)
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "The charged amount must be informed before the invoice can be paid.");
         }
 

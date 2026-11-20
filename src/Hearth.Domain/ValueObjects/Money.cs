@@ -1,3 +1,5 @@
+using Hearth.Domain.Exceptions;
+
 namespace Hearth.Domain.ValueObjects;
 
 /// <summary>
@@ -53,7 +55,7 @@ public readonly record struct Money : IComparable<Money>
     /// sum of the installments is exactly equal to the original amount.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The number of parts is not positive.</exception>
-    /// <exception cref="InvalidOperationException">
+    /// <exception cref="DomainException">
     /// The amount is not positive, or it is too small to give each installment at least R$ 0.01.
     /// </exception>
     public IReadOnlyList<Money> Split(int parts)
@@ -66,7 +68,7 @@ public readonly record struct Money : IComparable<Money>
 
         if (Amount <= 0)
         {
-            throw new InvalidOperationException("Only positive amounts can be split.");
+            throw new DomainException("Only positive amounts can be split.");
         }
 
         var totalCents = decimal.ToInt64(Amount * CentsPerUnit);
@@ -74,7 +76,7 @@ public readonly record struct Money : IComparable<Money>
 
         if (baseCents < 1)
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "The amount is too small to give each part at least R$ 0.01.");
         }
 

@@ -1,4 +1,5 @@
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Xunit;
 
@@ -129,7 +130,7 @@ public class CreditCardPurchaseTests
     [Fact]
     public void Create_AmountTooSmallForEachInstallmentToGetOneCent_Throws()
     {
-        Assert.Throws<InvalidOperationException>(() => NewPurchase(amount: 0.02m, count: 3));
+        Assert.Throws<DomainException>(() => NewPurchase(amount: 0.02m, count: 3));
     }
 
     [Theory]
@@ -355,7 +356,7 @@ public class CreditCardPurchaseTests
     {
         var purchase = NewPurchase();
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => purchase.UpdateAmount(M(250.00m), new DateOnly(2026, 11, 3)));
 
         Assert.Equal(M(100.00m), purchase.Amount);
@@ -379,7 +380,7 @@ public class CreditCardPurchaseTests
     {
         var purchase = NewPurchase();
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => purchase.UpdateAmount(M(0.02m), new DateOnly(2026, 10, 20)));
 
         Assert.Equal(M(100.00m), purchase.Amount);
@@ -403,7 +404,7 @@ public class CreditCardPurchaseTests
     {
         var purchase = NewPurchase();
 
-        Assert.Throws<InvalidOperationException>(
+        Assert.Throws<DomainException>(
             () => purchase.UpdateDate(new DateOnly(2026, 11, 5), new DateOnly(2026, 11, 3)));
 
         Assert.Equal(DefaultDate, purchase.Date);
@@ -469,16 +470,40 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
-    public void DescriptionAndCategory_RemainEditableAfterTheClosing()
+    public void UpdateCondition_Changes()
+    {
+        var purchase = NewPurchase(condition: PurchaseCondition.Own);
+
+        purchase.UpdateCondition(PurchaseCondition.Others);
+        Assert.Equal(PurchaseCondition.Others, purchase.Condition);
+
+        purchase.UpdateCondition(PurchaseCondition.Custom("Ana"));
+        Assert.Equal(PurchaseCondition.Custom("Ana"), purchase.Condition);
+    }
+
+    [Fact]
+    public void UpdateCondition_Null_ThrowsAndKeepsTheCondition()
+    {
+        var purchase = NewPurchase(condition: PurchaseCondition.Others);
+
+        Assert.Throws<ArgumentNullException>(() => purchase.UpdateCondition(null!));
+
+        Assert.Equal(PurchaseCondition.Others, purchase.Condition);
+    }
+
+    [Fact]
+    public void DescriptionCategoryAndCondition_RemainEditableAfterTheClosing()
     {
         var purchase = NewPurchase();
         Assert.True(purchase.IsLockedAt(new DateOnly(2026, 12, 1)));
 
         purchase.UpdateDescription("Notebook Dell");
         purchase.UpdateCategory(ExpenseCategory.Services);
+        purchase.UpdateCondition(PurchaseCondition.Custom("Mãe"));
 
         Assert.Equal("Notebook Dell", purchase.Description);
         Assert.Equal(ExpenseCategory.Services, purchase.Category);
+        Assert.Equal(PurchaseCondition.Custom("Mãe"), purchase.Condition);
     }
 
     // ---------- Main invariants ----------

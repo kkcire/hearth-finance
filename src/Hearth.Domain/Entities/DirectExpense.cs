@@ -48,11 +48,11 @@ public sealed class DirectExpense
         string description,
         ExpenseCategory category)
     {
-        ValidateId(id, nameof(id));
-        ValidateId(accountId, nameof(accountId));
-        ValidateAmount(amount, nameof(amount));
-        var validDescription = ValidateDescription(description);
-        ValidateCategory(category);
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
+        DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "expense amount");
+        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
 
         return new DirectExpense(id, accountId, date, amount, validDescription, category);
     }
@@ -64,53 +64,20 @@ public sealed class DirectExpense
 
     public void UpdateAmount(Money newAmount)
     {
-        ValidateAmount(newAmount, nameof(newAmount));
+        DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "expense amount");
 
         Amount = newAmount;
     }
 
     public void UpdateDescription(string description)
     {
-        Description = ValidateDescription(description);
+        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
     }
 
     public void UpdateCategory(ExpenseCategory category)
     {
-        ValidateCategory(category);
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
 
         Category = category;
-    }
-
-    private static void ValidateId(Guid id, string paramName)
-    {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", paramName);
-        }
-    }
-
-    private static void ValidateAmount(Money amount, string paramName)
-    {
-        if (amount <= Money.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                paramName, amount, "The expense amount must be greater than zero.");
-        }
-    }
-
-    private static string ValidateDescription(string description)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-
-        return description.Trim();
-    }
-
-    private static void ValidateCategory(ExpenseCategory category)
-    {
-        if (!Enum.IsDefined(category))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(category), category, "The category is not a known category.");
-        }
     }
 }

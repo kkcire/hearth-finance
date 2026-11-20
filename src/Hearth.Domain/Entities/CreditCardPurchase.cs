@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain.Entities;
@@ -53,7 +54,7 @@ public sealed class CreditCardPurchase
 
     public CardBillingRule Rule { get; }
 
-    public PurchaseCondition Condition { get; }
+    public PurchaseCondition Condition { get; private set; }
 
     public string Description { get; private set; }
 
@@ -74,16 +75,8 @@ public sealed class CreditCardPurchase
         string description,
         ExpenseCategory category)
     {
-        if (id == Guid.Empty)
-        {
-            throw new ArgumentException("The id must not be empty.", nameof(id));
-        }
-
-        if (accountId == Guid.Empty)
-        {
-            throw new ArgumentException("The account id must not be empty.", nameof(accountId));
-        }
-
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(condition);
 
@@ -101,8 +94,8 @@ public sealed class CreditCardPurchase
                 "The initial installment must be between 1 and the number of installments.");
         }
 
-        var validDescription = ValidateDescription(description);
-        ValidateCategory(category);
+        var validDescription = DomainValidation.ValidateRequiredText(description, nameof(description));
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
         EnsureConsistent(date, amount, installmentCount, rule);
 
         return new CreditCardPurchase(
@@ -148,7 +141,7 @@ public sealed class CreditCardPurchase
     public bool IsLockedAt(DateOnly today) =>
         today >= FirstCycle.AddCycles(InitialInstallment - 1).ClosingDate;
 
-    /// <exception cref="InvalidOperationException">The invoice has already closed.</exception>
+    /// <exception cref="DomainException">The invoice has already closed or the amount cannot be split.</exception>
     public void UpdateAmount(Money newAmount, DateOnly today)
     {
         EnsureEditable(today);
@@ -157,7 +150,7 @@ public sealed class CreditCardPurchase
         Amount = newAmount;
     }
 
-    /// <exception cref="InvalidOperationException">The invoice has already closed.</exception>
+    /// <exception cref="DomainException">The invoice has already closed.</exception>
     public void UpdateDate(DateOnly newDate, DateOnly today)
     {
         EnsureEditable(today);
@@ -166,14 +159,21 @@ public sealed class CreditCardPurchase
         Date = newDate;
     }
 
+    public void UpdateCondition(PurchaseCondition condition)
+    {
+        ArgumentNullException.ThrowIfNull(condition);
+
+        Condition = condition;
+    }
+
     public void UpdateDescription(string description)
     {
-        Description = ValidateDescription(description);
+        Description = DomainValidation.ValidateRequiredText(description, nameof(description));
     }
 
     public void UpdateCategory(ExpenseCategory category)
     {
-        ValidateCategory(category);
+        DomainValidation.EnsureDefinedCategory(category, nameof(category));
 
         Category = category;
     }
@@ -182,7 +182,7 @@ public sealed class CreditCardPurchase
     {
         if (IsLockedAt(today))
         {
-            throw new InvalidOperationException(
+            throw new DomainException(
                 "The amount and the date cannot be changed after the invoice has closed.");
         }
     }
@@ -191,29 +191,9 @@ public sealed class CreditCardPurchase
     private static void EnsureConsistent(
         DateOnly date, Money amount, int installmentCount, CardBillingRule rule)
     {
-        if (amount <= Money.Zero)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(amount), amount, "The purchase amount must be greater than zero.");
-        }
+        DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "purchase amount");
 
         _ = amount.Split(installmentCount);
         _ = BillingCycle.ForPurchase(date, rule).AddCycles(installmentCount - 1);
-    }
-
-    private static string ValidateDescription(string description)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(description);
-
-        return description.Trim();
-    }
-
-    private static void ValidateCategory(ExpenseCategory category)
-    {
-        if (!Enum.IsDefined(category))
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(category), category, "The category is not a known purchase category.");
-        }
     }
 }

@@ -1,4 +1,5 @@
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Xunit;
 
@@ -144,7 +145,7 @@ public class InvoiceTests
         var invoice = NewInvoiceWithCharge(500.00m);
         invoice.MarkAsPaid(Day(2026, 10, 12));
 
-        Assert.Throws<InvalidOperationException>(() => invoice.InformChargedAmount(M(600.00m)));
+        Assert.Throws<DomainException>(() => invoice.InformChargedAmount(M(600.00m)));
 
         Assert.Equal(Amt(500.00m), invoice.ChargedAmount);
         Assert.True(invoice.IsPaid);
@@ -169,7 +170,7 @@ public class InvoiceTests
     {
         var invoice = NewInvoice();
 
-        Assert.Throws<InvalidOperationException>(() => invoice.MarkAsPaid(Day(2026, 10, 12)));
+        Assert.Throws<DomainException>(() => invoice.MarkAsPaid(Day(2026, 10, 12)));
 
         Assert.False(invoice.IsPaid);
         Assert.Null(invoice.PaidOn);
@@ -416,7 +417,7 @@ public class InvoiceTests
                     }
                     else
                     {
-                        Assert.Throws<InvalidOperationException>(() => invoice.InformChargedAmount(amount));
+                        Assert.Throws<DomainException>(() => invoice.InformChargedAmount(amount));
                     }
 
                     break;
@@ -432,7 +433,7 @@ public class InvoiceTests
                     }
                     else if (modelCharged is null)
                     {
-                        Assert.Throws<InvalidOperationException>(() => invoice.MarkAsPaid(date));
+                        Assert.Throws<DomainException>(() => invoice.MarkAsPaid(date));
                     }
                     else
                     {
