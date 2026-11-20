@@ -10,6 +10,12 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class Account
 {
+    private Account()
+    {
+        Name = null!;
+        BillingRule = null!;
+    }
+
     private Account(
         Guid id,
         string name,

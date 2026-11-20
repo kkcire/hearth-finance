@@ -9,6 +9,13 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class CreditCardPurchase
 {
+    private CreditCardPurchase()
+    {
+        Rule = null!;
+        Condition = null!;
+        Description = null!;
+    }
+
     private CreditCardPurchase(
         Guid id,
         Guid accountId,

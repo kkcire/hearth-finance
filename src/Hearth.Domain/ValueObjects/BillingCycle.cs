@@ -8,6 +8,12 @@ namespace Hearth.Domain.ValueObjects;
 /// </summary>
 public sealed record BillingCycle
 {
+    private BillingCycle()
+    {
+        ClosingMonth = null!;
+        Rule = null!;
+    }
+
     private BillingCycle(YearMonth closingMonth, CardBillingRule rule)
     {
         ClosingMonth = closingMonth;

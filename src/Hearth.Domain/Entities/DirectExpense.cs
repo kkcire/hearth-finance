@@ -8,6 +8,11 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class DirectExpense
 {
+    private DirectExpense()
+    {
+        Description = null!;
+    }
+
     private DirectExpense(
         Guid id,
         Guid accountId,

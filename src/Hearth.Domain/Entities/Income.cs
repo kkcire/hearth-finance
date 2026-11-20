@@ -9,6 +9,11 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class Income
 {
+    private Income()
+    {
+        Description = null!;
+    }
+
     private Income(
         Guid id,
         Guid accountId,

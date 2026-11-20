@@ -9,6 +9,11 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class Category
 {
+    private Category()
+    {
+        Name = null!;
+    }
+
     private Category(Guid id, Guid accountId, string name)
     {
         Id = id;
