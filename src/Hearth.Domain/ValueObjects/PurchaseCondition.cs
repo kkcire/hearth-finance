@@ -13,6 +13,10 @@ public enum PurchaseConditionKind
 /// </summary>
 public sealed record PurchaseCondition
 {
+    private PurchaseCondition()
+    {
+    }
+
     private PurchaseCondition(PurchaseConditionKind kind, string? name)
     {
         Kind = kind;

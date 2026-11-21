@@ -13,6 +13,12 @@ public sealed class CategoryBudget
 {
     private readonly List<AmountChange> _amountHistory;
 
+    private CategoryBudget()
+    {
+        StartMonth = null!;
+        _amountHistory = [];
+    }
+
     private CategoryBudget(
         Guid id,
         Guid accountId,
@@ -42,7 +48,8 @@ public sealed class CategoryBudget
     public YearMonth? EndMonth { get; private set; }
 
     /// <summary>Monthly limits in order of effective month. The first entry always starts at <see cref="StartMonth"/>.</summary>
-    public IReadOnlyList<AmountChange> AmountHistory => _amountHistory.AsReadOnly();
+    public IReadOnlyList<AmountChange> AmountHistory =>
+        _amountHistory.OrderBy(change => change.EffectiveFrom).ToList().AsReadOnly();
 
     public static CategoryBudget Create(
         Guid id,
@@ -113,15 +120,19 @@ public sealed class CategoryBudget
             return null;
         }
 
-        for (var i = _amountHistory.Count - 1; i >= 0; i--)
+        AmountChange? latest = null;
+        foreach (var change in _amountHistory)
         {
-            if (_amountHistory[i].EffectiveFrom <= month)
+            if (change.EffectiveFrom <= month
+                && (latest is null || change.EffectiveFrom > latest.EffectiveFrom))
             {
-                return _amountHistory[i].Amount;
+                latest = change;
             }
         }
 
-        throw new InvalidOperationException("The amount history does not cover the start month.");
+        return latest is not null
+            ? latest.Amount
+            : throw new InvalidOperationException("The amount history does not cover the start month.");
     }
 
     /// <summary>

@@ -12,7 +12,14 @@ namespace Hearth.Domain.Entities;
 public sealed class FixedExpense
 {
     private readonly List<AmountChange> _amountHistory;
-    private readonly Dictionary<YearMonth, DateOnly> _payments = new();
+    private readonly List<FixedExpensePayment> _payments = [];
+
+    private FixedExpense()
+    {
+        StartMonth = null!;
+        Description = null!;
+        _amountHistory = [];
+    }
 
     private FixedExpense(
         Guid id,
@@ -48,10 +55,12 @@ public sealed class FixedExpense
     public Guid CategoryId { get; private set; }
 
     /// <summary>Amounts in order of effective month. The first entry always starts at <see cref="StartMonth"/>.</summary>
-    public IReadOnlyList<AmountChange> AmountHistory => _amountHistory.AsReadOnly();
+    public IReadOnlyList<AmountChange> AmountHistory =>
+        _amountHistory.OrderBy(change => change.EffectiveFrom).ToList().AsReadOnly();
 
     /// <summary>The payment date of each paid month.</summary>
-    public IReadOnlyDictionary<YearMonth, DateOnly> Payments => _payments.AsReadOnly();
+    public IReadOnlyDictionary<YearMonth, DateOnly> Payments =>
+        _payments.ToDictionary(payment => payment.Month, payment => payment.PaidOn).AsReadOnly();
 
     public static FixedExpense Create(
         Guid id,
@@ -108,15 +117,19 @@ public sealed class FixedExpense
             return null;
         }
 
-        for (var i = _amountHistory.Count - 1; i >= 0; i--)
+        AmountChange? latest = null;
+        foreach (var change in _amountHistory)
         {
-            if (_amountHistory[i].EffectiveFrom <= month)
+            if (change.EffectiveFrom <= month
+                && (latest is null || change.EffectiveFrom > latest.EffectiveFrom))
             {
-                return _amountHistory[i].Amount;
+                latest = change;
             }
         }
 
-        throw new InvalidOperationException("The amount history does not cover the start month.");
+        return latest is not null
+            ? latest.Amount
+            : throw new InvalidOperationException("The amount history does not cover the start month.");
     }
 
     /// <summary>
@@ -140,7 +153,7 @@ public sealed class FixedExpense
                 "The expense has already ended for every month that can still be changed.");
         }
 
-        if (_payments.Keys.Any(month => month >= effectiveFrom))
+        if (_payments.Any(payment => payment.Month >= effectiveFrom))
         {
             throw new DomainException(
                 "A month affected by this change is already paid. Revert the payment first.");
@@ -185,7 +198,7 @@ public sealed class FixedExpense
             }
         }
 
-        if (_payments.Keys.Any(month => month > lastMonth))
+        if (_payments.Any(payment => payment.Month > lastMonth))
         {
             throw new DomainException(
                 "A month after the new last month is already paid. Revert the payment first.");
@@ -209,12 +222,12 @@ public sealed class FixedExpense
             throw new DomainException("The expense is not active in this month.");
         }
 
-        if (_payments.ContainsKey(month))
+        if (_payments.Any(payment => payment.Month == month))
         {
             return false;
         }
 
-        _payments.Add(month, paidOn);
+        _payments.Add(new FixedExpensePayment(month, paidOn));
         return true;
     }
 
@@ -226,14 +239,14 @@ public sealed class FixedExpense
     {
         ArgumentNullException.ThrowIfNull(month);
 
-        return _payments.Remove(month);
+        return _payments.RemoveAll(payment => payment.Month == month) > 0;
     }
 
     public bool IsPaid(YearMonth month)
     {
         ArgumentNullException.ThrowIfNull(month);
 
-        return _payments.ContainsKey(month);
+        return _payments.Any(payment => payment.Month == month);
     }
 
     /// <summary>The date the month was paid, or null if it was not. It decides the month in the real balance.</summary>
@@ -241,7 +254,8 @@ public sealed class FixedExpense
     {
         ArgumentNullException.ThrowIfNull(month);
 
-        return _payments.TryGetValue(month, out var date) ? date : null;
+        var payment = _payments.FirstOrDefault(item => item.Month == month);
+        return payment?.PaidOn;
     }
 
     public void UpdateDescription(string description)

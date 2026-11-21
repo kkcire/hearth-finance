@@ -10,6 +10,11 @@ namespace Hearth.Domain.Entities;
 /// </summary>
 public sealed class Invoice
 {
+    private Invoice()
+    {
+        Cycle = null!;
+    }
+
     private Invoice(Guid id, Guid accountId, BillingCycle cycle)
     {
         Id = id;

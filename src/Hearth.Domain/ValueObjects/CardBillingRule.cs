@@ -11,6 +11,10 @@ public sealed record CardBillingRule
     public const int MinDueDay = 1;
     public const int MaxDueDay = 28;
 
+    private CardBillingRule()
+    {
+    }
+
     private CardBillingRule(int closingDay, int dueDay)
     {
         ClosingDay = closingDay;

@@ -6,6 +6,11 @@ namespace Hearth.Domain.ValueObjects;
 /// </summary>
 public sealed record AmountChange
 {
+    private AmountChange()
+    {
+        EffectiveFrom = null!;
+    }
+
     internal AmountChange(YearMonth effectiveFrom, Money amount)
     {
         EffectiveFrom = effectiveFrom;
