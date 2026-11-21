@@ -8,6 +8,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="bunit" Version="2.15.2" />
     <PackageReference Include="coverlet.collector" Version="6.0.4" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
     <PackageReference Include="Testcontainers.PostgreSql" Version="4.17.0" />
@@ -23,6 +24,7 @@
     <ProjectReference Include="..\..\src\Hearth.Domain\Hearth.Domain.csproj" />
     <ProjectReference Include="..\..\src\Hearth.Application\Hearth.Application.csproj" />
     <ProjectReference Include="..\..\src\Hearth.Infrastructure\Hearth.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\Hearth.Web\Hearth.Web.csproj" />
   </ItemGroup>
 
 </Project>
