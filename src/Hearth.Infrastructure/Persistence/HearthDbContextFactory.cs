@@ -10,7 +10,7 @@ namespace Hearth.Infrastructure.Persistence;
 public sealed class HearthDbContextFactory : IDesignTimeDbContextFactory<HearthDbContext>
 {
     private const string DefaultConnectionString =
-        "Host=localhost;Port=5432;Database=hearth;Username=hearth;Password=hearth";
+        "Host=localhost;Port=5433;Database=hearth;Username=hearth;Password=hearth";
 
     public HearthDbContext CreateDbContext(string[] args)
     {
