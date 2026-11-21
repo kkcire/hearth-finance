@@ -3,13 +3,13 @@
 @inject AccountContext AccountContext
 @inject NavigationManager Navigation
 
-<MudThemeProvider Theme="_theme" />
+<MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
 <MudDialogProvider />
 <MudSnackbarProvider />
 
 <MudLayout>
-    <MudAppBar Elevation="1">
+    <MudAppBar Elevation="0" Class="hearth-appbar">
         @if (AccountContext.HasAccounts)
         {
             <MudIconButton Icon="@Icons.Material.Filled.Menu"
@@ -19,7 +19,14 @@
                            OnClick="ToggleDrawer" />
         }
 
-        <MudText Typo="Typo.h6" Class="ml-2">Hearth</MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-1">
+            <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment"
+                     Color="Color.Primary"
+                     Size="Size.Medium"
+                     data-testid="hearth-logo-icon" />
+            <MudText Typo="Typo.h6" Style="font-weight: 700; letter-spacing: 0.3px;">Hearth</MudText>
+        </MudStack>
+
         <MudSpacer />
 
         @if (AccountContext.Accounts.Count > 1 && AccountContext.Current is not null)
@@ -30,7 +37,7 @@
                        Variant="Variant.Outlined"
                        Margin="Margin.Dense"
                        Dense="true"
-                       Style="max-width: 240px; background-color: rgba(255, 255, 255, 0.12);"
+                       Style="max-width: 240px;"
                        aria-label="Conta ativa"
                        data-testid="account-selector">
                 @foreach (var account in AccountContext.Accounts)
@@ -42,25 +49,25 @@
         else if (AccountContext.Current is not null)
         {
             <MudChip T="string"
-                     Color="Color.Inherit"
+                     Color="Color.Default"
                      Variant="Variant.Outlined"
                      Size="Size.Small"
                      Icon="@Icons.Material.Filled.AccountBalanceWallet"
                      data-testid="active-account-chip">
-                @AccountContext.Current.Name
+                Conta: @AccountContext.Current.Name
             </MudChip>
         }
     </MudAppBar>
 
     @if (AccountContext.HasAccounts)
     {
-        <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="0" ClipMode="DrawerClipMode.Always" Class="hearth-drawer">
             <NavMenu />
         </MudDrawer>
     }
 
     <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
             @if (!AccountContext.IsInitialized)
             {
                 @if (AccountContext.LoadError is not null)
@@ -114,12 +121,31 @@
 {
     private readonly MudTheme _theme = new()
     {
-        PaletteLight = new PaletteLight
+        PaletteDark = new PaletteDark
         {
-            Primary = "#1B4965",
-            Secondary = "#5FA8D3",
-            AppbarBackground = "#1B4965",
-            Background = "#F6F8FA",
+            Primary = "#D32F2F",
+            PrimaryLighten = "#EF5350",
+            PrimaryDarken = "#B71C1C",
+            Secondary = "#EF5350",
+            Background = "#121212",
+            Surface = "#1E1E1E",
+            DrawerBackground = "#181818",
+            DrawerText = "rgba(255, 255, 255, 0.82)",
+            DrawerIcon = "rgba(255, 255, 255, 0.65)",
+            AppbarBackground = "#181818",
+            AppbarText = "rgba(255, 255, 255, 0.92)",
+            TextPrimary = "rgba(255, 255, 255, 0.92)",
+            TextSecondary = "rgba(255, 255, 255, 0.62)",
+            LinesDefault = "rgba(255, 255, 255, 0.08)",
+            Divider = "rgba(255, 255, 255, 0.08)",
+            Success = "#4CAF50",
+            Error = "#EF5350",
+            Warning = "#FFA726",
+            Info = "#64B5F6",
+        },
+        LayoutProperties = new LayoutProperties
+        {
+            DefaultBorderRadius = "10px",
         },
     };
 

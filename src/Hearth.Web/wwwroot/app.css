@@ -1,13 +1,54 @@
 html, body {
     margin: 0;
     padding: 0;
+    background-color: #121212;
     font-family: 'Roboto', sans-serif;
 }
 
-.hearth-money-positive {
-    color: var(--mud-palette-success);
+.hearth-appbar {
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.hearth-money-negative {
-    color: var(--mud-palette-error);
+.hearth-drawer {
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.hearth-card {
+    background-color: #1E1E1E;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+}
+
+.hearth-statement-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+
+.hearth-sign-positive {
+    color: #4CAF50;
+    font-weight: 600;
+}
+
+.hearth-sign-negative {
+    color: #EF5350;
+    font-weight: 600;
+}
+
+.hearth-origin-toggle {
+    justify-content: space-between;
+    text-transform: none;
+    font-weight: 500;
+    padding: 10px 14px;
+}
+
+.mud-nav-link.active:not(.mud-nav-link-disabled) {
+    background-color: rgba(211, 47, 47, 0.18);
+    color: #EF5350;
+    border-radius: 8px;
+}
+
+.mud-nav-link.active:not(.mud-nav-link-disabled) .mud-nav-link-icon {
+    color: #EF5350;
 }

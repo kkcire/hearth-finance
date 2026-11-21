@@ -1,0 +1,615 @@
+@page "/"
+@inherits AccountPageBase
+@using Hearth.Application.CreditCardPurchases
+@using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases
+@using Hearth.Application.Invoices.GetInvoiceSummary
+@using Hearth.Application.Reports.GetBudgetStatus
+@using Hearth.Application.Reports.GetExpensesByCategory
+@using Hearth.Application.Reports.GetProjectedResult
+@using Hearth.Application.Reports.GetRealBalance
+@using Hearth.Web.Components.Shared
+
+<PageTitle>Painel do Mês — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5" Wrap="Wrap.Wrap" Spacing="2">
+    <MudText Typo="Typo.h4" Style="font-weight: 600;">Painel do Mês</MudText>
+    <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
+</MudStack>
+
+@if (_loading && _realBalance is null)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudGrid Spacing="4" Class="mb-4">
+        @* Esquerda: Saldo Real (Caixa) *@
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="real-balance-card">
+                <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-3" Wrap="Wrap.Wrap" Spacing="2">
+                    <div>
+                        <MudText Typo="Typo.h6" Style="font-weight: 600;">Saldo Real (Caixa)</MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Até @HearthFormat.Date(_realBalanceUntil)
+                        </MudText>
+                    </div>
+
+                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                        <MudDatePicker Date="HearthFormat.ToDateTime(_realBalanceUntil)"
+                                       DateChanged="OnRealBalanceDateChangedAsync"
+                                       DateFormat="dd/MM/yyyy"
+                                       Culture="@HearthFormat.PtBr"
+                                       Variant="Variant.Outlined"
+                                       Margin="Margin.Dense"
+                                       Editable="true"
+                                       Style="max-width: 155px;"
+                                       aria-label="Data do saldo real"
+                                       data-testid="real-balance-date-input" />
+                        @if (_realBalanceUntil != Clock.Today)
+                        {
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Text"
+                                       Color="Color.Primary"
+                                       OnClick="ResetRealBalanceDateAsync"
+                                       data-testid="real-balance-today-button">
+                                Hoje
+                            </MudButton>
+                        }
+                    </MudStack>
+                </MudStack>
+
+                <MudDivider Class="mb-3" />
+
+                @if (_realBalance is not null)
+                {
+                    <MudStack Spacing="2">
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">Saldo Inicial</MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.InitialBalance)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-positive">(+)</span> Receitas Recebidas
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.Incomes)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Gastos Diretos
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.DirectExpenses)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Despesas Fixas Pagas
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.FixedExpenses)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Faturas Pagas
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.CardInvoices)</MudText>
+                        </div>
+                    </MudStack>
+
+                    <MudDivider Class="my-4" />
+
+                    <div class="hearth-statement-row">
+                        <MudText Typo="Typo.h6" Color="Color.Primary" Style="font-weight: 600;">
+                            Saldo Real Atual:
+                        </MudText>
+                        <MudText Typo="Typo.h5"
+                                 Color="@(_realBalance.Balance < 0 ? Color.Error : Color.Primary)"
+                                 Style="font-weight: 700;"
+                                 data-testid="real-balance-value">
+                            @HearthFormat.Money(_realBalance.Balance)
+                        </MudText>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* Direita: Resultado Projetado (Competência) *@
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="projected-result-card">
+                <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-3" Wrap="Wrap.Wrap" Spacing="2">
+                    <div>
+                        <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                            Resultado Projetado <MudText Inline="true" Typo="Typo.body2" Color="Color.Secondary">(Competência)</MudText>
+                        </MudText>
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Fechamento de @HearthFormat.MonthYear(_selectedMonth)
+                        </MudText>
+                    </div>
+
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
+                        @HearthFormat.MonthYear(_selectedMonth)
+                    </MudChip>
+                </MudStack>
+
+                <MudDivider Class="mb-3" />
+
+                @if (_projectedResult is not null)
+                {
+                    <MudStack Spacing="2">
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-positive">(+)</span> Receitas (Previstas)
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.Incomes)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Gastos Diretos
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.DirectExpenses)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Despesas Fixas
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.FixedExpenses)</MudText>
+                        </div>
+                        <div class="hearth-statement-row">
+                            <MudText Typo="Typo.body1">
+                                <span class="hearth-sign-negative">(-)</span> Fatura Calculada
+                            </MudText>
+                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.CardInvoice)</MudText>
+                        </div>
+                    </MudStack>
+
+                    <MudDivider Class="my-4" />
+
+                    <div class="hearth-statement-row">
+                        <MudText Typo="Typo.h6" Style="font-weight: 600;">
+                            Balanço Previsto do Mês (Resultado):
+                        </MudText>
+                        <div style="text-align: right;">
+                            <MudText Typo="Typo.h5"
+                                     Color="@(_projectedResult.Result < 0 ? Color.Error : Color.Default)"
+                                     Style="font-weight: 700;"
+                                     data-testid="projected-result-value">
+                                @HearthFormat.Money(_projectedResult.Result)
+                            </MudText>
+                            <MudText Typo="Typo.caption"
+                                     Color="@(_projectedResult.Result > 0 ? Color.Success : _projectedResult.Result < 0 ? Color.Error : Color.Secondary)">
+                                @(_projectedResult.Result > 0 ? "positivo" : _projectedResult.Result < 0 ? "negativo" : "neutro")
+                            </MudText>
+                        </div>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+
+    @* Filtro de condição do cartão aplicado a Orçamentos e Gastos por Categoria *@
+    <MudPaper Elevation="0" Class="pa-3 mb-4 hearth-card">
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
+            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mr-2">
+                Condição do cartão (relatórios):
+            </MudText>
+
+            <MudButton Size="Size.Small"
+                       Variant="@(_conditionFilter is null ? Variant.Filled : Variant.Outlined)"
+                       Color="@(_conditionFilter is null ? Color.Primary : Color.Default)"
+                       OnClick="() => OnConditionFilterChangedAsync(null)"
+                       data-testid="dashboard-condition-all">
+                Todas
+            </MudButton>
+
+            <MudButton Size="Size.Small"
+                       Variant="@(IsConditionSelected(PurchaseConditionKind.Own, null) ? Variant.Filled : Variant.Outlined)"
+                       Color="@(IsConditionSelected(PurchaseConditionKind.Own, null) ? Color.Primary : Color.Default)"
+                       OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Own))"
+                       data-testid="dashboard-condition-own">
+                Própria
+            </MudButton>
+
+            <MudButton Size="Size.Small"
+                       Variant="@(IsConditionSelected(PurchaseConditionKind.Others, null) ? Variant.Filled : Variant.Outlined)"
+                       Color="@(IsConditionSelected(PurchaseConditionKind.Others, null) ? Color.Primary : Color.Default)"
+                       OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Others))"
+                       data-testid="dashboard-condition-others">
+                Outros
+            </MudButton>
+
+            @foreach (var customName in _customConditionNames)
+            {
+                var nameCopy = customName;
+                <MudButton Size="Size.Small"
+                           Variant="@(IsConditionSelected(PurchaseConditionKind.Custom, nameCopy) ? Variant.Filled : Variant.Outlined)"
+                           Color="@(IsConditionSelected(PurchaseConditionKind.Custom, nameCopy) ? Color.Primary : Color.Default)"
+                           OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Custom, nameCopy))"
+                           data-testid="@($"dashboard-condition-custom-{nameCopy}")">
+                    @nameCopy
+                </MudButton>
+            }
+        </MudStack>
+    </MudPaper>
+
+    @* Linha Inferior: Fatura do Mês, Orçamentos por Categoria e Gastos por Categoria *@
+    <MudGrid Spacing="4">
+        @* 1. Fatura do Mês *@
+        <MudItem xs="12" lg="4">
+            <MudPaper Elevation="0" Class="pa-5 hearth-card d-flex flex-column justify-space-between" Style="height: 100%;" data-testid="dashboard-invoice-card">
+                <div>
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;" GutterBottom="true">
+                        Fatura do Mês (@HearthFormat.ShortMonthYear(_selectedMonth))
+                    </MudText>
+
+                    @if (_invoiceSummary is not null)
+                    {
+                        <MudText Typo="Typo.caption" Color="Color.Secondary">
+                            Valor calculado · fecha @HearthFormat.Date(_invoiceSummary.ClosingDate) · vence @HearthFormat.Date(_invoiceSummary.DueDate)
+                        </MudText>
+                        <MudText Typo="Typo.h4" Style="font-weight: 700;" Class="my-2" data-testid="dashboard-invoice-calculated">
+                            @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
+                        </MudText>
+
+                        <MudStack Spacing="1" Class="mt-3">
+                            <div class="hearth-statement-row">
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Valor cobrado:</MudText>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;" data-testid="dashboard-invoice-charged">
+                                    @(_invoiceSummary.ChargedAmount.HasValue ? HearthFormat.Money(_invoiceSummary.ChargedAmount.Value) : "Não informado")
+                                </MudText>
+                            </div>
+
+                            @if (_invoiceSummary.Divergence.HasValue)
+                            {
+                                <div class="hearth-statement-row">
+                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Divergência:</MudText>
+                                    <MudText Typo="Typo.body2"
+                                             Color="@(_invoiceSummary.Divergence.Value == 0m ? Color.Success : Color.Warning)"
+                                             Style="font-weight: 600;"
+                                             data-testid="dashboard-invoice-divergence">
+                                        @HearthFormat.Money(_invoiceSummary.Divergence.Value)
+                                    </MudText>
+                                </div>
+                            }
+
+                            <div class="hearth-statement-row">
+                                <MudText Typo="Typo.body2" Color="Color.Secondary">Status:</MudText>
+                                @if (_invoiceSummary.IsPaid)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                                        Paga em @HearthFormat.Date(_invoiceSummary.PaidOn)
+                                    </MudChip>
+                                }
+                                else
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                                        Em aberto
+                                    </MudChip>
+                                }
+                            </div>
+                        </MudStack>
+                    }
+                </div>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           FullWidth="true"
+                           EndIcon="@Icons.Material.Filled.ArrowForward"
+                           Href="/cartao/faturas"
+                           Class="mt-4"
+                           data-testid="dashboard-invoices-link">
+                    Visualizar Faturas
+                </MudButton>
+            </MudPaper>
+        </MudItem>
+
+        @* 2. Orçamentos por Categoria *@
+        <MudItem xs="12" lg="4">
+            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="dashboard-budgets-card">
+                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
+                    <MudText Typo="Typo.h6" Style="font-weight: 600;">Orçamentos por Categoria</MudText>
+                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Href="/orcamentos">
+                        Gerenciar
+                    </MudButton>
+                </MudStack>
+
+                @if (_budgetStatus is null || _budgetStatus.Items.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="py-4">
+                        Nenhum orçamento ativo em @HearthFormat.MonthYear(_selectedMonth).
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="3">
+                        @foreach (var item in _budgetStatus.Items)
+                        {
+                            var progressValue = Math.Min(100d, (double)item.UsagePercentage);
+                            <div data-testid="@($"budget-item-{item.CategoryId}")">
+                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1" Spacing="1">
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@item.CategoryName</MudText>
+                                        @if (item.IsExceeded)
+                                        {
+                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" data-testid="budget-exceeded-badge">
+                                                Estourado
+                                            </MudChip>
+                                        }
+                                    </MudStack>
+
+                                    <MudText Typo="Typo.caption" Color="@(item.IsExceeded ? Color.Error : Color.Secondary)">
+                                        @HearthFormat.Money(item.SpentAmount) / @HearthFormat.Money(item.BudgetAmount)
+                                        (@HearthFormat.Percentage(item.UsagePercentage))
+                                    </MudText>
+                                </MudStack>
+
+                                <MudProgressLinear Value="progressValue"
+                                                   Color="@(item.IsExceeded ? Color.Error : Color.Default)"
+                                                   Rounded="true"
+                                                   Size="Size.Medium" />
+                            </div>
+                        }
+                    </MudStack>
+                }
+            </MudPaper>
+        </MudItem>
+
+        @* 3. Gastos por Categoria *@
+        <MudItem xs="12" lg="4">
+            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="dashboard-spending-card">
+                <MudText Typo="Typo.h6" Style="font-weight: 600;" Class="mb-3">Gastos por Categoria</MudText>
+
+                <MudStack Spacing="2" Class="mb-4">
+                    <MudButton Variant="@(_includeCard ? Variant.Filled : Variant.Outlined)"
+                               Color="@(_includeCard ? Color.Primary : Color.Default)"
+                               FullWidth="true"
+                               OnClick="ToggleCardOriginAsync"
+                               Class="hearth-origin-toggle"
+                               data-testid="toggle-origin-card">
+                        <div class="hearth-statement-row" style="width: 100%;">
+                            <span>Cartão</span>
+                            <span>@HearthFormat.Money(_categorySpending?.CardInstallments ?? 0m)</span>
+                        </div>
+                    </MudButton>
+
+                    <MudButton Variant="@(_includeFixed ? Variant.Filled : Variant.Outlined)"
+                               Color="@(_includeFixed ? Color.Primary : Color.Default)"
+                               FullWidth="true"
+                               OnClick="ToggleFixedOriginAsync"
+                               Class="hearth-origin-toggle"
+                               data-testid="toggle-origin-fixed">
+                        <div class="hearth-statement-row" style="width: 100%;">
+                            <span>Fixo</span>
+                            <span>@HearthFormat.Money(_categorySpending?.FixedExpenses ?? 0m)</span>
+                        </div>
+                    </MudButton>
+
+                    <MudButton Variant="@(_includeDirect ? Variant.Filled : Variant.Outlined)"
+                               Color="@(_includeDirect ? Color.Primary : Color.Default)"
+                               FullWidth="true"
+                               OnClick="ToggleDirectOriginAsync"
+                               Class="hearth-origin-toggle"
+                               data-testid="toggle-origin-direct">
+                        <div class="hearth-statement-row" style="width: 100%;">
+                            <span>Direto</span>
+                            <span>@HearthFormat.Money(_categorySpending?.DirectExpenses ?? 0m)</span>
+                        </div>
+                    </MudButton>
+                </MudStack>
+
+                <MudDivider Class="mb-3" />
+
+                @if (_categorySpending is null || _categorySpending.Categories.Count == 0)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Nenhum gasto registrado para os filtros selecionados.
+                    </MudText>
+                }
+                else
+                {
+                    <MudStack Spacing="2" data-testid="spending-categories-list">
+                        @foreach (var item in _categorySpending.Categories)
+                        {
+                            <div class="hearth-statement-row">
+                                <MudText Typo="Typo.body2">@item.CategoryName</MudText>
+                                <MudText Typo="Typo.body2" Style="font-weight: 500;">
+                                    @HearthFormat.Money(item.Total)
+                                </MudText>
+                            </div>
+                        }
+                    </MudStack>
+
+                    <MudDivider Class="my-3" />
+
+                    <div class="hearth-statement-row">
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Total filtrado</MudText>
+                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;" data-testid="spending-total">
+                            @HearthFormat.Money(_categorySpending.Total)
+                        </MudText>
+                    </div>
+                }
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code
+{
+    private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
+    private DateOnly _realBalanceUntil;
+
+    private bool _includeCard = true;
+    private bool _includeFixed = true;
+    private bool _includeDirect = true;
+    private PurchaseConditionFilter? _conditionFilter;
+    private IReadOnlyList<string> _customConditionNames = [];
+
+    private RealBalanceDto? _realBalance;
+    private ProjectedResultDto? _projectedResult;
+    private InvoiceSummaryDto? _invoiceSummary;
+    private BudgetStatusDto? _budgetStatus;
+    private CategorySpendingDto? _categorySpending;
+    private bool _loading = true;
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = YearMonth.From(Clock.Today);
+        _realBalanceUntil = Clock.Today;
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        await LoadRealBalanceAsync(cancellationToken);
+        await LoadCustomConditionNamesAsync(cancellationToken);
+        await LoadMonthDataAsync(cancellationToken);
+
+        _loading = false;
+    }
+
+    private async Task LoadRealBalanceAsync(CancellationToken cancellationToken)
+    {
+        var result = await Executor.ExecuteAsync<GetRealBalanceHandler, RealBalanceDto>(
+            (handler, ct) => handler.ExecuteAsync(new GetRealBalanceQuery(AccountId, _realBalanceUntil), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _realBalance = result.Value;
+        }
+    }
+
+    private async Task LoadCustomConditionNamesAsync(CancellationToken cancellationToken)
+    {
+        var result = await Executor.ExecuteAsync<ListCreditCardPurchasesHandler, IReadOnlyList<CreditCardPurchaseDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCreditCardPurchasesQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _customConditionNames = result.Value
+                .Where(p => p.ConditionKind == PurchaseConditionKind.Custom && !string.IsNullOrWhiteSpace(p.ConditionName))
+                .Select(p => p.ConditionName!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+    }
+
+    private async Task LoadMonthDataAsync(CancellationToken cancellationToken)
+    {
+        var projectedResult = await Executor.ExecuteAsync<GetProjectedResultHandler, ProjectedResultDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetProjectedResultQuery(AccountId, _selectedMonth.Year, _selectedMonth.Month), ct),
+            cancellationToken: cancellationToken);
+
+        if (projectedResult.IsSuccess && projectedResult.Value is not null)
+        {
+            _projectedResult = projectedResult.Value;
+        }
+
+        var invoiceResult = await Executor.ExecuteAsync<GetInvoiceSummaryHandler, InvoiceSummaryDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetInvoiceSummaryQuery(AccountId, _selectedMonth.Year, _selectedMonth.Month), ct),
+            cancellationToken: cancellationToken);
+
+        if (invoiceResult.IsSuccess && invoiceResult.Value is not null)
+        {
+            _invoiceSummary = invoiceResult.Value;
+        }
+
+        await LoadFilteredReportsAsync(cancellationToken);
+    }
+
+    private async Task LoadFilteredReportsAsync(CancellationToken cancellationToken)
+    {
+        IReadOnlyList<PurchaseConditionFilter>? conditions = _conditionFilter is null
+            ? null
+            : [_conditionFilter];
+
+        var budgetResult = await Executor.ExecuteAsync<GetBudgetStatusHandler, BudgetStatusDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetBudgetStatusQuery(
+                    AccountId,
+                    _selectedMonth.Year,
+                    _selectedMonth.Month,
+                    IncludeDirectExpenses: true,
+                    IncludeFixedExpenses: true,
+                    IncludeCardInstallments: true,
+                    IncludedConditions: conditions),
+                ct),
+            cancellationToken: cancellationToken);
+
+        if (budgetResult.IsSuccess && budgetResult.Value is not null)
+        {
+            _budgetStatus = budgetResult.Value;
+        }
+
+        var spendingResult = await Executor.ExecuteAsync<GetExpensesByCategoryHandler, CategorySpendingDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetExpensesByCategoryQuery(
+                    AccountId,
+                    _selectedMonth.Year,
+                    _selectedMonth.Month,
+                    IncludeDirectExpenses: _includeDirect,
+                    IncludeFixedExpenses: _includeFixed,
+                    IncludeCardInstallments: _includeCard,
+                    IncludedConditions: conditions),
+                ct),
+            cancellationToken: cancellationToken);
+
+        if (spendingResult.IsSuccess && spendingResult.Value is not null)
+        {
+            _categorySpending = spendingResult.Value;
+        }
+    }
+
+    private async Task OnMonthChangedAsync(YearMonth month)
+    {
+        _selectedMonth = month;
+        await LoadMonthDataAsync(ComponentCancellationToken);
+    }
+
+    private async Task OnRealBalanceDateChangedAsync(DateTime? date)
+    {
+        if (!date.HasValue)
+        {
+            return;
+        }
+
+        _realBalanceUntil = HearthFormat.ToDateOnly(date.Value);
+        await LoadRealBalanceAsync(ComponentCancellationToken);
+    }
+
+    private async Task ResetRealBalanceDateAsync()
+    {
+        _realBalanceUntil = Clock.Today;
+        await LoadRealBalanceAsync(ComponentCancellationToken);
+    }
+
+    private async Task OnConditionFilterChangedAsync(PurchaseConditionFilter? filter)
+    {
+        _conditionFilter = filter;
+        await LoadFilteredReportsAsync(ComponentCancellationToken);
+    }
+
+    private async Task ToggleCardOriginAsync()
+    {
+        _includeCard = !_includeCard;
+        await LoadFilteredReportsAsync(ComponentCancellationToken);
+    }
+
+    private async Task ToggleFixedOriginAsync()
+    {
+        _includeFixed = !_includeFixed;
+        await LoadFilteredReportsAsync(ComponentCancellationToken);
+    }
+
+    private async Task ToggleDirectOriginAsync()
+    {
+        _includeDirect = !_includeDirect;
+        await LoadFilteredReportsAsync(ComponentCancellationToken);
+    }
+
+    private bool IsConditionSelected(PurchaseConditionKind kind, string? name) =>
+        _conditionFilter is not null
+        && _conditionFilter.Kind == kind
+        && string.Equals(_conditionFilter.Name, name, StringComparison.OrdinalIgnoreCase);
+}
