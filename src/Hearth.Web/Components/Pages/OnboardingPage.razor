@@ -1,0 +1,204 @@
+@page "/onboarding"
+@inject UseCaseExecutor Executor
+@inject AccountContext AccountContext
+@inject IClock Clock
+@inject NavigationManager Navigation
+@using Hearth.Application.Accounts.CreateAccount
+
+<PageTitle>Configuração inicial — Hearth</PageTitle>
+
+<MudGrid Justify="Justify.Center">
+    <MudItem xs="12" sm="10" md="7" lg="6">
+        <MudPaper Elevation="2" Class="pa-6">
+            <MudText Typo="Typo.h4" GutterBottom="true">Bem-vindo ao Hearth</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
+                Crie sua conta financeira para começar. As 8 categorias padrão
+                (Transporte, Alimentação, Saúde, Educação, Entretenimento, Serviços, Compras e Pessoal)
+                serão criadas automaticamente.
+            </MudText>
+
+            <MudForm @ref="_form" @onsubmit="SubmitAsync">
+                <MudStack Spacing="4">
+                    <MudTextField @bind-Value="_name"
+                                  Label="Nome da conta"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  RequiredError="Informe o nome da conta."
+                                  MaxLength="@DomainValidation.MaxNameLength"
+                                  Counter="@DomainValidation.MaxNameLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="account-name-input" />
+
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_initialBalance"
+                                     Label="Saldo inicial"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     HelperText="Pode ser zero ou negativo."
+                                     Disabled="_saving"
+                                     data-testid="initial-balance-input" />
+
+                    <MudDatePicker @bind-Date="_initialBalanceDate"
+                                   Label="Data do saldo inicial"
+                                   Variant="Variant.Outlined"
+                                   DateFormat="dd/MM/yyyy"
+                                   Culture="@HearthFormat.PtBr"
+                                   Editable="true"
+                                   Required="true"
+                                   RequiredError="Informe a data do saldo inicial."
+                                   HelperText="A data do saldo inicial não poderá ser alterada depois de criada."
+                                   Disabled="_saving"
+                                   data-testid="initial-balance-date-input" />
+
+                    <MudGrid>
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField T="int"
+                                             @bind-Value="_closingDay"
+                                             Label="Dia de fechamento do cartão"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="28"
+                                             HelperText="Entre 1 e 28"
+                                             Disabled="_saving"
+                                             data-testid="closing-day-input" />
+                        </MudItem>
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField T="int"
+                                             @bind-Value="_dueDay"
+                                             Label="Dia de vencimento do cartão"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="28"
+                                             HelperText="Entre 1 e 28"
+                                             Disabled="_saving"
+                                             data-testid="due-day-input" />
+                        </MudItem>
+                    </MudGrid>
+
+                    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                    {
+                        <MudAlert Severity="Severity.Warning" data-testid="onboarding-error">
+                            @_errorMessage
+                        </MudAlert>
+                    }
+
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        @if (AccountContext.HasAccounts)
+                        {
+                            <MudButton Variant="Variant.Text"
+                                       Color="Color.Default"
+                                       Href="/"
+                                       Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        }
+
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SubmitAsync"
+                                   Disabled="_saving"
+                                   data-testid="create-account-submit">
+                            @if (_saving)
+                            {
+                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                                <span>Criando...</span>
+                            }
+                            else
+                            {
+                                <span>Criar conta</span>
+                            }
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudForm>
+        </MudPaper>
+    </MudItem>
+</MudGrid>
+
+@code
+{
+    private MudForm? _form;
+    private string _name = string.Empty;
+    private decimal _initialBalance;
+    private DateTime? _initialBalanceDate;
+    private int _closingDay = 3;
+    private int _dueDay = 12;
+    private bool _saving;
+    private string? _errorMessage;
+
+    protected override void OnInitialized()
+    {
+        _initialBalanceDate = HearthFormat.ToDateTime(Clock.Today);
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _errorMessage = null;
+
+        if (_form is not null)
+        {
+            await _form.ValidateAsync();
+            if (!_form.IsValid)
+            {
+                return;
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(_name))
+        {
+            _errorMessage = "Informe o nome da conta.";
+            return;
+        }
+
+        if (!_initialBalanceDate.HasValue)
+        {
+            _errorMessage = "Informe a data do saldo inicial.";
+            return;
+        }
+
+        if (_closingDay is < 1 or > 28 || _dueDay is < 1 or > 28)
+        {
+            _errorMessage = "Os dias de fechamento e vencimento devem estar entre 1 e 28.";
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var command = new CreateAccountCommand(
+                _name.Trim(),
+                _initialBalance,
+                HearthFormat.ToDateOnly(_initialBalanceDate.Value),
+                _closingDay,
+                _dueDay);
+
+            var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(command, ct),
+                successMessage: "Conta criada com sucesso.");
+
+            if (!result.IsSuccess)
+            {
+                _errorMessage = result.ErrorMessage;
+                return;
+            }
+
+            await AccountContext.ReloadAsync(result.Value);
+            Navigation.NavigateTo("/");
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

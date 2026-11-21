@@ -1,0 +1,272 @@
+@page "/conta"
+@inherits AccountPageBase
+@using Hearth.Application.Accounts
+@using Hearth.Application.Accounts.ChangeBillingRule
+@using Hearth.Application.Accounts.GetAccount
+@using Hearth.Application.Accounts.RenameAccount
+@using Hearth.Application.Accounts.UpdateInitialBalance
+
+<PageTitle>Conta — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4">
+    <MudText Typo="Typo.h4">Configurações da Conta</MudText>
+    <MudButton Variant="Variant.Outlined"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               Href="/onboarding"
+               data-testid="new-account-button">
+        Nova conta
+    </MudButton>
+</MudStack>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else if (_account is not null)
+{
+    <MudGrid Spacing="4">
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Class="pa-5">
+                <MudText Typo="Typo.h6" GutterBottom="true">Identificação</MudText>
+
+                <MudStack Spacing="3">
+                    <MudTextField @bind-Value="_name"
+                                  Label="Nome da conta"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MaxLength="@DomainValidation.MaxNameLength"
+                                  Counter="@DomainValidation.MaxNameLength"
+                                  Immediate="true"
+                                  Disabled="_savingName"
+                                  data-testid="rename-account-input" />
+
+                    <MudStack Row="true" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveNameAsync"
+                                   Disabled="_savingName"
+                                   data-testid="rename-account-submit">
+                            @(_savingName ? "Salvando..." : "Salvar nome")
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12" md="6">
+            <MudPaper Elevation="2" Class="pa-5">
+                <MudText Typo="Typo.h6" GutterBottom="true">Saldo inicial</MudText>
+
+                <MudStack Spacing="3">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_initialBalance"
+                                     Label="Saldo inicial"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     Disabled="_savingBalance"
+                                     data-testid="update-balance-input" />
+
+                    <MudTextField Value="@HearthFormat.Date(_account.InitialBalanceDate)"
+                                  Label="Data do saldo inicial (imutável)"
+                                  Variant="Variant.Outlined"
+                                  ReadOnly="true"
+                                  HelperText="A data não pode ser alterada porque poderia invalidar lançamentos existentes."
+                                  data-testid="initial-balance-date-readonly" />
+
+                    <MudStack Row="true" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveInitialBalanceAsync"
+                                   Disabled="_savingBalance"
+                                   data-testid="update-balance-submit">
+                            @(_savingBalance ? "Salvando..." : "Atualizar saldo")
+                        </MudButton>
+                    </MudStack>
+                </MudStack>
+            </MudPaper>
+        </MudItem>
+
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-5">
+                <MudText Typo="Typo.h6" GutterBottom="true">Regra do cartão de crédito</MudText>
+
+                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
+                    Alterar o dia de fechamento ou vencimento vale apenas para novas compras.
+                    Compras já registradas mantêm a regra com que foram criadas.
+                </MudAlert>
+
+                <MudGrid Spacing="3" Class="align-center">
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int"
+                                         @bind-Value="_closingDay"
+                                         Label="Dia de fechamento"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="28"
+                                         HelperText="Entre 1 e 28"
+                                         Disabled="_savingBillingRule"
+                                         data-testid="update-closing-day-input" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="int"
+                                         @bind-Value="_dueDay"
+                                         Label="Dia de vencimento"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="28"
+                                         HelperText="Entre 1 e 28"
+                                         Disabled="_savingBillingRule"
+                                         data-testid="update-due-day-input" />
+                    </MudItem>
+                    <MudItem xs="12" sm="4">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="SaveBillingRuleAsync"
+                                   Disabled="_savingBillingRule"
+                                   data-testid="update-billing-rule-submit">
+                            @(_savingBillingRule ? "Salvando..." : "Atualizar regra")
+                        </MudButton>
+                    </MudItem>
+                </MudGrid>
+            </MudPaper>
+        </MudItem>
+    </MudGrid>
+}
+
+@code
+{
+    private AccountDto? _account;
+    private string _name = string.Empty;
+    private decimal _initialBalance;
+    private int _closingDay = 3;
+    private int _dueDay = 12;
+
+    private bool _loading = true;
+    private bool _savingName;
+    private bool _savingBalance;
+    private bool _savingBillingRule;
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var result = await Executor.ExecuteAsync<GetAccountHandler, AccountDto>(
+            (handler, ct) => handler.ExecuteAsync(new GetAccountQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            ApplyAccount(result.Value);
+        }
+
+        _loading = false;
+    }
+
+    private void ApplyAccount(AccountDto account)
+    {
+        _account = account;
+        _name = account.Name;
+        _initialBalance = account.InitialBalance;
+        _closingDay = account.ClosingDay;
+        _dueDay = account.DueDay;
+    }
+
+    private async Task SaveNameAsync()
+    {
+        if (_savingName || string.IsNullOrWhiteSpace(_name))
+        {
+            return;
+        }
+
+        _savingName = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<RenameAccountHandler>(
+                (handler, ct) => handler.ExecuteAsync(new RenameAccountCommand(AccountId, _name.Trim()), ct),
+                successMessage: "Nome da conta atualizado.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
+            }
+            else
+            {
+                await LoadDataAsync(ComponentCancellationToken);
+            }
+        }
+        finally
+        {
+            _savingName = false;
+        }
+    }
+
+    private async Task SaveInitialBalanceAsync()
+    {
+        if (_savingBalance)
+        {
+            return;
+        }
+
+        _savingBalance = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<UpdateInitialBalanceHandler>(
+                (handler, ct) => handler.ExecuteAsync(new UpdateInitialBalanceCommand(AccountId, _initialBalance), ct),
+                successMessage: "Saldo inicial atualizado.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
+            }
+            else
+            {
+                await LoadDataAsync(ComponentCancellationToken);
+            }
+        }
+        finally
+        {
+            _savingBalance = false;
+        }
+    }
+
+    private async Task SaveBillingRuleAsync()
+    {
+        if (_savingBillingRule)
+        {
+            return;
+        }
+
+        _savingBillingRule = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<ChangeBillingRuleHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new ChangeBillingRuleCommand(AccountId, _closingDay, _dueDay), ct),
+                successMessage: "Regra do cartão atualizada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
+            }
+            else
+            {
+                await LoadDataAsync(ComponentCancellationToken);
+            }
+        }
+        finally
+        {
+            _savingBillingRule = false;
+        }
+    }
+}
