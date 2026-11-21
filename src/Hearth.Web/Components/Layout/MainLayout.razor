@@ -1,23 +1,225 @@
 ﻿@inherits LayoutComponentBase
+@implements IDisposable
+@inject AccountContext AccountContext
+@inject NavigationManager Navigation
 
-<div class="page">
-    <div class="sidebar">
-        <NavMenu />
-    </div>
+<MudThemeProvider Theme="_theme" />
+<MudPopoverProvider />
+<MudDialogProvider />
+<MudSnackbarProvider />
 
-    <main>
-        <div class="top-row px-4">
-            <a href="https://learn.microsoft.com/aspnet/core/" target="_blank">About</a>
-        </div>
+<MudLayout>
+    <MudAppBar Elevation="1">
+        @if (AccountContext.HasAccounts)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Menu"
+                           Color="Color.Inherit"
+                           Edge="Edge.Start"
+                           aria-label="Alternar menu"
+                           OnClick="ToggleDrawer" />
+        }
 
-        <article class="content px-4">
-            @Body
-        </article>
-    </main>
-</div>
+        <MudText Typo="Typo.h6" Class="ml-2">Hearth</MudText>
+        <MudSpacer />
 
-<div id="blazor-error-ui" data-nosnippet>
-    An unhandled error has occurred.
-    <a href="." class="reload">Reload</a>
-    <span class="dismiss">🗙</span>
-</div>
+        @if (AccountContext.Accounts.Count > 1 && AccountContext.Current is not null)
+        {
+            <MudSelect T="Guid"
+                       Value="AccountContext.Current.Id"
+                       ValueChanged="HandleAccountSelected"
+                       Variant="Variant.Outlined"
+                       Margin="Margin.Dense"
+                       Dense="true"
+                       Style="max-width: 240px; background-color: rgba(255, 255, 255, 0.12);"
+                       aria-label="Conta ativa"
+                       data-testid="account-selector">
+                @foreach (var account in AccountContext.Accounts)
+                {
+                    <MudSelectItem T="Guid" Value="@account.Id">@account.Name</MudSelectItem>
+                }
+            </MudSelect>
+        }
+        else if (AccountContext.Current is not null)
+        {
+            <MudChip T="string"
+                     Color="Color.Inherit"
+                     Variant="Variant.Outlined"
+                     Size="Size.Small"
+                     Icon="@Icons.Material.Filled.AccountBalanceWallet"
+                     data-testid="active-account-chip">
+                @AccountContext.Current.Name
+            </MudChip>
+        }
+    </MudAppBar>
+
+    @if (AccountContext.HasAccounts)
+    {
+        <MudDrawer @bind-Open="_drawerOpen" Elevation="2" ClipMode="DrawerClipMode.Always">
+            <NavMenu />
+        </MudDrawer>
+    }
+
+    <MudMainContent>
+        <MudContainer MaxWidth="MaxWidth.Large" Class="py-6">
+            @if (!AccountContext.IsInitialized)
+            {
+                @if (AccountContext.LoadError is not null)
+                {
+                    <MudAlert Severity="Severity.Error" Class="mb-4" data-testid="account-load-error">
+                        @AccountContext.LoadError
+                    </MudAlert>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="RetryInitializationAsync"
+                               data-testid="account-retry-button">
+                        Tentar novamente
+                    </MudButton>
+                }
+                else
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" data-testid="account-loading" />
+                }
+            }
+            else if (!AccountContext.HasAccounts && !IsOnboardingRoute())
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" data-testid="onboarding-redirect" />
+            }
+            else
+            {
+                <ErrorBoundary @ref="_errorBoundary">
+                    <ChildContent>
+                        @Body
+                    </ChildContent>
+                    <ErrorContent>
+                        <MudAlert Severity="Severity.Error"
+                                  Variant="Variant.Outlined"
+                                  Class="mb-4"
+                                  data-testid="error-boundary-alert">
+                            Algo deu errado ao exibir esta tela.
+                        </MudAlert>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   OnClick="RecoverError"
+                                   data-testid="error-boundary-recover">
+                            Tentar novamente
+                        </MudButton>
+                    </ErrorContent>
+                </ErrorBoundary>
+            }
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+@code
+{
+    private readonly MudTheme _theme = new()
+    {
+        PaletteLight = new PaletteLight
+        {
+            Primary = "#1B4965",
+            Secondary = "#5FA8D3",
+            AppbarBackground = "#1B4965",
+            Background = "#F6F8FA",
+        },
+    };
+
+    private bool _drawerOpen = true;
+    private ErrorBoundary? _errorBoundary;
+    private bool _disposed;
+
+    protected override async Task OnInitializedAsync()
+    {
+        AccountContext.Changed += HandleAccountContextChanged;
+        Navigation.LocationChanged += HandleLocationChanged;
+
+        await AccountContext.InitializeAsync();
+        RedirectToOnboardingIfNeeded();
+    }
+
+    protected override void OnParametersSet()
+    {
+        _errorBoundary?.Recover();
+    }
+
+    private void ToggleDrawer() =>
+        _drawerOpen = !_drawerOpen;
+
+    private void HandleAccountSelected(Guid accountId) =>
+        AccountContext.SelectAccount(accountId);
+
+    private async Task RetryInitializationAsync()
+    {
+        await AccountContext.ReloadAsync();
+        RedirectToOnboardingIfNeeded();
+    }
+
+    private void RecoverError() =>
+        _errorBoundary?.Recover();
+
+    private void HandleAccountContextChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            RedirectToOnboardingIfNeeded();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs args)
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _ = InvokeAsync(() =>
+        {
+            if (_disposed)
+            {
+                return;
+            }
+
+            _errorBoundary?.Recover();
+            RedirectToOnboardingIfNeeded();
+            StateHasChanged();
+        });
+    }
+
+    private void RedirectToOnboardingIfNeeded()
+    {
+        if (AccountContext.IsInitialized && !AccountContext.HasAccounts && !IsOnboardingRoute())
+        {
+            Navigation.NavigateTo("/onboarding", replace: true);
+        }
+    }
+
+    private bool IsOnboardingRoute()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri).Trim('/');
+        var pathOnly = relative.Split('?', '#')[0];
+
+        return string.Equals(pathOnly, "onboarding", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public void Dispose()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
+        AccountContext.Changed -= HandleAccountContextChanged;
+        Navigation.LocationChanged -= HandleLocationChanged;
+    }
+}

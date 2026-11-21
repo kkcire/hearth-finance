@@ -16,7 +16,7 @@ namespace Hearth.Tests.Web;
 /// persists across the short-lived scopes created by <see cref="UseCaseExecutor"/> while
 /// staying completely isolated between tests.
 /// </summary>
-public abstract class WebTestBase : BunitContext
+public abstract class WebTestBase : BunitContext, IAsyncLifetime
 {
     internal InMemoryAccountRepository Accounts { get; } = new();
     internal InMemoryCategoryRepository Categories { get; } = new();
@@ -87,4 +87,8 @@ public abstract class WebTestBase : BunitContext
 
         return result.Value;
     }
+
+    public virtual Task InitializeAsync() => Task.CompletedTask;
+
+    public new virtual async Task DisposeAsync() => await base.DisposeAsync();
 }
