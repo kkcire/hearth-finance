@@ -1,0 +1,376 @@
+@page "/gastos-diretos"
+@inherits AccountPageBase
+@using Hearth.Application.Categories
+@using Hearth.Application.Categories.ListCategories
+@using Hearth.Application.DirectExpenses
+@using Hearth.Application.DirectExpenses.DeleteDirectExpense
+@using Hearth.Application.DirectExpenses.ListDirectExpenses
+@using Hearth.Application.DirectExpenses.RegisterDirectExpense
+@using Hearth.Application.DirectExpenses.UpdateDirectExpense
+@using Hearth.Web.Components.Shared
+
+<PageTitle>Gastos Diretos — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
+    <MudText Typo="Typo.h4">Gastos Diretos</MudText>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        @if (!_showAllMonths)
+        {
+            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+        }
+
+        <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="StartCreate"
+                   Disabled="_saving || ActiveCategories.Count == 0"
+                   data-testid="new-direct-expense-button">
+            Novo gasto
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_showForm)
+{
+    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="direct-expense-form">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            @(_editingId.HasValue ? "Editar gasto direto" : "Novo gasto direto")
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_description"
+                              Label="Descrição"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              MaxLength="@DomainValidation.MaxDescriptionLength"
+                              Counter="@DomainValidation.MaxDescriptionLength"
+                              Immediate="true"
+                              Disabled="_saving"
+                              data-testid="direct-description-input" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?"
+                           @bind-Value="_categoryId"
+                           Label="Categoria"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           Disabled="_saving"
+                           data-testid="direct-category-select">
+                    @foreach (var category in AvailableCategoriesForForm)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
+                            @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
+                        </MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_amount"
+                                 Label="Valor"
+                                 Variant="Variant.Outlined"
+                                 Culture="@HearthFormat.PtBr"
+                                 Format="N2"
+                                 Adornment="Adornment.Start"
+                                 AdornmentText="R$"
+                                 HideSpinButtons="true"
+                                 Disabled="_saving"
+                                 data-testid="direct-amount-input" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_date"
+                               Label="Data do gasto"
+                               Variant="Variant.Outlined"
+                               DateFormat="dd/MM/yyyy"
+                               Culture="@HearthFormat.PtBr"
+                               Editable="true"
+                               Disabled="_saving"
+                               data-testid="direct-date-input" />
+            </MudItem>
+
+            <MudItem xs="12">
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Text" OnClick="CloseForm" Disabled="_saving">Cancelar</MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="SaveAsync"
+                               Disabled="_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0 || !_date.HasValue"
+                               data-testid="save-direct-expense">
+                        @(_saving ? "Salvando..." : "Salvar")
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2" Class="mb-3 pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @FilteredExpenses.Count lançamento(s)
+            </MudText>
+            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" data-testid="direct-expenses-total">
+                Total: @HearthFormat.Money(FilteredExpenses.Sum(item => item.Amount))
+            </MudText>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="2">
+        <MudTable Items="FilteredExpenses" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh Style="width: 120px;">Data</MudTh>
+                <MudTh>Descrição</MudTh>
+                <MudTh>Categoria</MudTh>
+                <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
+                <MudTh Style="width: 190px; text-align: right;">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Data">@HearthFormat.Date(context.Date)</MudTd>
+                <MudTd DataLabel="Descrição">@context.Description</MudTd>
+                <MudTd DataLabel="Categoria">@GetCategoryName(context.CategoryId)</MudTd>
+                <MudTd DataLabel="Valor" Style="text-align: right; font-weight: 500;">
+                    @HearthFormat.Money(context.Amount)
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right;">
+                    @if (_confirmDeleteId == context.Id)
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Error"
+                                       OnClick="() => DeleteAsync(context.Id)"
+                                       Disabled="_saving"
+                                       data-testid="@($"confirm-delete-direct-{context.Id}")">
+                                Confirmar
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Text"
+                                       OnClick="() => _confirmDeleteId = null"
+                                       Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           title="Editar"
+                                           OnClick="() => StartEdit(context)"
+                                           Disabled="_saving"
+                                           data-testid="@($"edit-direct-{context.Id}")" />
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           title="Excluir"
+                                           OnClick="() => _confirmDeleteId = context.Id"
+                                           Disabled="_saving"
+                                           data-testid="@($"delete-direct-{context.Id}")" />
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                    Nenhum gasto direto neste período.
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code
+{
+    private IReadOnlyList<DirectExpenseDto> _expenses = [];
+    private IReadOnlyList<CategoryDto> _allCategories = [];
+    private Dictionary<Guid, string> _categoryNames = [];
+
+    private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
+    private bool _showAllMonths;
+    private bool _loading = true;
+    private bool _saving;
+
+    private bool _showForm;
+    private Guid? _editingId;
+    private Guid? _editingOriginalCategoryId;
+    private string _description = string.Empty;
+    private Guid? _categoryId;
+    private decimal _amount;
+    private DateTime? _date;
+    private Guid? _confirmDeleteId;
+
+    private IReadOnlyList<CategoryDto> ActiveCategories =>
+        _allCategories.Where(category => !category.IsArchived).ToList();
+
+    private IReadOnlyList<CategoryDto> AvailableCategoriesForForm =>
+        _allCategories
+            .Where(category => !category.IsArchived || category.Id == _editingOriginalCategoryId)
+            .ToList();
+
+    private IReadOnlyList<DirectExpenseDto> FilteredExpenses =>
+        _showAllMonths
+            ? _expenses
+            : _expenses
+                .Where(item => item.Date.Year == _selectedMonth.Year && item.Date.Month == _selectedMonth.Month)
+                .ToList();
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = YearMonth.From(Clock.Today);
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var expensesResult = await Executor.ExecuteAsync<ListDirectExpensesHandler, IReadOnlyList<DirectExpenseDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListDirectExpensesQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, IncludeArchived: true), ct),
+            cancellationToken: cancellationToken);
+
+        if (expensesResult.IsSuccess && expensesResult.Value is not null)
+        {
+            _expenses = expensesResult.Value;
+        }
+
+        if (categoriesResult.IsSuccess && categoriesResult.Value is not null)
+        {
+            _allCategories = categoriesResult.Value;
+            _categoryNames = _allCategories.ToDictionary(c => c.Id, c => c.Name);
+        }
+
+        _loading = false;
+    }
+
+    private void OnMonthChanged(YearMonth month) =>
+        _selectedMonth = month;
+
+    private void StartCreate()
+    {
+        _confirmDeleteId = null;
+        _editingId = null;
+        _editingOriginalCategoryId = null;
+        _description = string.Empty;
+        _amount = 0m;
+        _date = HearthFormat.ToDateTime(Clock.Today);
+        _categoryId = ActiveCategories.FirstOrDefault()?.Id;
+        _showForm = true;
+    }
+
+    private void StartEdit(DirectExpenseDto expense)
+    {
+        _confirmDeleteId = null;
+        _editingId = expense.Id;
+        _editingOriginalCategoryId = expense.CategoryId;
+        _description = expense.Description;
+        _amount = expense.Amount;
+        _date = HearthFormat.ToDateTime(expense.Date);
+        _categoryId = expense.CategoryId;
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editingId = null;
+        _editingOriginalCategoryId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0 || !_date.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var dateOnly = HearthFormat.ToDateOnly(_date.Value);
+
+            if (_editingId.HasValue)
+            {
+                var id = _editingId.Value;
+                var result = await Executor.ExecuteAsync<UpdateDirectExpenseHandler>(
+                    (handler, ct) => handler.ExecuteAsync(
+                        new UpdateDirectExpenseCommand(id, dateOnly, _amount, _description.Trim(), _categoryId.Value), ct),
+                    successMessage: "Gasto direto atualizado.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    CloseForm();
+                }
+            }
+            else
+            {
+                var result = await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
+                    (handler, ct) => handler.ExecuteAsync(
+                        new RegisterDirectExpenseCommand(AccountId, dateOnly, _amount, _description.Trim(), _categoryId.Value), ct),
+                    successMessage: "Gasto direto registrado.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    CloseForm();
+                }
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid id)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteDirectExpenseHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteDirectExpenseCommand(id), ct),
+                successMessage: "Gasto direto excluído.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteId = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private string GetCategoryName(Guid categoryId) =>
+        _categoryNames.GetValueOrDefault(categoryId, "—");
+}

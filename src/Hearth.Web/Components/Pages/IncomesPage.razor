@@ -1,0 +1,503 @@
+@page "/receitas"
+@inherits AccountPageBase
+@using Hearth.Application.Incomes
+@using Hearth.Application.Incomes.DeleteIncome
+@using Hearth.Application.Incomes.ListIncomes
+@using Hearth.Application.Incomes.MarkIncomeAsReceived
+@using Hearth.Application.Incomes.RegisterIncome
+@using Hearth.Application.Incomes.RevertIncomeToExpected
+@using Hearth.Application.Incomes.UpdateIncome
+@using Hearth.Web.Components.Shared
+
+<PageTitle>Receitas — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
+    <MudText Typo="Typo.h4">Receitas</MudText>
+
+    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
+        @if (!_showAllMonths)
+        {
+            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+        }
+
+        <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
+
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Add"
+                   OnClick="StartCreate"
+                   Disabled="_saving"
+                   data-testid="new-income-button">
+            Nova receita
+        </MudButton>
+    </MudStack>
+</MudStack>
+
+@if (_showForm)
+{
+    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="income-form">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            @(_editingId.HasValue ? "Editar receita" : "Nova receita")
+        </MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudTextField @bind-Value="_description"
+                              Label="Descrição"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              MaxLength="@DomainValidation.MaxDescriptionLength"
+                              Counter="@DomainValidation.MaxDescriptionLength"
+                              Immediate="true"
+                              Disabled="_saving"
+                              data-testid="income-description-input" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_amount"
+                                 Label="Valor"
+                                 Variant="Variant.Outlined"
+                                 Culture="@HearthFormat.PtBr"
+                                 Format="N2"
+                                 Adornment="Adornment.Start"
+                                 AdornmentText="R$"
+                                 HideSpinButtons="true"
+                                 Disabled="_saving"
+                                 data-testid="income-amount-input" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_expectedDate"
+                               Label="Data prevista"
+                               Variant="Variant.Outlined"
+                               DateFormat="dd/MM/yyyy"
+                               Culture="@HearthFormat.PtBr"
+                               Editable="true"
+                               Disabled="_saving"
+                               data-testid="income-expected-date-input" />
+            </MudItem>
+
+            @if (!_editingId.HasValue)
+            {
+                <MudItem xs="12" sm="6" Class="d-flex align-center">
+                    <MudSwitch T="bool"
+                               @bind-Value="_alreadyReceived"
+                               Color="Color.Success"
+                               Label="Já foi recebida?"
+                               Disabled="_saving" />
+                </MudItem>
+
+                @if (_alreadyReceived)
+                {
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_receivedOn"
+                                       Label="Data de recebimento"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="dd/MM/yyyy"
+                                       Culture="@HearthFormat.PtBr"
+                                       Editable="true"
+                                       Disabled="_saving"
+                                       data-testid="income-received-date-input" />
+                    </MudItem>
+                }
+            }
+
+            <MudItem xs="12">
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Text" OnClick="CloseForm" Disabled="_saving">Cancelar</MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="SaveAsync"
+                               Disabled="_saving || string.IsNullOrWhiteSpace(_description) || _amount <= 0 || !_expectedDate.HasValue || (_alreadyReceived && !_receivedOn.HasValue)"
+                               data-testid="save-income">
+                        @(_saving ? "Salvando..." : "Salvar")
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_receivingIncome is not null)
+{
+    <MudPaper Elevation="2" Class="pa-4 mb-4" data-testid="receive-income-panel">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            Confirmar recebimento — @_receivingIncome.Description (@HearthFormat.Money(_receivingIncome.Amount))
+        </MudText>
+        <MudGrid Spacing="3" Class="align-center">
+            <MudItem xs="12" sm="6">
+                <MudDatePicker @bind-Date="_receiveDate"
+                               Label="Data de recebimento"
+                               Variant="Variant.Outlined"
+                               DateFormat="dd/MM/yyyy"
+                               Culture="@HearthFormat.PtBr"
+                               Editable="true"
+                               Disabled="_saving"
+                               data-testid="confirm-receive-date-input" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Success"
+                               OnClick="ConfirmReceiveAsync"
+                               Disabled="_saving || !_receiveDate.HasValue"
+                               data-testid="confirm-receive-submit">
+                        Confirmar recebimento
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="() => _receivingIncome = null" Disabled="_saving">
+                        Cancelar
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2" Class="mb-3 pa-3">
+        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @FilteredIncomes.Count receita(s)
+            </MudText>
+            <MudStack Row="true" Spacing="4" Wrap="Wrap.Wrap">
+                <MudText Typo="Typo.body2">
+                    Previsto: <strong>@HearthFormat.Money(FilteredIncomes.Sum(i => i.Amount))</strong>
+                </MudText>
+                <MudText Typo="Typo.body2" Color="Color.Success">
+                    Recebido: <strong>@HearthFormat.Money(FilteredIncomes.Where(i => i.IsReceived).Sum(i => i.Amount))</strong>
+                </MudText>
+            </MudStack>
+        </MudStack>
+    </MudPaper>
+
+    <MudPaper Elevation="2">
+        <MudTable Items="FilteredIncomes" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh Style="width: 120px;">Data prevista</MudTh>
+                <MudTh>Descrição</MudTh>
+                <MudTh Style="width: 180px;">Status</MudTh>
+                <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
+                <MudTh Style="width: 240px; text-align: right;">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Data prevista">@HearthFormat.Date(context.ExpectedDate)</MudTd>
+                <MudTd DataLabel="Descrição">@context.Description</MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsReceived)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                            Recebida em @HearthFormat.Date(context.ReceivedOn)
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
+                            Prevista
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Valor" Style="text-align: right; font-weight: 500;">
+                    @HearthFormat.Money(context.Amount)
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right;">
+                    @if (_confirmDeleteId == context.Id)
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Error"
+                                       OnClick="() => DeleteAsync(context.Id)"
+                                       Disabled="_saving"
+                                       data-testid="@($"confirm-delete-income-{context.Id}")">
+                                Confirmar
+                            </MudButton>
+                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => _confirmDeleteId = null" Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            @if (context.IsReceived)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Undo"
+                                               Size="Size.Small"
+                                               Color="Color.Warning"
+                                               title="Reverter para prevista"
+                                               OnClick="() => RevertToExpectedAsync(context.Id)"
+                                               Disabled="_saving"
+                                               data-testid="@($"revert-income-{context.Id}")" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                               Size="Size.Small"
+                                               Color="Color.Success"
+                                               title="Marcar como recebida"
+                                               OnClick="() => StartReceive(context)"
+                                               Disabled="_saving"
+                                               data-testid="@($"receive-income-{context.Id}")" />
+                            }
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           title="Editar"
+                                           OnClick="() => StartEdit(context)"
+                                           Disabled="_saving"
+                                           data-testid="@($"edit-income-{context.Id}")" />
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           title="Excluir"
+                                           OnClick="() => _confirmDeleteId = context.Id"
+                                           Disabled="_saving"
+                                           data-testid="@($"delete-income-{context.Id}")" />
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                    Nenhuma receita neste período.
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+}
+
+@code
+{
+    private IReadOnlyList<IncomeDto> _incomes = [];
+    private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
+    private bool _showAllMonths;
+    private bool _loading = true;
+    private bool _saving;
+
+    private bool _showForm;
+    private Guid? _editingId;
+    private string _description = string.Empty;
+    private decimal _amount;
+    private DateTime? _expectedDate;
+    private bool _alreadyReceived;
+    private DateTime? _receivedOn;
+
+    private IncomeDto? _receivingIncome;
+    private DateTime? _receiveDate;
+    private Guid? _confirmDeleteId;
+
+    private IReadOnlyList<IncomeDto> FilteredIncomes =>
+        _showAllMonths
+            ? _incomes
+            : _incomes
+                .Where(item => item.ExpectedDate.Year == _selectedMonth.Year && item.ExpectedDate.Month == _selectedMonth.Month)
+                .ToList();
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = YearMonth.From(Clock.Today);
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var result = await Executor.ExecuteAsync<ListIncomesHandler, IReadOnlyList<IncomeDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListIncomesQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _incomes = result.Value;
+        }
+
+        _loading = false;
+    }
+
+    private void OnMonthChanged(YearMonth month) =>
+        _selectedMonth = month;
+
+    private void StartCreate()
+    {
+        _receivingIncome = null;
+        _confirmDeleteId = null;
+        _editingId = null;
+        _description = string.Empty;
+        _amount = 0m;
+        _expectedDate = HearthFormat.ToDateTime(Clock.Today);
+        _alreadyReceived = false;
+        _receivedOn = HearthFormat.ToDateTime(Clock.Today);
+        _showForm = true;
+    }
+
+    private void StartEdit(IncomeDto income)
+    {
+        _receivingIncome = null;
+        _confirmDeleteId = null;
+        _editingId = income.Id;
+        _description = income.Description;
+        _amount = income.Amount;
+        _expectedDate = HearthFormat.ToDateTime(income.ExpectedDate);
+        _alreadyReceived = false;
+        _showForm = true;
+    }
+
+    private void CloseForm()
+    {
+        _showForm = false;
+        _editingId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_saving || string.IsNullOrWhiteSpace(_description) || _amount <= 0 || !_expectedDate.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var expectedDate = HearthFormat.ToDateOnly(_expectedDate.Value);
+
+            if (_editingId.HasValue)
+            {
+                var id = _editingId.Value;
+                var result = await Executor.ExecuteAsync<UpdateIncomeHandler>(
+                    (handler, ct) => handler.ExecuteAsync(
+                        new UpdateIncomeCommand(id, expectedDate, _amount, _description.Trim()), ct),
+                    successMessage: "Receita atualizada.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    CloseForm();
+                }
+            }
+            else
+            {
+                DateOnly? received = _alreadyReceived && _receivedOn.HasValue
+                    ? HearthFormat.ToDateOnly(_receivedOn.Value)
+                    : null;
+
+                var result = await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
+                    (handler, ct) => handler.ExecuteAsync(
+                        new RegisterIncomeCommand(AccountId, expectedDate, _amount, _description.Trim(), received), ct),
+                    successMessage: "Receita registrada.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    CloseForm();
+                }
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartReceive(IncomeDto income)
+    {
+        _showForm = false;
+        _confirmDeleteId = null;
+        _receivingIncome = income;
+        _receiveDate = HearthFormat.ToDateTime(Clock.Today);
+    }
+
+    private async Task ConfirmReceiveAsync()
+    {
+        if (_saving || _receivingIncome is null || !_receiveDate.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var incomeId = _receivingIncome.Id;
+            var receivedOn = HearthFormat.ToDateOnly(_receiveDate.Value);
+
+            var result = await Executor.ExecuteAsync<MarkIncomeAsReceivedHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(new MarkIncomeAsReceivedCommand(incomeId, receivedOn), ct),
+                successMessage: "Receita marcada como recebida.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _receivingIncome = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RevertToExpectedAsync(Guid incomeId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            await Executor.ExecuteAsync<RevertIncomeToExpectedHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(new RevertIncomeToExpectedCommand(incomeId), ct),
+                successMessage: "Receita revertida para prevista.",
+                cancellationToken: ComponentCancellationToken);
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid incomeId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteIncomeHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteIncomeCommand(incomeId), ct),
+                successMessage: "Receita excluída.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteId = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

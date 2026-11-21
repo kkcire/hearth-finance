@@ -1,0 +1,41 @@
+<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                   Size="Size.Small"
+                   Variant="Variant.Outlined"
+                   title="Mês anterior"
+                   OnClick="PreviousMonthAsync"
+                   Disabled="Disabled"
+                   data-testid="month-prev" />
+
+    <MudText Typo="Typo.subtitle1"
+             Style="min-width: 168px; text-align: center; font-weight: 500;"
+             data-testid="month-label">
+        @HearthFormat.MonthYear(Month)
+    </MudText>
+
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                   Size="Size.Small"
+                   Variant="Variant.Outlined"
+                   title="Próximo mês"
+                   OnClick="NextMonthAsync"
+                   Disabled="Disabled"
+                   data-testid="month-next" />
+</MudStack>
+
+@code
+{
+    [Parameter, EditorRequired]
+    public YearMonth Month { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback<YearMonth> MonthChanged { get; set; }
+
+    [Parameter]
+    public bool Disabled { get; set; }
+
+    private Task PreviousMonthAsync() =>
+        MonthChanged.InvokeAsync(Month.AddMonths(-1));
+
+    private Task NextMonthAsync() =>
+        MonthChanged.InvokeAsync(Month.AddMonths(1));
+}
