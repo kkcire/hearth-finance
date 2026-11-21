@@ -1,0 +1,578 @@
+@page "/orcamentos"
+@inherits AccountPageBase
+@inject ISnackbar Snackbar
+@using Hearth.Application.Categories
+@using Hearth.Application.Categories.ListCategories
+@using Hearth.Application.CategoryBudgets
+@using Hearth.Application.CategoryBudgets.ChangeCategoryBudgetAmount
+@using Hearth.Application.CategoryBudgets.CreateCategoryBudget
+@using Hearth.Application.CategoryBudgets.DeleteCategoryBudget
+@using Hearth.Application.CategoryBudgets.EndCategoryBudget
+@using Hearth.Application.CategoryBudgets.ListCategoryBudgets
+
+<PageTitle>Orçamentos — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h4">Orçamentos Mensais</MudText>
+    <MudButton Variant="Variant.Filled"
+               Color="Color.Primary"
+               StartIcon="@Icons.Material.Filled.Add"
+               OnClick="ToggleCreateForm"
+               Disabled="_saving || _activeCategories.Count == 0"
+               data-testid="toggle-create-budget">
+        @(_showCreateForm ? "Fechar formulário" : "Novo orçamento")
+    </MudButton>
+</MudStack>
+
+@if (_showCreateForm)
+{
+    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="create-budget-panel">
+        <MudText Typo="Typo.h6" GutterBottom="true">Novo orçamento por categoria</MudText>
+
+        <MudGrid Spacing="3">
+            <MudItem xs="12" sm="6">
+                <MudSelect T="Guid?"
+                           @bind-Value="_newCategoryId"
+                           Label="Categoria"
+                           Variant="Variant.Outlined"
+                           Required="true"
+                           Disabled="_saving"
+                           data-testid="budget-category-select">
+                    @foreach (var category in _activeCategories)
+                    {
+                        <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">@category.Name</MudSelectItem>
+                    }
+                </MudSelect>
+            </MudItem>
+
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_newAmount"
+                                 Label="Valor mensal"
+                                 Variant="Variant.Outlined"
+                                 Culture="@HearthFormat.PtBr"
+                                 Format="N2"
+                                 Adornment="Adornment.Start"
+                                 AdornmentText="R$"
+                                 HideSpinButtons="true"
+                                 Disabled="_saving"
+                                 data-testid="budget-amount-input" />
+            </MudItem>
+
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int"
+                                 @bind-Value="_newStartMonth"
+                                 Label="Mês inicial"
+                                 Variant="Variant.Outlined"
+                                 Min="1"
+                                 Max="12"
+                                 Disabled="_saving"
+                                 data-testid="budget-start-month-input" />
+            </MudItem>
+
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int"
+                                 @bind-Value="_newStartYear"
+                                 Label="Ano inicial"
+                                 Variant="Variant.Outlined"
+                                 Min="2000"
+                                 Max="2100"
+                                 Disabled="_saving"
+                                 data-testid="budget-start-year-input" />
+            </MudItem>
+
+            <MudItem xs="12" sm="6" Class="d-flex align-center">
+                <MudSwitch T="bool"
+                           @bind-Value="_hasEndMonth"
+                           Color="Color.Primary"
+                           Label="Definir mês final?"
+                           Disabled="_saving" />
+            </MudItem>
+
+            @if (_hasEndMonth)
+            {
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int"
+                                     @bind-Value="_newEndMonth"
+                                     Label="Mês final"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="12"
+                                     Disabled="_saving"
+                                     data-testid="budget-end-month-input" />
+                </MudItem>
+
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int"
+                                     @bind-Value="_newEndYear"
+                                     Label="Ano final"
+                                     Variant="Variant.Outlined"
+                                     Min="2000"
+                                     Max="2100"
+                                     Disabled="_saving"
+                                     data-testid="budget-end-year-input" />
+                </MudItem>
+            }
+
+            <MudItem xs="12">
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    <MudButton Variant="Variant.Text" OnClick="ToggleCreateForm" Disabled="_saving">
+                        Cancelar
+                    </MudButton>
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="CreateBudgetAsync"
+                               Disabled="_saving || !_newCategoryId.HasValue || _newAmount <= 0"
+                               data-testid="create-budget-submit">
+                        @(_saving ? "Salvando..." : "Criar orçamento")
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_changingAmountBudget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="change-amount-panel">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            Alterar valor — @_changingAmountBudget.CategoryName
+        </MudText>
+        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
+            O novo valor passa a valer a partir do mês calendário atual (@HearthFormat.MonthYear(CurrentMonth)).
+            Meses anteriores permanecem intactos.
+        </MudAlert>
+        <MudGrid Spacing="3" Class="align-center">
+            <MudItem xs="12" sm="6">
+                <MudNumericField T="decimal"
+                                 @bind-Value="_editAmount"
+                                 Label="Novo valor mensal"
+                                 Variant="Variant.Outlined"
+                                 Culture="@HearthFormat.PtBr"
+                                 Format="N2"
+                                 Adornment="Adornment.Start"
+                                 AdornmentText="R$"
+                                 HideSpinButtons="true"
+                                 Disabled="_saving"
+                                 data-testid="edit-budget-amount-input" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               OnClick="SaveBudgetAmountAsync"
+                               Disabled="_saving || _editAmount <= 0"
+                               data-testid="save-budget-amount">
+                        @(_saving ? "Salvando..." : "Salvar valor")
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="CancelInlineEditors" Disabled="_saving">
+                        Cancelar
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_endingBudget is not null)
+{
+    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="end-budget-panel">
+        <MudText Typo="Typo.h6" GutterBottom="true">
+            Encerrar orçamento — @_endingBudget.CategoryName
+        </MudText>
+        <MudGrid Spacing="3" Class="align-center">
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int"
+                                 @bind-Value="_endLastMonth"
+                                 Label="Último mês"
+                                 Variant="Variant.Outlined"
+                                 Min="1"
+                                 Max="12"
+                                 Disabled="_saving"
+                                 data-testid="end-budget-month-input" />
+            </MudItem>
+            <MudItem xs="6" sm="3">
+                <MudNumericField T="int"
+                                 @bind-Value="_endLastYear"
+                                 Label="Último ano"
+                                 Variant="Variant.Outlined"
+                                 Min="2000"
+                                 Max="2100"
+                                 Disabled="_saving"
+                                 data-testid="end-budget-year-input" />
+            </MudItem>
+            <MudItem xs="12" sm="6">
+                <MudStack Row="true" Spacing="2">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Warning"
+                               OnClick="SaveEndBudgetAsync"
+                               Disabled="_saving"
+                               data-testid="save-budget-end">
+                        @(_saving ? "Salvando..." : "Confirmar encerramento")
+                    </MudButton>
+                    <MudButton Variant="Variant.Text" OnClick="CancelInlineEditors" Disabled="_saving">
+                        Cancelar
+                    </MudButton>
+                </MudStack>
+            </MudItem>
+        </MudGrid>
+    </MudPaper>
+}
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable Items="_budgets" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Categoria</MudTh>
+                <MudTh>Vigência</MudTh>
+                <MudTh>Valor vigente</MudTh>
+                <MudTh>Histórico</MudTh>
+                <MudTh Style="width: 240px; text-align: right;">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Categoria">
+                    <MudText Typo="Typo.body1">@context.CategoryName</MudText>
+                </MudTd>
+                <MudTd DataLabel="Vigência">
+                    @FormatPeriod(context)
+                </MudTd>
+                <MudTd DataLabel="Valor vigente">
+                    <MudText Typo="Typo.body1" Style="font-weight: 500;">
+                        @HearthFormat.Money(GetCurrentOrLatestAmount(context))
+                    </MudText>
+                </MudTd>
+                <MudTd DataLabel="Histórico">
+                    <MudStack Row="true" Spacing="1" Wrap="Wrap.Wrap">
+                        @foreach (var change in context.AmountHistory)
+                        {
+                            <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined">
+                                @HearthFormat.ShortMonthYear(change.EffectiveFromYear, change.EffectiveFromMonth): @HearthFormat.Money(change.Amount)
+                            </MudChip>
+                        }
+                    </MudStack>
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right;">
+                    @if (_confirmDeleteBudgetId == context.Id)
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Error">Excluir?</MudText>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Error"
+                                       OnClick="() => DeleteBudgetAsync(context.Id)"
+                                       Disabled="_saving"
+                                       data-testid="@($"confirm-delete-budget-{context.Id}")">
+                                Confirmar
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Text"
+                                       OnClick="() => _confirmDeleteBudgetId = null"
+                                       Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.AttachMoney"
+                                           Size="Size.Small"
+                                           Color="Color.Primary"
+                                           title="Alterar valor"
+                                           OnClick="() => StartChangeAmount(context)"
+                                           Disabled="_saving"
+                                           data-testid="@($"change-amount-{context.Id}")" />
+
+                            <MudIconButton Icon="@Icons.Material.Filled.EventBusy"
+                                           Size="Size.Small"
+                                           Color="Color.Warning"
+                                           title="Encerrar vigência"
+                                           OnClick="() => StartEndBudget(context)"
+                                           Disabled="_saving"
+                                           data-testid="@($"end-budget-{context.Id}")" />
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           title="Excluir"
+                                           OnClick="() => StartDelete(context.Id)"
+                                           Disabled="_saving"
+                                           data-testid="@($"delete-budget-{context.Id}")" />
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                    Nenhum orçamento cadastrado ainda. Clique em "Novo orçamento" para definir metas por categoria.
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+        Orçamentos são puramente informativos (nunca bloqueiam lançamentos) e acompanham os gastos pelo regime de competência.
+    </MudAlert>
+}
+
+@code
+{
+    private IReadOnlyList<CategoryBudgetDto> _budgets = [];
+    private IReadOnlyList<CategoryDto> _activeCategories = [];
+
+    private bool _loading = true;
+    private bool _saving;
+    private bool _showCreateForm;
+
+    private Guid? _newCategoryId;
+    private decimal _newAmount;
+    private int _newStartMonth;
+    private int _newStartYear;
+    private bool _hasEndMonth;
+    private int _newEndMonth;
+    private int _newEndYear;
+
+    private CategoryBudgetDto? _changingAmountBudget;
+    private decimal _editAmount;
+
+    private CategoryBudgetDto? _endingBudget;
+    private int _endLastMonth;
+    private int _endLastYear;
+
+    private Guid? _confirmDeleteBudgetId;
+
+    private YearMonth CurrentMonth => YearMonth.From(Clock.Today);
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var budgetsResult = await Executor.ExecuteAsync<ListCategoryBudgetsHandler, IReadOnlyList<CategoryBudgetDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCategoryBudgetsQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, IncludeArchived: false), ct),
+            cancellationToken: cancellationToken);
+
+        if (budgetsResult.IsSuccess && budgetsResult.Value is not null)
+        {
+            _budgets = budgetsResult.Value;
+        }
+
+        if (categoriesResult.IsSuccess && categoriesResult.Value is not null)
+        {
+            _activeCategories = categoriesResult.Value;
+        }
+
+        ResetCreateDefaults();
+        _loading = false;
+    }
+
+    private void ResetCreateDefaults()
+    {
+        var today = Clock.Today;
+        _newStartMonth = today.Month;
+        _newStartYear = today.Year;
+        _newEndMonth = today.Month;
+        _newEndYear = today.Year;
+        _hasEndMonth = false;
+        _newAmount = 0m;
+        _newCategoryId = _activeCategories.FirstOrDefault()?.Id;
+    }
+
+    private void ToggleCreateForm()
+    {
+        CancelInlineEditors();
+        _showCreateForm = !_showCreateForm;
+        if (_showCreateForm)
+        {
+            ResetCreateDefaults();
+        }
+    }
+
+    private void CancelInlineEditors()
+    {
+        _changingAmountBudget = null;
+        _endingBudget = null;
+        _confirmDeleteBudgetId = null;
+    }
+
+    private async Task CreateBudgetAsync()
+    {
+        if (_saving || !_newCategoryId.HasValue || _newAmount <= 0)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var command = new CreateCategoryBudgetCommand(
+                AccountId,
+                _newCategoryId.Value,
+                _newStartYear,
+                _newStartMonth,
+                _hasEndMonth ? _newEndYear : null,
+                _hasEndMonth ? _newEndMonth : null,
+                _newAmount);
+
+            var result = await Executor.ExecuteAsync<CreateCategoryBudgetHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(command, ct),
+                successMessage: "Orçamento criado.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _showCreateForm = false;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartChangeAmount(CategoryBudgetDto budget)
+    {
+        _showCreateForm = false;
+        CancelInlineEditors();
+        _changingAmountBudget = budget;
+        _editAmount = GetCurrentOrLatestAmount(budget);
+    }
+
+    private async Task SaveBudgetAmountAsync()
+    {
+        if (_saving || _changingAmountBudget is null || _editAmount <= 0)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var budgetId = _changingAmountBudget.Id;
+            var result = await Executor.ExecuteAsync<ChangeCategoryBudgetAmountHandler, ChangeCategoryBudgetAmountResult>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new ChangeCategoryBudgetAmountCommand(budgetId, _editAmount), ct),
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess && result.Value is not null)
+            {
+                _changingAmountBudget = null;
+                var effective = HearthFormat.MonthYear(result.Value.EffectiveFromYear, result.Value.EffectiveFromMonth);
+                Snackbar.Add($"Valor atualizado a partir de {effective}.", Severity.Success);
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartEndBudget(CategoryBudgetDto budget)
+    {
+        _showCreateForm = false;
+        CancelInlineEditors();
+        _endingBudget = budget;
+        _endLastMonth = budget.EndMonth ?? Clock.Today.Month;
+        _endLastYear = budget.EndYear ?? Clock.Today.Year;
+    }
+
+    private async Task SaveEndBudgetAsync()
+    {
+        if (_saving || _endingBudget is null)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var budgetId = _endingBudget.Id;
+            var result = await Executor.ExecuteAsync<EndCategoryBudgetHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new EndCategoryBudgetCommand(budgetId, _endLastYear, _endLastMonth), ct),
+                successMessage: "Vigência do orçamento atualizada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _endingBudget = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartDelete(Guid budgetId)
+    {
+        _showCreateForm = false;
+        CancelInlineEditors();
+        _confirmDeleteBudgetId = budgetId;
+    }
+
+    private async Task DeleteBudgetAsync(Guid budgetId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteCategoryBudgetHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteCategoryBudgetCommand(budgetId), ct),
+                successMessage: "Orçamento excluído.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteBudgetId = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private static string FormatPeriod(CategoryBudgetDto budget)
+    {
+        var start = HearthFormat.ShortMonthYear(budget.StartYear, budget.StartMonth);
+        var end = budget.EndYear.HasValue && budget.EndMonth.HasValue
+            ? HearthFormat.ShortMonthYear(budget.EndYear.Value, budget.EndMonth.Value)
+            : "Em aberto";
+
+        return $"{start} — {end}";
+    }
+
+    private decimal GetCurrentOrLatestAmount(CategoryBudgetDto budget)
+    {
+        var current = CurrentMonth;
+        var entry = budget.AmountHistory
+            .LastOrDefault(change => YearMonth.Of(change.EffectiveFromYear, change.EffectiveFromMonth) <= current);
+
+        return entry?.Amount ?? budget.AmountHistory[^1].Amount;
+    }
+}

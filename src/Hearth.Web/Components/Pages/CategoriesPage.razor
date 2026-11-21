@@ -1,0 +1,383 @@
+@page "/categorias"
+@inherits AccountPageBase
+@using Hearth.Application.Categories
+@using Hearth.Application.Categories.ArchiveCategory
+@using Hearth.Application.Categories.CreateCategory
+@using Hearth.Application.Categories.DeleteCategory
+@using Hearth.Application.Categories.ListCategories
+@using Hearth.Application.Categories.RenameCategory
+@using Hearth.Application.Categories.RestoreCategory
+
+<PageTitle>Categorias — Hearth</PageTitle>
+
+<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap">
+    <MudText Typo="Typo.h4">Categorias</MudText>
+    <MudSwitch T="bool"
+               Value="_showArchived"
+               ValueChanged="ToggleArchivedAsync"
+               Color="Color.Primary"
+               Label="Mostrar arquivadas"
+               data-testid="toggle-archived" />
+</MudStack>
+
+<MudPaper Elevation="2" Class="pa-4 mb-4">
+    <MudGrid Spacing="2" Class="align-center">
+        <MudItem xs="12" sm="8" md="9">
+            <MudTextField @bind-Value="_newCategoryName"
+                          Label="Nova categoria"
+                          Placeholder="Ex.: Pets, Viagens, Assinaturas"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          MaxLength="@DomainValidation.MaxNameLength"
+                          Immediate="true"
+                          Disabled="_saving"
+                          data-testid="new-category-name" />
+        </MudItem>
+        <MudItem xs="12" sm="4" md="3">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       FullWidth="true"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="CreateCategoryAsync"
+                       Disabled="_saving || string.IsNullOrWhiteSpace(_newCategoryName)"
+                       data-testid="create-category-submit">
+                @(_saving ? "Salvando..." : "Adicionar")
+            </MudButton>
+        </MudItem>
+    </MudGrid>
+</MudPaper>
+
+@if (_loading)
+{
+    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
+}
+else
+{
+    <MudPaper Elevation="2">
+        <MudTable Items="_categories" Hover="true" Dense="true" Elevation="0">
+            <HeaderContent>
+                <MudTh>Nome</MudTh>
+                <MudTh Style="width: 140px;">Status</MudTh>
+                <MudTh Style="width: 280px; text-align: right;">Ações</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd DataLabel="Nome">
+                    @if (_editingCategoryId == context.Id)
+                    {
+                        <MudTextField @bind-Value="_editingName"
+                                      Variant="Variant.Outlined"
+                                      Margin="Margin.Dense"
+                                      MaxLength="@DomainValidation.MaxNameLength"
+                                      Immediate="true"
+                                      Disabled="_saving"
+                                      data-testid="rename-category-input" />
+                    }
+                    else
+                    {
+                        <MudText Typo="Typo.body1">@context.Name</MudText>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Status">
+                    @if (context.IsArchived)
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
+                            Arquivada
+                        </MudChip>
+                    }
+                    else
+                    {
+                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
+                            Ativa
+                        </MudChip>
+                    }
+                </MudTd>
+                <MudTd DataLabel="Ações" Style="text-align: right;">
+                    @if (_editingCategoryId == context.Id)
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       OnClick="SaveRenameAsync"
+                                       Disabled="_saving || string.IsNullOrWhiteSpace(_editingName)"
+                                       data-testid="rename-category-save">
+                                Salvar
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Text"
+                                       OnClick="CancelRename"
+                                       Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else if (_confirmDeleteCategoryId == context.Id)
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.caption" Color="Color.Error">Excluir?</MudText>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Filled"
+                                       Color="Color.Error"
+                                       OnClick="() => DeleteCategoryAsync(context.Id)"
+                                       Disabled="_saving"
+                                       data-testid="@($"confirm-delete-{context.Id}")">
+                                Confirmar
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       Variant="Variant.Text"
+                                       OnClick="CancelDelete"
+                                       Disabled="_saving">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    }
+                    else
+                    {
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                           Size="Size.Small"
+                                           title="Renomear"
+                                           OnClick="() => StartRename(context)"
+                                           Disabled="_saving"
+                                           data-testid="@($"rename-{context.Id}")" />
+
+                            @if (context.IsArchived)
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Unarchive"
+                                               Size="Size.Small"
+                                               Color="Color.Primary"
+                                               title="Restaurar"
+                                               OnClick="() => RestoreCategoryAsync(context.Id)"
+                                               Disabled="_saving"
+                                               data-testid="@($"restore-{context.Id}")" />
+                            }
+                            else
+                            {
+                                <MudIconButton Icon="@Icons.Material.Filled.Archive"
+                                               Size="Size.Small"
+                                               Color="Color.Warning"
+                                               title="Arquivar"
+                                               OnClick="() => ArchiveCategoryAsync(context.Id)"
+                                               Disabled="_saving"
+                                               data-testid="@($"archive-{context.Id}")" />
+                            }
+
+                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                           Size="Size.Small"
+                                           Color="Color.Error"
+                                           title="Excluir"
+                                           OnClick="() => StartDelete(context.Id)"
+                                           Disabled="_saving"
+                                           data-testid="@($"delete-{context.Id}")" />
+                        </MudStack>
+                    }
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
+                    Nenhuma categoria encontrada.
+                </MudText>
+            </NoRecordsContent>
+        </MudTable>
+    </MudPaper>
+
+    <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-4">
+        Categorias arquivadas não podem ser escolhidas em novos lançamentos ou orçamentos, mas continuam no histórico.
+        A exclusão só é permitida se nenhum lançamento ou orçamento apontar para a categoria.
+    </MudAlert>
+}
+
+@code
+{
+    private IReadOnlyList<CategoryDto> _categories = [];
+    private bool _showArchived;
+    private bool _loading = true;
+    private bool _saving;
+
+    private string _newCategoryName = string.Empty;
+    private Guid? _editingCategoryId;
+    private string _editingName = string.Empty;
+    private Guid? _confirmDeleteCategoryId;
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var result = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, _showArchived), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _categories = result.Value;
+        }
+
+        _loading = false;
+    }
+
+    private async Task ToggleArchivedAsync(bool showArchived)
+    {
+        _showArchived = showArchived;
+        await LoadDataAsync(ComponentCancellationToken);
+    }
+
+    private async Task CreateCategoryAsync()
+    {
+        if (_saving || string.IsNullOrWhiteSpace(_newCategoryName))
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<CreateCategoryHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new CreateCategoryCommand(AccountId, _newCategoryName.Trim()), ct),
+                successMessage: "Categoria criada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _newCategoryName = string.Empty;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartRename(CategoryDto category)
+    {
+        _confirmDeleteCategoryId = null;
+        _editingCategoryId = category.Id;
+        _editingName = category.Name;
+    }
+
+    private void CancelRename()
+    {
+        _editingCategoryId = null;
+        _editingName = string.Empty;
+    }
+
+    private async Task SaveRenameAsync()
+    {
+        if (_saving || !_editingCategoryId.HasValue || string.IsNullOrWhiteSpace(_editingName))
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var categoryId = _editingCategoryId.Value;
+            var result = await Executor.ExecuteAsync<RenameCategoryHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new RenameCategoryCommand(categoryId, _editingName.Trim()), ct),
+                successMessage: "Categoria renomeada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelRename();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ArchiveCategoryAsync(Guid categoryId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            await Executor.ExecuteAsync<ArchiveCategoryHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(new ArchiveCategoryCommand(categoryId), ct),
+                successMessage: "Categoria arquivada.",
+                cancellationToken: ComponentCancellationToken);
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RestoreCategoryAsync(Guid categoryId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            await Executor.ExecuteAsync<RestoreCategoryHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(new RestoreCategoryCommand(categoryId), ct),
+                successMessage: "Categoria restaurada.",
+                cancellationToken: ComponentCancellationToken);
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartDelete(Guid categoryId)
+    {
+        _editingCategoryId = null;
+        _confirmDeleteCategoryId = categoryId;
+    }
+
+    private void CancelDelete() =>
+        _confirmDeleteCategoryId = null;
+
+    private async Task DeleteCategoryAsync(Guid categoryId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteCategoryHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteCategoryCommand(categoryId), ct),
+                successMessage: "Categoria excluída.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteCategoryId = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}
