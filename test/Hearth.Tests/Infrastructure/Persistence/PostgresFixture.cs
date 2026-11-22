@@ -60,7 +60,8 @@ public sealed class PostgresFixture : IAsyncLifetime
                 incomes,
                 invoices,
                 categories,
-                accounts
+                accounts,
+                users
             RESTART IDENTITY CASCADE;
             """);
     }

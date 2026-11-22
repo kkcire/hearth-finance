@@ -1,6 +1,7 @@
 using Hearth.Application.Abstractions;
 using Hearth.Infrastructure.Persistence;
 using Hearth.Infrastructure.Persistence.Repositories;
+using Hearth.Infrastructure.Security;
 using Hearth.Infrastructure.Time;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -21,6 +22,7 @@ public static class DependencyInjection
         services.AddDbContext<HearthDbContext>(options => options.UseNpgsql(connectionString));
 
         services.AddScoped<IUnitOfWork, EfUnitOfWork>();
+        services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IAccountRepository, AccountRepository>();
         services.AddScoped<ICategoryRepository, CategoryRepository>();
         services.AddScoped<ICategoryBudgetRepository, CategoryBudgetRepository>();
@@ -30,6 +32,7 @@ public static class DependencyInjection
         services.AddScoped<IIncomeRepository, IncomeRepository>();
         services.AddScoped<IInvoiceRepository, InvoiceRepository>();
 
+        services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();
         services.AddSingleton(TimeProvider.System);
         services.AddSingleton<IClock>(provider =>
             new SystemClock(provider.GetRequiredService<TimeProvider>(), timeZoneId));
