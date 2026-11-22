@@ -1,5 +1,8 @@
+using System.Reflection;
 using Bunit;
 using Hearth.Web.Components.Layout;
+using Hearth.Web.Components.Shared;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.Rendering;
 using Microsoft.Extensions.DependencyInjection;
@@ -44,6 +47,59 @@ public sealed class MainLayoutTests : WebTestBase
         Assert.Contains("Lançamentos", cut.Markup);
         Assert.Contains("Planejamento", cut.Markup);
         Assert.Contains("Conta", cut.Markup);
+        Assert.Contains("Erick", cut.Find("[data-testid='user-name']").TextContent);
+
+        var logoutForm = cut.Find("form[data-testid='logout-form']");
+        Assert.Equal("post", logoutForm.GetAttribute("method"), ignoreCase: true);
+        Assert.Equal("/auth/logout", logoutForm.GetAttribute("action"));
+    }
+
+    [Fact]
+    public void RedirectToLogin_OnProtectedDeepLink_NavigatesToLoginWithReturnUrl()
+    {
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        navigation.NavigateTo("/cartao/faturas");
+
+        Render<RedirectToLogin>();
+
+        Assert.EndsWith("/login?returnUrl=%2Fcartao%2Ffaturas", navigation.Uri, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AllRoutablePages_HaveExplicitAuthorizeOrAllowAnonymousMetadata()
+    {
+        var allowedAnonymousRoutes = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "/login",
+            "/cadastro",
+            "/Error",
+            "/not-found",
+        };
+
+        var pageTypes = typeof(MainLayout).Assembly
+            .GetTypes()
+            .Where(type => typeof(IComponent).IsAssignableFrom(type)
+                           && type.GetCustomAttributes<RouteAttribute>().Any())
+            .ToList();
+
+        Assert.NotEmpty(pageTypes);
+
+        foreach (var pageType in pageTypes)
+        {
+            var routes = pageType.GetCustomAttributes<RouteAttribute>().Select(r => r.Template).ToList();
+            var hasAuthorize = pageType.GetCustomAttributes<AuthorizeAttribute>().Any();
+            var hasAllowAnonymous = pageType.GetCustomAttributes<AllowAnonymousAttribute>().Any();
+
+            if (routes.All(route => allowedAnonymousRoutes.Contains(route)))
+            {
+                Assert.True(hasAllowAnonymous, $"Public page {pageType.Name} must declare [AllowAnonymous].");
+            }
+            else
+            {
+                Assert.True(hasAuthorize, $"Protected page {pageType.Name} must declare [Authorize].");
+                Assert.False(hasAllowAnonymous, $"Protected page {pageType.Name} must not declare [AllowAnonymous].");
+            }
+        }
     }
 
     [Fact]

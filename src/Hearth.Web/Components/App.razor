@@ -55,6 +55,7 @@
 
         return path.Value.StartsWithSegments("/login", StringComparison.OrdinalIgnoreCase)
                || path.Value.StartsWithSegments("/cadastro", StringComparison.OrdinalIgnoreCase)
+               || path.Value.StartsWithSegments("/not-found", StringComparison.OrdinalIgnoreCase)
                || path.Value.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -2,6 +2,7 @@
 @implements IDisposable
 @inject AccountContext AccountContext
 @inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
 
 <MudThemeProvider Theme="_theme" IsDarkMode="true" />
 <MudPopoverProvider />
@@ -56,6 +57,31 @@
                      data-testid="active-account-chip">
                 Conta: @AccountContext.Current.Name
             </MudChip>
+        }
+
+        @if (!string.IsNullOrWhiteSpace(_userName))
+        {
+            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-3" data-testid="user-menu">
+                <MudIcon Icon="@Icons.Material.Filled.Person"
+                         Size="Size.Small"
+                         Color="Color.Secondary"
+                         Class="d-none d-sm-inline-flex" />
+                <MudText Typo="Typo.body2" Class="d-none d-sm-inline" data-testid="user-name">
+                    @_userName
+                </MudText>
+                <form method="post" action="/auth/logout" data-testid="logout-form" style="display: inline;">
+                    <AntiforgeryToken />
+                    <MudButton ButtonType="ButtonType.Submit"
+                               Variant="Variant.Text"
+                               Color="Color.Inherit"
+                               Size="Size.Small"
+                               StartIcon="@Icons.Material.Filled.Logout"
+                               aria-label="Sair da conta"
+                               data-testid="logout-button">
+                        Sair
+                    </MudButton>
+                </form>
+            </MudStack>
         }
     </MudAppBar>
 
@@ -152,11 +178,20 @@
     private bool _drawerOpen = true;
     private ErrorBoundary? _errorBoundary;
     private bool _disposed;
+    private string? _userName;
 
     protected override async Task OnInitializedAsync()
     {
         AccountContext.Changed += HandleAccountContextChanged;
         Navigation.LocationChanged += HandleLocationChanged;
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (!HearthAuth.TryReadUser(authState.User, out _, out var name, out _))
+        {
+            return;
+        }
+
+        _userName = name;
 
         await AccountContext.InitializeAsync();
         RedirectToOnboardingIfNeeded();
