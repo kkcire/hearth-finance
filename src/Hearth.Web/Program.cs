@@ -189,7 +189,7 @@ app.MapPost("/auth/logout", async (HttpContext httpContext, IAntiforgery antifor
     return Results.LocalRedirect("/login");
 }).RequireAuthorization();
 
-app.MapStaticAssets();
+app.MapStaticAssets().AllowAnonymous();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
 
