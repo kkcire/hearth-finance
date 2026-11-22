@@ -9,6 +9,16 @@ namespace Hearth.Tests.Web.Pages;
 public sealed class OnboardingPageTests : WebTestBase
 {
     [Fact]
+    public void Render_GreetsAuthenticatedUserByName()
+    {
+        CurrentUser.Name = "Erick";
+
+        var cut = Render<OnboardingPage>();
+
+        Assert.Contains("Olá, Erick!", cut.Find("[data-testid='onboarding-greeting']").TextContent);
+    }
+
+    [Fact]
     public async Task Submit_WithPortugueseDecimalInitialBalance_CreatesAccountWithDefaultCategoriesAndNavigatesHome()
     {
         var cut = Render<OnboardingPage>();

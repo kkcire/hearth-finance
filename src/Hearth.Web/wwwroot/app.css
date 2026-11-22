@@ -52,3 +52,205 @@ html, body {
 .mud-nav-link.active:not(.mud-nav-link-disabled) .mud-nav-link-icon {
     color: #EF5350;
 }
+
+/* Static SSR authentication pages (/login, /cadastro) */
+.hearth-auth-page {
+    min-height: 100vh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px 16px;
+    background-color: #121212;
+    color: rgba(255, 255, 255, 0.92);
+    box-sizing: border-box;
+}
+
+.hearth-auth-card {
+    width: 100%;
+    max-width: 420px;
+    background-color: #1E1E1E;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 12px;
+    padding: 32px 28px;
+    box-sizing: border-box;
+}
+
+.hearth-auth-brand {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 24px;
+}
+
+.hearth-auth-logo {
+    width: 28px;
+    height: 28px;
+    color: #D32F2F;
+    flex-shrink: 0;
+}
+
+.hearth-auth-brand-name {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    color: rgba(255, 255, 255, 0.94);
+}
+
+.hearth-auth-title {
+    margin: 0 0 6px;
+    font-size: 1.5rem;
+    font-weight: 600;
+    color: rgba(255, 255, 255, 0.95);
+}
+
+.hearth-auth-subtitle {
+    margin: 0 0 24px;
+    font-size: 0.95rem;
+    color: rgba(255, 255, 255, 0.64);
+    line-height: 1.45;
+}
+
+.hearth-auth-alert {
+    margin-bottom: 20px;
+    padding: 12px 14px;
+    border-radius: 8px;
+    background-color: rgba(255, 138, 128, 0.12);
+    border: 1px solid rgba(255, 138, 128, 0.45);
+    color: #FFAB91;
+    font-size: 0.925rem;
+    line-height: 1.4;
+}
+
+.hearth-auth-field {
+    margin-bottom: 18px;
+}
+
+.hearth-auth-label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.86);
+}
+
+.hearth-auth-password-wrap {
+    position: relative;
+    display: flex;
+    align-items: center;
+}
+
+.hearth-auth-input {
+    width: 100%;
+    padding: 11px 14px;
+    font-size: 16px;
+    line-height: 1.4;
+    color: rgba(255, 255, 255, 0.94);
+    background-color: #141414;
+    border: 1px solid rgba(255, 255, 255, 0.16);
+    border-radius: 8px;
+    box-sizing: border-box;
+    outline: none;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.hearth-auth-password-wrap .hearth-auth-input {
+    padding-right: 78px;
+}
+
+.hearth-auth-input:focus {
+    border-color: #EF5350;
+    box-shadow: 0 0 0 2px rgba(239, 83, 80, 0.25);
+}
+
+.hearth-auth-input.is-invalid {
+    border-color: #FF8A80;
+}
+
+.hearth-auth-toggle-password {
+    position: absolute;
+    right: 8px;
+    padding: 6px 8px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: rgba(255, 255, 255, 0.72);
+    font-size: 0.82rem;
+    font-weight: 500;
+    cursor: pointer;
+}
+
+.hearth-auth-toggle-password:hover,
+.hearth-auth-toggle-password:focus-visible {
+    color: #FFFFFF;
+    background-color: rgba(255, 255, 255, 0.08);
+    outline: none;
+}
+
+.hearth-auth-help {
+    margin: 6px 0 0;
+    font-size: 0.82rem;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.hearth-auth-error {
+    margin: 6px 0 0;
+    font-size: 0.85rem;
+    color: #FF8A80;
+}
+
+.hearth-auth-submit {
+    width: 100%;
+    margin-top: 8px;
+    padding: 12px 16px;
+    border: none;
+    border-radius: 8px;
+    background-color: #D32F2F;
+    color: #FFFFFF;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, opacity 0.15s ease;
+}
+
+.hearth-auth-submit:hover:not(:disabled) {
+    background-color: #B71C1C;
+}
+
+.hearth-auth-submit:focus-visible {
+    outline: 2px solid #FFFFFF;
+    outline-offset: 2px;
+}
+
+.hearth-auth-submit:disabled {
+    opacity: 0.65;
+    cursor: wait;
+}
+
+.hearth-auth-footer {
+    margin: 22px 0 0;
+    text-align: center;
+    font-size: 0.9rem;
+    color: rgba(255, 255, 255, 0.68);
+}
+
+.hearth-auth-link {
+    color: #EF5350;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.hearth-auth-link:hover,
+.hearth-auth-link:focus-visible {
+    text-decoration: underline;
+}
+
+@media (max-width: 480px) {
+    .hearth-auth-page {
+        padding: 16px 12px;
+        align-items: flex-start;
+    }
+
+    .hearth-auth-card {
+        padding: 24px 18px;
+    }
+}

@@ -1,0 +1,320 @@
+@page "/cadastro"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@attribute [EnableRateLimiting(HearthAuth.RateLimitPolicyName)]
+@using Hearth.Application.Auth
+@using Hearth.Application.Auth.RegisterUser
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.Extensions.Options
+@inject RegisterUserHandler RegisterUser
+@inject IOptions<HearthAuthOptions> AuthOptions
+@inject NavigationManager Navigation
+
+<PageTitle>Criar conta — Hearth</PageTitle>
+
+<h1 class="hearth-auth-title">Criar conta</h1>
+
+@if (!AuthOptions.Value.AllowRegistration)
+{
+    <div class="hearth-auth-alert" role="alert" data-testid="registration-disabled">
+        @HearthAuth.ToPortugueseError(AuthErrorCode.RegistrationDisabled)
+    </div>
+
+    <p class="hearth-auth-footer">
+        Já tem conta?
+        <a href="/login" class="hearth-auth-link" data-testid="go-to-login">Entrar</a>
+    </p>
+}
+else
+{
+    <p class="hearth-auth-subtitle">Crie seu acesso para começar a controlar suas finanças.</p>
+
+    @if (!string.IsNullOrWhiteSpace(_serverError))
+    {
+        <div class="hearth-auth-alert" role="alert" data-testid="register-error">
+            @_serverError
+        </div>
+    }
+
+    <form method="post"
+          action="/cadastro"
+          @formname="register"
+          @onsubmit="SubmitAsync"
+          data-auth-form="true"
+          novalidate>
+        <AntiforgeryToken />
+
+        <div class="hearth-auth-field">
+            <label class="hearth-auth-label" for="register-name">Nome</label>
+            <input id="register-name"
+                   name="Input.Name"
+                   type="text"
+                   autocomplete="name"
+                   maxlength="@DomainValidation.MaxNameLength"
+                   value="@(Input?.Name ?? string.Empty)"
+                   class="hearth-auth-input @(HasError("Name") ? "is-invalid" : null)"
+                   aria-invalid="@(HasError("Name") ? "true" : "false")"
+                   aria-describedby="@(HasError("Name") ? "register-name-error" : null)"
+                   autofocus="@(_firstErrorField is null or "Name")"
+                   required
+                   data-testid="register-name-input" />
+            @if (GetError("Name") is { } nameError)
+            {
+                <p id="register-name-error" class="hearth-auth-error" role="alert">@nameError</p>
+            }
+        </div>
+
+        <div class="hearth-auth-field">
+            <label class="hearth-auth-label" for="register-email">E-mail</label>
+            <input id="register-email"
+                   name="Input.Email"
+                   type="email"
+                   inputmode="email"
+                   autocomplete="email"
+                   maxlength="@DomainValidation.MaxEmailLength"
+                   value="@(Input?.Email ?? string.Empty)"
+                   class="hearth-auth-input @(HasError("Email") ? "is-invalid" : null)"
+                   aria-invalid="@(HasError("Email") ? "true" : "false")"
+                   aria-describedby="@(HasError("Email") ? "register-email-error" : null)"
+                   autofocus="@(_firstErrorField == "Email")"
+                   required
+                   data-testid="register-email-input" />
+            @if (GetError("Email") is { } emailError)
+            {
+                <p id="register-email-error" class="hearth-auth-error" role="alert">@emailError</p>
+            }
+        </div>
+
+        <div class="hearth-auth-field">
+            <label class="hearth-auth-label" for="register-password">Senha</label>
+            <div class="hearth-auth-password-wrap">
+                <input id="register-password"
+                       name="Input.Password"
+                       type="password"
+                       autocomplete="new-password"
+                       minlength="@DomainValidation.MinPasswordLength"
+                       maxlength="@DomainValidation.MaxPasswordLength"
+                       value="@(Input?.Password ?? string.Empty)"
+                       class="hearth-auth-input @(HasError("Password") ? "is-invalid" : null)"
+                       aria-invalid="@(HasError("Password") ? "true" : "false")"
+                       aria-describedby="register-password-help @(HasError("Password") ? "register-password-error" : string.Empty)"
+                       autofocus="@(_firstErrorField == "Password")"
+                       required
+                       data-testid="register-password-input" />
+                <button type="button"
+                        class="hearth-auth-toggle-password"
+                        data-toggle-password="register-password"
+                        aria-label="Mostrar senha"
+                        aria-pressed="false">
+                    Mostrar
+                </button>
+            </div>
+            <p id="register-password-help" class="hearth-auth-help">
+                Mínimo de @DomainValidation.MinPasswordLength caracteres.
+            </p>
+            @if (GetError("Password") is { } passwordError)
+            {
+                <p id="register-password-error" class="hearth-auth-error" role="alert">@passwordError</p>
+            }
+        </div>
+
+        <div class="hearth-auth-field">
+            <label class="hearth-auth-label" for="register-confirm-password">Confirmar senha</label>
+            <div class="hearth-auth-password-wrap">
+                <input id="register-confirm-password"
+                       name="Input.ConfirmPassword"
+                       type="password"
+                       autocomplete="new-password"
+                       minlength="@DomainValidation.MinPasswordLength"
+                       maxlength="@DomainValidation.MaxPasswordLength"
+                       value="@(Input?.ConfirmPassword ?? string.Empty)"
+                       class="hearth-auth-input @(HasError("ConfirmPassword") ? "is-invalid" : null)"
+                       aria-invalid="@(HasError("ConfirmPassword") ? "true" : "false")"
+                       aria-describedby="@(HasError("ConfirmPassword") ? "register-confirm-password-error" : null)"
+                       autofocus="@(_firstErrorField == "ConfirmPassword")"
+                       required
+                       data-testid="register-confirm-password-input" />
+                <button type="button"
+                        class="hearth-auth-toggle-password"
+                        data-toggle-password="register-confirm-password"
+                        aria-label="Mostrar confirmação de senha"
+                        aria-pressed="false">
+                    Mostrar
+                </button>
+            </div>
+            @if (GetError("ConfirmPassword") is { } confirmError)
+            {
+                <p id="register-confirm-password-error" class="hearth-auth-error" role="alert">@confirmError</p>
+            }
+        </div>
+
+        <button type="submit"
+                class="hearth-auth-submit"
+                data-loading-text="Criando conta..."
+                data-testid="register-submit">
+            Criar conta
+        </button>
+    </form>
+
+    <p class="hearth-auth-footer">
+        Já tem conta?
+        <a href="/login" class="hearth-auth-link" data-testid="go-to-login">Entrar</a>
+    </p>
+}
+
+@code
+{
+    private readonly Dictionary<string, string> _fieldErrors = new(StringComparer.Ordinal);
+    private string? _serverError;
+    private string? _firstErrorField;
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "register")]
+    public RegisterInput? Input { get; set; }
+
+    protected override void OnInitialized()
+    {
+        Input ??= new RegisterInput();
+
+        if (HttpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var destination = HearthAuth.IsSafeLocalReturnUrl(ReturnUrl) ? ReturnUrl! : "/";
+            Navigation.NavigateTo(destination, replace: true);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        Input ??= new RegisterInput();
+        _fieldErrors.Clear();
+        _serverError = null;
+        _firstErrorField = null;
+
+        if (!AuthOptions.Value.AllowRegistration)
+        {
+            if (HttpContext is not null)
+            {
+                HttpContext.Response.StatusCode = StatusCodes.Status403Forbidden;
+            }
+
+            ClearPasswords();
+            _serverError = HearthAuth.ToPortugueseError(AuthErrorCode.RegistrationDisabled);
+            return;
+        }
+
+        var name = Input.Name?.Trim() ?? string.Empty;
+        var email = Input.Email?.Trim() ?? string.Empty;
+        var password = Input.Password ?? string.Empty;
+        var confirmPassword = Input.ConfirmPassword ?? string.Empty;
+
+        Input.Name = name;
+        Input.Email = email;
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            AddFieldError("Name", "Informe seu nome.");
+        }
+        else if (name.Length > DomainValidation.MaxNameLength)
+        {
+            AddFieldError("Name", $"O nome deve ter no máximo {DomainValidation.MaxNameLength} caracteres.");
+        }
+
+        if (!DomainValidation.IsValidEmail(email))
+        {
+            AddFieldError("Email", "Informe um e-mail válido.");
+        }
+
+        if (password.Length < DomainValidation.MinPasswordLength)
+        {
+            AddFieldError("Password", $"A senha deve ter pelo menos {DomainValidation.MinPasswordLength} caracteres.");
+        }
+        else if (password.Length > DomainValidation.MaxPasswordLength)
+        {
+            AddFieldError("Password", $"A senha deve ter no máximo {DomainValidation.MaxPasswordLength} caracteres.");
+        }
+
+        if (string.IsNullOrEmpty(confirmPassword))
+        {
+            AddFieldError("ConfirmPassword", "Confirme sua senha.");
+        }
+        else if (!string.Equals(password, confirmPassword, StringComparison.Ordinal))
+        {
+            AddFieldError("ConfirmPassword", "As senhas não conferem.");
+        }
+
+        if (_fieldErrors.Count > 0)
+        {
+            ClearPasswords();
+            return;
+        }
+
+        var result = await RegisterUser.ExecuteAsync(new RegisterUserCommand(name, email, password));
+        if (!result.IsSuccess || result.User is null)
+        {
+            ClearPasswords();
+
+            if (result.ErrorCode == AuthErrorCode.EmailAlreadyInUse)
+            {
+                AddFieldError("Email", HearthAuth.ToPortugueseError(result.ErrorCode));
+            }
+            else
+            {
+                _serverError = HearthAuth.ToPortugueseError(result.ErrorCode);
+            }
+
+            return;
+        }
+
+        if (HttpContext is not null)
+        {
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                HearthAuth.CreatePrincipal(result.User),
+                HearthAuth.CreateCookieProperties());
+        }
+
+        Navigation.NavigateTo("/onboarding", replace: true);
+    }
+
+    private void ClearPasswords()
+    {
+        if (Input is null)
+        {
+            return;
+        }
+
+        Input.Password = string.Empty;
+        Input.ConfirmPassword = string.Empty;
+    }
+
+    private void AddFieldError(string field, string message)
+    {
+        if (!_fieldErrors.ContainsKey(field))
+        {
+            _fieldErrors[field] = message;
+            _firstErrorField ??= field;
+        }
+    }
+
+    private bool HasError(string field) => _fieldErrors.ContainsKey(field);
+
+    private string? GetError(string field) =>
+        _fieldErrors.TryGetValue(field, out var message) ? message : null;
+
+    public sealed class RegisterInput
+    {
+        public string Name { get; set; } = string.Empty;
+
+        public string Email { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+
+        public string ConfirmPassword { get; set; } = string.Empty;
+    }
+}

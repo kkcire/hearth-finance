@@ -1,0 +1,205 @@
+@page "/login"
+@layout AuthLayout
+@attribute [AllowAnonymous]
+@attribute [EnableRateLimiting(HearthAuth.RateLimitPolicyName)]
+@using Hearth.Application.Auth.AuthenticateUser
+@using Microsoft.AspNetCore.Authentication
+@using Microsoft.AspNetCore.Authentication.Cookies
+@using Microsoft.Extensions.Options
+@inject AuthenticateUserHandler AuthenticateUser
+@inject IAccountRepository Accounts
+@inject IOptions<HearthAuthOptions> AuthOptions
+@inject NavigationManager Navigation
+
+<PageTitle>Entrar — Hearth</PageTitle>
+
+<h1 class="hearth-auth-title">Entrar</h1>
+<p class="hearth-auth-subtitle">Acesse seu painel financeiro pessoal.</p>
+
+@if (!string.IsNullOrWhiteSpace(_serverError))
+{
+    <div class="hearth-auth-alert" role="alert" data-testid="login-error">
+        @_serverError
+    </div>
+}
+
+<form method="post"
+      action="@FormAction"
+      @formname="login"
+      @onsubmit="SubmitAsync"
+      data-auth-form="true"
+      novalidate>
+    <AntiforgeryToken />
+
+    <div class="hearth-auth-field">
+        <label class="hearth-auth-label" for="login-email">E-mail</label>
+        <input id="login-email"
+               name="Input.Email"
+               type="email"
+               inputmode="email"
+               autocomplete="email"
+               maxlength="@DomainValidation.MaxEmailLength"
+               value="@(Input?.Email ?? string.Empty)"
+               class="hearth-auth-input @(HasError("Email") ? "is-invalid" : null)"
+               aria-invalid="@(HasError("Email") ? "true" : "false")"
+               aria-describedby="@(HasError("Email") ? "login-email-error" : null)"
+               autofocus="@(_firstErrorField is null or "Email")"
+               required
+               data-testid="login-email-input" />
+        @if (GetError("Email") is { } emailError)
+        {
+            <p id="login-email-error" class="hearth-auth-error" role="alert">@emailError</p>
+        }
+    </div>
+
+    <div class="hearth-auth-field">
+        <label class="hearth-auth-label" for="login-password">Senha</label>
+        <div class="hearth-auth-password-wrap">
+            <input id="login-password"
+                   name="Input.Password"
+                   type="password"
+                   autocomplete="current-password"
+                   maxlength="@DomainValidation.MaxPasswordLength"
+                   value="@(Input?.Password ?? string.Empty)"
+                   class="hearth-auth-input @(HasError("Password") ? "is-invalid" : null)"
+                   aria-invalid="@(HasError("Password") ? "true" : "false")"
+                   aria-describedby="@(HasError("Password") ? "login-password-error" : null)"
+                   autofocus="@(_firstErrorField == "Password")"
+                   required
+                   data-testid="login-password-input" />
+            <button type="button"
+                    class="hearth-auth-toggle-password"
+                    data-toggle-password="login-password"
+                    aria-label="Mostrar senha"
+                    aria-pressed="false">
+                Mostrar
+            </button>
+        </div>
+        @if (GetError("Password") is { } passwordError)
+        {
+            <p id="login-password-error" class="hearth-auth-error" role="alert">@passwordError</p>
+        }
+    </div>
+
+    <button type="submit"
+            class="hearth-auth-submit"
+            data-loading-text="Entrando..."
+            data-testid="login-submit">
+        Entrar
+    </button>
+</form>
+
+@if (AuthOptions.Value.AllowRegistration)
+{
+    <p class="hearth-auth-footer">
+        Ainda não tem conta?
+        <a href="/cadastro" class="hearth-auth-link" data-testid="go-to-register">Criar conta</a>
+    </p>
+}
+
+@code
+{
+    private readonly Dictionary<string, string> _fieldErrors = new(StringComparer.Ordinal);
+    private string? _serverError;
+    private string? _firstErrorField;
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromForm(FormName = "login")]
+    public LoginInput? Input { get; set; }
+
+    private string FormAction =>
+        HearthAuth.IsSafeLocalReturnUrl(ReturnUrl)
+            ? $"/login?returnUrl={Uri.EscapeDataString(ReturnUrl!)}"
+            : "/login";
+
+    protected override void OnInitialized()
+    {
+        Input ??= new LoginInput();
+
+        if (HttpContext?.User.Identity?.IsAuthenticated == true)
+        {
+            var destination = HearthAuth.IsSafeLocalReturnUrl(ReturnUrl) ? ReturnUrl! : "/";
+            Navigation.NavigateTo(destination, replace: true);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        Input ??= new LoginInput();
+        _fieldErrors.Clear();
+        _serverError = null;
+        _firstErrorField = null;
+
+        var email = Input.Email?.Trim() ?? string.Empty;
+        var password = Input.Password ?? string.Empty;
+        Input.Email = email;
+
+        if (!DomainValidation.IsValidEmail(email))
+        {
+            AddFieldError("Email", "Informe um e-mail válido.");
+        }
+
+        if (string.IsNullOrEmpty(password))
+        {
+            AddFieldError("Password", "Informe sua senha.");
+        }
+
+        if (_fieldErrors.Count > 0)
+        {
+            Input.Password = string.Empty;
+            return;
+        }
+
+        var result = await AuthenticateUser.ExecuteAsync(new AuthenticateUserCommand(email, password));
+        if (!result.IsSuccess || result.User is null)
+        {
+            _serverError = HearthAuth.ToPortugueseError(result.ErrorCode);
+            Input.Password = string.Empty;
+            _firstErrorField = "Password";
+            return;
+        }
+
+        if (HttpContext is not null)
+        {
+            await HttpContext.SignInAsync(
+                CookieAuthenticationDefaults.AuthenticationScheme,
+                HearthAuth.CreatePrincipal(result.User),
+                HearthAuth.CreateCookieProperties());
+        }
+
+        var userAccounts = await Accounts.GetByOwnerAsync(result.User.Id);
+        var target = userAccounts.Count == 0
+            ? "/onboarding"
+            : HearthAuth.IsSafeLocalReturnUrl(ReturnUrl)
+                ? ReturnUrl!
+                : "/";
+
+        Navigation.NavigateTo(target, replace: true);
+    }
+
+    private void AddFieldError(string field, string message)
+    {
+        if (!_fieldErrors.ContainsKey(field))
+        {
+            _fieldErrors[field] = message;
+            _firstErrorField ??= field;
+        }
+    }
+
+    private bool HasError(string field) => _fieldErrors.ContainsKey(field);
+
+    private string? GetError(string field) =>
+        _fieldErrors.TryGetValue(field, out var message) ? message : null;
+
+    public sealed class LoginInput
+    {
+        public string Email { get; set; } = string.Empty;
+
+        public string Password { get; set; } = string.Empty;
+    }
+}

@@ -2,10 +2,12 @@ using Bunit;
 using Hearth.Application;
 using Hearth.Application.Abstractions;
 using Hearth.Application.Accounts.CreateAccount;
+using Hearth.Web.Auth;
 using Hearth.Web.Services;
 using Hearth.Tests.Application.Fakes;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
 using MudBlazor;
 using MudBlazor.Services;
 
@@ -21,6 +23,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
 {
     internal FakeCurrentUser CurrentUser { get; } = new();
     internal TestAuthenticationStateProvider AuthStateProvider { get; }
+    internal HearthAuthOptions AuthOptions { get; } = new() { AllowRegistration = true };
     internal InMemoryUserRepository Users { get; } = new();
     internal FakePasswordHasher PasswordHasher { get; } = new();
     internal InMemoryAccountRepository Accounts { get; } = new();
@@ -40,6 +43,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         AuthStateProvider = new TestAuthenticationStateProvider(CurrentUser);
 
         Services.AddSingleton<AuthenticationStateProvider>(AuthStateProvider);
+        Services.AddSingleton<IOptions<HearthAuthOptions>>(_ => Options.Create(AuthOptions));
         Services.AddScoped<ScopedCurrentUser>();
         Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<ScopedCurrentUser>());
         Services.AddSingleton<IUserRepository>(Users);

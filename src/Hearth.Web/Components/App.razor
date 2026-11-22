@@ -7,19 +7,29 @@
     <base href="/" />
     <ResourcePreloader />
     <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    @if (PageRenderMode is not null)
+    {
+        <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    }
     <link rel="stylesheet" href="@Assets["app.css"]" />
     <link rel="stylesheet" href="@Assets["Hearth.Web.styles.css"]" />
     <ImportMap />
     <link rel="icon" type="image/png" href="favicon.png" />
-    <HeadOutlet @rendermode="InteractiveServerNoPrerender" />
+    <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
-    <Routes @rendermode="InteractiveServerNoPrerender" />
-    <ReconnectModal />
-    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
-    <script src="@Assets["_framework/blazor.web.js"]"></script>
+    <Routes @rendermode="PageRenderMode" />
+    @if (PageRenderMode is not null)
+    {
+        <ReconnectModal />
+        <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+        <script src="@Assets["_framework/blazor.web.js"]"></script>
+    }
+    else
+    {
+        <script src="@Assets["auth.js"]" defer></script>
+    }
 </body>
 
 </html>
@@ -28,4 +38,23 @@
 {
     private static readonly IComponentRenderMode InteractiveServerNoPrerender =
         new InteractiveServerRenderMode(prerender: false);
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private IComponentRenderMode? PageRenderMode =>
+        IsStaticRoute(HttpContext) ? null : InteractiveServerNoPrerender;
+
+    private static bool IsStaticRoute(HttpContext? context)
+    {
+        var path = context?.Request.Path;
+        if (!path.HasValue)
+        {
+            return false;
+        }
+
+        return path.Value.StartsWithSegments("/login", StringComparison.OrdinalIgnoreCase)
+               || path.Value.StartsWithSegments("/cadastro", StringComparison.OrdinalIgnoreCase)
+               || path.Value.StartsWithSegments("/Error", StringComparison.OrdinalIgnoreCase);
+    }
 }

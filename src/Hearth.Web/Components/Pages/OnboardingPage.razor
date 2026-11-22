@@ -3,6 +3,7 @@
 @inject AccountContext AccountContext
 @inject IClock Clock
 @inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
 @using Hearth.Application.Accounts.CreateAccount
 
 <PageTitle>Configuração inicial — Hearth</PageTitle>
@@ -10,9 +11,11 @@
 <MudGrid Justify="Justify.Center">
     <MudItem xs="12" sm="10" md="7" lg="6">
         <MudPaper Elevation="2" Class="pa-6">
-            <MudText Typo="Typo.h4" GutterBottom="true">Bem-vindo ao Hearth</MudText>
+            <MudText Typo="Typo.h4" GutterBottom="true" data-testid="onboarding-greeting">
+                @(string.IsNullOrWhiteSpace(_userName) ? "Bem-vindo ao Hearth" : $"Olá, {_userName}!")
+            </MudText>
             <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-                Crie sua conta financeira para começar. As 8 categorias padrão
+                Crie sua primeira conta financeira para começar. As 8 categorias padrão
                 (Transporte, Alimentação, Saúde, Educação, Entretenimento, Serviços, Compras e Pessoal)
                 serão criadas automaticamente.
             </MudText>
@@ -130,10 +133,17 @@
     private int _dueDay = 12;
     private bool _saving;
     private string? _errorMessage;
+    private string? _userName;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _initialBalanceDate = HearthFormat.ToDateTime(Clock.Today);
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        if (HearthAuth.TryReadUser(authState.User, out _, out var name, out _))
+        {
+            _userName = name;
+        }
     }
 
     private async Task SubmitAsync()
