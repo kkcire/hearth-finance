@@ -46,6 +46,7 @@ public sealed class DependencyInjectionTests
 
     private static void RegisterFakes(IServiceCollection services)
     {
+        var users = new InMemoryUserRepository();
         var accounts = new InMemoryAccountRepository();
         var categories = new InMemoryCategoryRepository();
         var budgets = new InMemoryCategoryBudgetRepository();
@@ -55,6 +56,8 @@ public sealed class DependencyInjectionTests
         var incomes = new InMemoryIncomeRepository();
         var invoices = new InMemoryInvoiceRepository();
 
+        services.AddSingleton<IUserRepository>(users);
+        services.AddSingleton<IPasswordHasher>(new FakePasswordHasher());
         services.AddSingleton<IAccountRepository>(accounts);
         services.AddSingleton<ICategoryRepository>(categories);
         services.AddSingleton<ICategoryBudgetRepository>(budgets);

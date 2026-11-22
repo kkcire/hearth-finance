@@ -4,6 +4,8 @@ using Hearth.Application.Accounts.GetAccount;
 using Hearth.Application.Accounts.ListAccounts;
 using Hearth.Application.Accounts.RenameAccount;
 using Hearth.Application.Accounts.UpdateInitialBalance;
+using Hearth.Application.Auth.AuthenticateUser;
+using Hearth.Application.Auth.RegisterUser;
 using Hearth.Application.Categories.ArchiveCategory;
 using Hearth.Application.Categories.CreateCategory;
 using Hearth.Application.Categories.DeleteCategory;
@@ -57,6 +59,10 @@ public static class DependencyInjection
     public static IServiceCollection AddApplication(this IServiceCollection services)
     {
         ArgumentNullException.ThrowIfNull(services);
+
+        // Auth
+        services.AddScoped<RegisterUserHandler>();
+        services.AddScoped<AuthenticateUserHandler>();
 
         // Accounts
         services.AddScoped<CreateAccountHandler>();

@@ -23,6 +23,8 @@ public sealed class SystemClock : IClock
         _timeZone = TimeZoneInfo.FindSystemTimeZoneById(timeZoneId);
     }
 
+    public DateTimeOffset UtcNow => _timeProvider.GetUtcNow();
+
     public DateOnly Today
     {
         get

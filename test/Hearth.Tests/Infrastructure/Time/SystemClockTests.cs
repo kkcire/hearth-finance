@@ -41,6 +41,16 @@ public class SystemClockTests
     }
 
     [Fact]
+    public void UtcNow_ReturnsProviderUtcTimestamp()
+    {
+        var expected = new DateTimeOffset(2026, 11, 22, 14, 45, 0, TimeSpan.Zero);
+        var provider = new FixedTimeProvider(expected);
+        var clock = new SystemClock(provider);
+
+        Assert.Equal(expected, clock.UtcNow);
+    }
+
+    [Fact]
     public void Constructor_InvalidArguments_Throw()
     {
         var provider = new FixedTimeProvider(DateTimeOffset.UtcNow);
