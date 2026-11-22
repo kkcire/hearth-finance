@@ -1,32 +1,42 @@
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Exceptions;
+using Hearth.Web.Auth;
+using Microsoft.AspNetCore.Components.Authorization;
 using MudBlazor;
 
 namespace Hearth.Web.Services;
 
 /// <summary>
 /// Executes Application handlers inside short-lived DI scopes so DbContext instances
-/// are never held for the entire lifetime of a Blazor Server circuit.
+/// are never held for the entire lifetime of a Blazor Server circuit, while propagating
+/// the authenticated circuit user into each child scope's <see cref="ScopedCurrentUser"/>.
 /// </summary>
 public sealed class UseCaseExecutor
 {
     public const string UnexpectedErrorMessage =
         "Ocorreu um erro inesperado ao processar a operação. Tente novamente.";
 
+    public const string SessionExpiredMessage =
+        "Sua sessão expirou. Faça login novamente.";
+
     private readonly IServiceScopeFactory _scopeFactory;
+    private readonly AuthenticationStateProvider _authenticationStateProvider;
     private readonly ISnackbar _snackbar;
     private readonly ILogger<UseCaseExecutor> _logger;
 
     public UseCaseExecutor(
         IServiceScopeFactory scopeFactory,
+        AuthenticationStateProvider authenticationStateProvider,
         ISnackbar snackbar,
         ILogger<UseCaseExecutor> logger)
     {
         ArgumentNullException.ThrowIfNull(scopeFactory);
+        ArgumentNullException.ThrowIfNull(authenticationStateProvider);
         ArgumentNullException.ThrowIfNull(snackbar);
         ArgumentNullException.ThrowIfNull(logger);
 
         _scopeFactory = scopeFactory;
+        _authenticationStateProvider = authenticationStateProvider;
         _snackbar = snackbar;
         _logger = logger;
     }
@@ -43,6 +53,8 @@ public sealed class UseCaseExecutor
         try
         {
             await using var scope = _scopeFactory.CreateAsyncScope();
+            await PopulateCurrentUserAsync(scope.ServiceProvider);
+
             var handler = scope.ServiceProvider.GetRequiredService<THandler>();
             var result = await operation(handler, cancellationToken);
 
@@ -56,6 +68,12 @@ public sealed class UseCaseExecutor
         catch (OperationCanceledException)
         {
             throw;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            _logger.LogWarning(ex, "Unauthenticated execution attempt in {Handler}.", typeof(THandler).Name);
+            ShowError(SessionExpiredMessage, Severity.Warning, showErrorSnackbar);
+            return ExecutionResult<TResult>.BusinessFailure(SessionExpiredMessage);
         }
         catch (DomainException ex)
         {
@@ -113,6 +131,25 @@ public sealed class UseCaseExecutor
             : result.IsBusinessError
                 ? ExecutionResult.BusinessFailure(result.ErrorMessage!)
                 : ExecutionResult.UnexpectedFailure(result.ErrorMessage!);
+    }
+
+    private async Task PopulateCurrentUserAsync(IServiceProvider scopedServices)
+    {
+        var currentUser = scopedServices.GetService<ScopedCurrentUser>();
+        if (currentUser is null)
+        {
+            return;
+        }
+
+        var authState = await _authenticationStateProvider.GetAuthenticationStateAsync();
+        if (HearthAuth.TryReadUser(authState.User, out var userId, out var name, out var email))
+        {
+            currentUser.SetAuthenticated(userId, name, email);
+        }
+        else
+        {
+            currentUser.Clear();
+        }
     }
 
     private void ShowError(string message, Severity severity, bool showSnackbar)

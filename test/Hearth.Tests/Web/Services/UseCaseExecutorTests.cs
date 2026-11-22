@@ -99,6 +99,35 @@ public sealed class UseCaseExecutorTests : WebTestBase
     }
 
     [Fact]
+    public async Task ExecuteAsync_PropagatesAuthenticatedUserIntoFreshChildScope()
+    {
+        Services.AddScoped<CurrentUserProbeHandler>();
+
+        var result = await Executor.ExecuteAsync<CurrentUserProbeHandler, Guid?>(
+            (handler, _) => Task.FromResult(handler.CurrentUserId),
+            showErrorSnackbar: false);
+
+        Assert.True(result.IsSuccess);
+        Assert.Equal(CurrentUser.UserId, result.Value);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WhenUnauthenticated_ReturnsSessionExpiredFailure()
+    {
+        CurrentUser.IsAuthenticated = false;
+        CurrentUser.UserId = null;
+
+        var result = await Executor.ExecuteAsync<ListAccountsHandler, IReadOnlyList<AccountDto>>(
+            (handler, ct) => handler.ExecuteAsync(ct));
+
+        Assert.False(result.IsSuccess);
+        Assert.True(result.IsBusinessError);
+        Assert.Equal(UseCaseExecutor.SessionExpiredMessage, result.ErrorMessage);
+        Assert.Contains(Snackbar.ShownSnackbars, item =>
+            item.Severity == Severity.Warning && item.Message == UseCaseExecutor.SessionExpiredMessage);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_WhenCancelled_RethrowsOperationCanceledException()
     {
         Services.AddScoped<ThrowingHandler>();
@@ -114,6 +143,11 @@ public sealed class UseCaseExecutorTests : WebTestBase
     private sealed class ScopeProbeHandler
     {
         public Guid InstanceId { get; } = Guid.NewGuid();
+    }
+
+    private sealed class CurrentUserProbeHandler(Hearth.Application.Abstractions.ICurrentUser currentUser)
+    {
+        public Guid? CurrentUserId => currentUser.UserId;
     }
 
     private sealed class ThrowingHandler
