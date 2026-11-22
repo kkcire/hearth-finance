@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.CreateAccount;
 using Hearth.Application.Categories;
 using Hearth.Domain.ValueObjects;
@@ -8,14 +9,17 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class CreateAccountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly CreateAccountHandler _handler;
 
     public CreateAccountHandlerTests()
     {
-        _handler = new CreateAccountHandler(_accounts, _categories, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new CreateAccountHandler(_accountAccess, _accounts, _categories, _unitOfWork);
     }
 
     private static CreateAccountCommand ValidCommand(
@@ -151,8 +155,8 @@ public class CreateAccountHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _categories, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accounts, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accounts, _categories, null!));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _accounts, _categories, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, _accounts, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, _accounts, _categories, null!));
     }
 }

@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.ListCategories;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,22 +10,27 @@ namespace Hearth.Tests.Application.Categories;
 
 public class ListCategoriesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly ListCategoriesHandler _handler;
 
     public ListCategoriesHandlerTests()
     {
-        _handler = new ListCategoriesHandler(_accounts, _categories);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListCategoriesHandler(_accountAccess, _categories);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExcludesArchivedByDefault_AndIncludesWhenRequested()
     {
         var account = Account.Create(
-            Guid.NewGuid(), "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
         var otherAccount = Account.Create(
-            Guid.NewGuid(), "Outra", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Outra", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
         await _accounts.AddAsync(account);
         await _accounts.AddAsync(otherAccount);
 
@@ -65,6 +71,6 @@ public class ListCategoriesHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListCategoriesHandler(null!, _categories));
-        Assert.Throws<ArgumentNullException>(() => new ListCategoriesHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListCategoriesHandler(_accountAccess, null!));
     }
 }

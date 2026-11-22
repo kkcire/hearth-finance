@@ -1,6 +1,5 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -8,20 +7,20 @@ namespace Hearth.Application.Invoices.GetInvoiceSummary;
 
 public sealed class GetInvoiceSummaryHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IInvoiceRepository _invoices;
     private readonly ICreditCardPurchaseRepository _purchases;
 
     public GetInvoiceSummaryHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IInvoiceRepository invoices,
         ICreditCardPurchaseRepository purchases)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(invoices);
         ArgumentNullException.ThrowIfNull(purchases);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _invoices = invoices;
         _purchases = purchases;
     }
@@ -34,8 +33,7 @@ public sealed class GetInvoiceSummaryHandler
 
         var closingMonth = YearMonth.Of(query.ClosingYear, query.ClosingMonth);
 
-        var account = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var invoice = await _invoices.GetByAccountAndClosingMonthAsync(
             account.Id, closingMonth, cancellationToken);

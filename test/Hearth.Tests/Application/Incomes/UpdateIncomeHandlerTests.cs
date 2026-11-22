@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Domain.Entities;
@@ -12,20 +13,24 @@ public class UpdateIncomeHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly UpdateIncomeHandler _handler;
 
     public UpdateIncomeHandlerTests()
     {
-        _handler = new UpdateIncomeHandler(_accounts, _incomes, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateIncomeHandler(_accountAccess, _incomes, _unitOfWork);
     }
 
     private async Task<(Account Account, Income Income)> SeedAsync(bool received = false)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -120,7 +125,7 @@ public class UpdateIncomeHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(null!, _incomes, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accounts, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accounts, _incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, _incomes, null!));
     }
 }

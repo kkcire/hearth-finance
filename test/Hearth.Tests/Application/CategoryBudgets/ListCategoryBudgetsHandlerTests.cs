@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.ListCategoryBudgets;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,21 +10,25 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class ListCategoryBudgetsHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly ListCategoryBudgetsHandler _handler;
 
     public ListCategoryBudgetsHandlerTests()
     {
-        _handler = new ListCategoryBudgetsHandler(_accounts, _categories, _budgets);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListCategoryBudgetsHandler(_accountAccess, _categories, _budgets);
     }
 
     [Fact]
     public async Task ExecuteAsync_ReturnsAccountBudgetsWithCategoryNamesAndHistory()
     {
         var account = Account.Create(
-            Guid.NewGuid(), "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
         await _accounts.AddAsync(account);
 
         var transport = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
@@ -61,7 +66,7 @@ public class ListCategoryBudgetsHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListCategoryBudgetsHandler(null!, _categories, _budgets));
-        Assert.Throws<ArgumentNullException>(() => new ListCategoryBudgetsHandler(_accounts, null!, _budgets));
-        Assert.Throws<ArgumentNullException>(() => new ListCategoryBudgetsHandler(_accounts, _categories, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListCategoryBudgetsHandler(_accountAccess, null!, _budgets));
+        Assert.Throws<ArgumentNullException>(() => new ListCategoryBudgetsHandler(_accountAccess, _categories, null!));
     }
 }

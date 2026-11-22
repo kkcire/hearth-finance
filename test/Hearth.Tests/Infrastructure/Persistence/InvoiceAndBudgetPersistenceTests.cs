@@ -1,7 +1,9 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
+using Hearth.Tests.Application.Fakes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -23,28 +25,32 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task<(Guid AccountId, Guid CategoryId)> SeedAccountAndCategoryAsync()
+    private async Task<(Guid UserId, Guid AccountId, Guid CategoryId)> SeedAccountAndCategoryAsync()
     {
+        var userId = Guid.CreateVersion7();
         var accountId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
 
         await using var scope = _fixture.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
         var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
+        await users.AddAsync(User.Create(
+            userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
         await categories.AddAsync(Category.Create(categoryId, accountId, "Transporte"));
         await uow.SaveChangesAsync();
 
-        return (accountId, categoryId);
+        return (userId, accountId, categoryId);
     }
 
     [Fact]
     public async Task InvoiceRepository_QueriesByClosingMonthAndEnforcesUniqueAccountClosingMonth()
     {
-        var (accountId, _) = await SeedAccountAndCategoryAsync();
+        var (_, accountId, _) = await SeedAccountAndCategoryAsync();
         var cycle = BillingCycle.Closing(YearMonth.Of(2026, 11), CardBillingRule.Of(3, 12));
 
         await using (var scope = _fixture.CreateScope())
@@ -86,7 +92,7 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
     [Fact]
     public async Task CategoryBudgetRepository_PersistsAmountHistoryUpdatesAndIntegratesWithGetBudgetStatus()
     {
-        var (accountId, categoryId) = await SeedAccountAndCategoryAsync();
+        var (userId, accountId, categoryId) = await SeedAccountAndCategoryAsync();
         var budgetId = Guid.CreateVersion7();
 
         await using (var scope = _fixture.CreateScope())
@@ -122,8 +128,11 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
 
         await using (var scope = _fixture.CreateScope())
         {
-            var handler = new GetBudgetStatusHandler(
+            var guard = new AccountAccessGuard(
                 scope.ServiceProvider.GetRequiredService<IAccountRepository>(),
+                new FakeCurrentUser(userId));
+            var handler = new GetBudgetStatusHandler(
+                guard,
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryBudgetRepository>(),
                 scope.ServiceProvider.GetRequiredService<IDirectExpenseRepository>(),

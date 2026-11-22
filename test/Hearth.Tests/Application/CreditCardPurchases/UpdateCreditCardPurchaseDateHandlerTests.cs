@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -12,7 +13,9 @@ public class UpdateCreditCardPurchaseDateHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -20,13 +23,15 @@ public class UpdateCreditCardPurchaseDateHandlerTests
 
     public UpdateCreditCardPurchaseDateHandlerTests()
     {
-        _handler = new UpdateCreditCardPurchaseDateHandler(_accounts, _purchases, _clock, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateCreditCardPurchaseDateHandler(_accountAccess, _purchases, _clock, _unitOfWork);
     }
 
     private async Task<CreditCardPurchase> SeedAsync(DateOnly? purchaseDate = null, int initialInstallment = 1)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -142,10 +147,10 @@ public class UpdateCreditCardPurchaseDateHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new UpdateCreditCardPurchaseDateHandler(null!, _purchases, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDateHandler(_accounts, null!, _clock, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDateHandler(_accountAccess, null!, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDateHandler(_accounts, _purchases, null!, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDateHandler(_accountAccess, _purchases, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDateHandler(_accounts, _purchases, _clock, null!));
+            () => new UpdateCreditCardPurchaseDateHandler(_accountAccess, _purchases, _clock, null!));
     }
 }

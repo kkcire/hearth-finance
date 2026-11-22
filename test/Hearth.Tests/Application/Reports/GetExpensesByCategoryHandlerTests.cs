@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Domain.Entities;
@@ -9,7 +10,9 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetExpensesByCategoryHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
@@ -18,8 +21,9 @@ public class GetExpensesByCategoryHandlerTests
 
     public GetExpensesByCategoryHandlerTests()
     {
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetExpensesByCategoryHandler(
-            _accounts,
+            _accountAccess,
             _categories,
             _directExpenses,
             _fixedExpenses,
@@ -29,7 +33,8 @@ public class GetExpensesByCategoryHandlerTests
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -281,12 +286,12 @@ public class GetExpensesByCategoryHandlerTests
         Assert.Throws<ArgumentNullException>(() =>
             new GetExpensesByCategoryHandler(null!, _categories, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, null!, _directExpenses, _fixedExpenses, _purchases));
+            new GetExpensesByCategoryHandler(_accountAccess, null!, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, _categories, null!, _fixedExpenses, _purchases));
+            new GetExpensesByCategoryHandler(_accountAccess, _categories, null!, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, _categories, _directExpenses, null!, _purchases));
+            new GetExpensesByCategoryHandler(_accountAccess, _categories, _directExpenses, null!, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetExpensesByCategoryHandler(_accounts, _categories, _directExpenses, _fixedExpenses, null!));
+            new GetExpensesByCategoryHandler(_accountAccess, _categories, _directExpenses, _fixedExpenses, null!));
     }
 }

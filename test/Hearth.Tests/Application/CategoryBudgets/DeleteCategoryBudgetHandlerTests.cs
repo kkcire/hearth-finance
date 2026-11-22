@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.DeleteCategoryBudget;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,20 +10,32 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class DeleteCategoryBudgetHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly DeleteCategoryBudgetHandler _handler;
 
     public DeleteCategoryBudgetHandlerTests()
     {
-        _handler = new DeleteCategoryBudgetHandler(_budgets, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new DeleteCategoryBudgetHandler(_accountAccess, _budgets, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingBudget_DeletesAndSaves()
     {
         var budget = CategoryBudget.Create(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
+            Guid.NewGuid(), _accountId, Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
         await _budgets.AddAsync(budget);
 
         await _handler.ExecuteAsync(new DeleteCategoryBudgetCommand(budget.Id));
@@ -48,7 +61,8 @@ public class DeleteCategoryBudgetHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryBudgetHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryBudgetHandler(_budgets, null!));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryBudgetHandler(null!, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryBudgetHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryBudgetHandler(_accountAccess, _budgets, null!));
     }
 }

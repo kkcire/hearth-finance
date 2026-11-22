@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -8,23 +9,23 @@ namespace Hearth.Application.DirectExpenses.UpdateDirectExpense;
 
 public sealed class UpdateDirectExpenseHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateDirectExpenseHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         IDirectExpenseRepository directExpenses,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _categories = categories;
         _directExpenses = directExpenses;
         _unitOfWork = unitOfWork;
@@ -36,13 +37,14 @@ public sealed class UpdateDirectExpenseHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        _accountAccess.GetRequiredUserId();
         var amount = Money.FromDecimal(command.Amount);
 
         var expense = await _directExpenses.GetByIdAsync(command.DirectExpenseId, cancellationToken)
                       ?? throw new NotFoundException(nameof(DirectExpense), command.DirectExpenseId);
 
-        var account = await _accounts.GetByIdAsync(expense.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), expense.AccountId);
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+            expense.AccountId, nameof(DirectExpense), expense.Id, cancellationToken);
 
         if (command.CategoryId != expense.CategoryId)
         {

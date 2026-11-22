@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Domain.Entities;
@@ -9,20 +10,32 @@ namespace Hearth.Tests.Application.Incomes;
 
 public class RevertIncomeToExpectedHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RevertIncomeToExpectedHandler _handler;
 
     public RevertIncomeToExpectedHandlerTests()
     {
-        _handler = new RevertIncomeToExpectedHandler(_incomes, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RevertIncomeToExpectedHandler(_accountAccess, _incomes, _unitOfWork);
     }
 
     private async Task<Income> SeedIncomeAsync(bool received)
     {
         var income = Income.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             new DateOnly(2026, 10, 28),
             Money.FromDecimal(5000.00m),
             "Salário");
@@ -84,7 +97,8 @@ public class RevertIncomeToExpectedHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RevertIncomeToExpectedHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RevertIncomeToExpectedHandler(_incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new RevertIncomeToExpectedHandler(null!, _incomes, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertIncomeToExpectedHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertIncomeToExpectedHandler(_accountAccess, _incomes, null!));
     }
 }

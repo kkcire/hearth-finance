@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.ListFixedExpenses;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class ListFixedExpensesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly ListFixedExpensesHandler _handler;
 
     public ListFixedExpensesHandlerTests()
     {
-        _handler = new ListFixedExpensesHandler(_accounts, _fixedExpenses);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListFixedExpensesHandler(_accountAccess, _fixedExpenses);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -91,6 +96,6 @@ public class ListFixedExpensesHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListFixedExpensesHandler(null!, _fixedExpenses));
-        Assert.Throws<ArgumentNullException>(() => new ListFixedExpensesHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListFixedExpensesHandler(_accountAccess, null!));
     }
 }

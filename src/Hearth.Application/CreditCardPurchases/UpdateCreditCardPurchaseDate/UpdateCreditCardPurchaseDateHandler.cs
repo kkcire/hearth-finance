@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -7,23 +8,23 @@ namespace Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 
 public sealed class UpdateCreditCardPurchaseDateHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICreditCardPurchaseRepository _purchases;
     private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public UpdateCreditCardPurchaseDateHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICreditCardPurchaseRepository purchases,
         IClock clock,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(purchases);
         ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _purchases = purchases;
         _clock = clock;
         _unitOfWork = unitOfWork;
@@ -35,11 +36,13 @@ public sealed class UpdateCreditCardPurchaseDateHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        _accountAccess.GetRequiredUserId();
+
         var purchase = await _purchases.GetByIdAsync(command.PurchaseId, cancellationToken)
                        ?? throw new NotFoundException(nameof(CreditCardPurchase), command.PurchaseId);
 
-        var account = await _accounts.GetByIdAsync(purchase.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), purchase.AccountId);
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+            purchase.AccountId, nameof(CreditCardPurchase), purchase.Id, cancellationToken);
 
         if (!purchase.IsLockedAt(_clock.Today))
         {

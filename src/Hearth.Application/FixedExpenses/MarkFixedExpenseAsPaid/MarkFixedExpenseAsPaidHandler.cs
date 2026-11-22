@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -7,20 +8,20 @@ namespace Hearth.Application.FixedExpenses.MarkFixedExpenseAsPaid;
 
 public sealed class MarkFixedExpenseAsPaidHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IFixedExpenseRepository _fixedExpenses;
     private readonly IUnitOfWork _unitOfWork;
 
     public MarkFixedExpenseAsPaidHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IFixedExpenseRepository fixedExpenses,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _fixedExpenses = fixedExpenses;
         _unitOfWork = unitOfWork;
     }
@@ -31,13 +32,14 @@ public sealed class MarkFixedExpenseAsPaidHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        _accountAccess.GetRequiredUserId();
         var month = YearMonth.Of(command.Year, command.Month);
 
         var expense = await _fixedExpenses.GetByIdAsync(command.FixedExpenseId, cancellationToken)
                       ?? throw new NotFoundException(nameof(FixedExpense), command.FixedExpenseId);
 
-        var account = await _accounts.GetByIdAsync(expense.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), expense.AccountId);
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+            expense.AccountId, nameof(FixedExpense), expense.Id, cancellationToken);
 
         account.EnsureCanRegisterOn(command.PaidOn);
 

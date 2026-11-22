@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -12,7 +13,9 @@ public class RegisterCreditCardPurchaseHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -20,13 +23,15 @@ public class RegisterCreditCardPurchaseHandlerTests
 
     public RegisterCreditCardPurchaseHandlerTests()
     {
-        _handler = new RegisterCreditCardPurchaseHandler(_accounts, _categories, _purchases, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RegisterCreditCardPurchaseHandler(_accountAccess, _categories, _purchases, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -205,10 +210,10 @@ public class RegisterCreditCardPurchaseHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new RegisterCreditCardPurchaseHandler(null!, _categories, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(_accounts, null!, _purchases, _unitOfWork));
+            () => new RegisterCreditCardPurchaseHandler(_accountAccess, null!, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(_accounts, _categories, null!, _unitOfWork));
+            () => new RegisterCreditCardPurchaseHandler(_accountAccess, _categories, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterCreditCardPurchaseHandler(_accounts, _categories, _purchases, null!));
+            () => new RegisterCreditCardPurchaseHandler(_accountAccess, _categories, _purchases, null!));
     }
 }

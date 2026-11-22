@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.ListAccounts;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -8,12 +9,15 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class ListAccountsHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ListAccountsHandler _handler;
 
     public ListAccountsHandlerTests()
     {
-        _handler = new ListAccountsHandler(_accounts);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListAccountsHandler(_accountAccess, _accounts);
     }
 
     [Fact]
@@ -28,13 +32,15 @@ public class ListAccountsHandlerTests
     public async Task ExecuteAsync_MultipleAccounts_ReturnsAllMappedDtos()
     {
         var first = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Nubank",
             Money.FromDecimal(1000.00m),
             new DateOnly(2026, 10, 1),
             CardBillingRule.Of(3, 12));
         var second = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Inter",
             Money.FromDecimal(-250.50m),
             new DateOnly(2026, 11, 1),
@@ -72,6 +78,6 @@ public class ListAccountsHandlerTests
     [Fact]
     public void Constructor_NullRepository_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => new ListAccountsHandler(null!));
+        Assert.Throws<ArgumentNullException>(() => new ListAccountsHandler(null!, _accounts));
     }
 }

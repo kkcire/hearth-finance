@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,6 +11,10 @@ namespace Hearth.Tests.Application.CreditCardPurchases;
 
 public class UpdateCreditCardPurchaseDetailsHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -17,13 +22,21 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
 
     public UpdateCreditCardPurchaseDetailsHandlerTests()
     {
-        _handler = new UpdateCreditCardPurchaseDetailsHandler(_categories, _purchases, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _purchases, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingPurchase_UpdatesDescriptionCategoryAndConditionAndSaves()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
         var personal = Category.Create(Guid.NewGuid(), accountId, "Pessoal");
         await _categories.AddAsync(shopping);
@@ -59,7 +72,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_KeepingArchivedCategory_AllowsUpdatingDescriptionAndCondition()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
         shopping.Archive();
         await _categories.AddAsync(shopping);
@@ -88,7 +101,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_ReassigningToArchivedCategory_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
         var archived = Category.Create(Guid.NewGuid(), accountId, "Antiga");
         archived.Archive();
@@ -139,10 +152,10 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(null!, _purchases, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, null!, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(_categories, null!, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(_categories, _purchases, null!));
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _purchases, null!));
     }
 }

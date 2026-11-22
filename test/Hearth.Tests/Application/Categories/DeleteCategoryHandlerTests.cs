@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.DeleteCategory;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,6 +11,10 @@ namespace Hearth.Tests.Application.Categories;
 
 public class DeleteCategoryHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
@@ -20,7 +25,16 @@ public class DeleteCategoryHandlerTests
 
     public DeleteCategoryHandlerTests()
     {
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new DeleteCategoryHandler(
+            _accountAccess,
             _categories,
             _directExpenses,
             _fixedExpenses,
@@ -32,7 +46,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UnusedCategory_DeletesAndSaves()
     {
-        var category = Category.Create(Guid.NewGuid(), Guid.NewGuid(), "Temporária");
+        var category = Category.Create(Guid.NewGuid(), _accountId, "Temporária");
         await _categories.AddAsync(category);
 
         await _handler.ExecuteAsync(new DeleteCategoryCommand(category.Id));
@@ -45,7 +59,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByDirectExpense_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var category = Category.Create(Guid.NewGuid(), accountId, "Alimentação");
         await _categories.AddAsync(category);
         await _directExpenses.AddAsync(DirectExpense.Create(
@@ -61,7 +75,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByFixedExpense_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var category = Category.Create(Guid.NewGuid(), accountId, "Serviços");
         await _categories.AddAsync(category);
         await _fixedExpenses.AddAsync(FixedExpense.Create(
@@ -76,7 +90,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByCreditCardPurchase_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var category = Category.Create(Guid.NewGuid(), accountId, "Compras");
         await _categories.AddAsync(category);
         await _purchases.AddAsync(CreditCardPurchase.Create(
@@ -100,7 +114,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByCategoryBudget_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var category = Category.Create(Guid.NewGuid(), accountId, "Transporte");
         await _categories.AddAsync(category);
         await _budgets.AddAsync(CategoryBudget.Create(
@@ -127,11 +141,12 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(null!, _directExpenses, _fixedExpenses, _purchases, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_categories, null!, _fixedExpenses, _purchases, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_categories, _directExpenses, null!, _purchases, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_categories, _directExpenses, _fixedExpenses, null!, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_categories, _directExpenses, _fixedExpenses, _purchases, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_categories, _directExpenses, _fixedExpenses, _purchases, _budgets, null!));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(null!, _categories, _directExpenses, _fixedExpenses, _purchases, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, null!, _directExpenses, _fixedExpenses, _purchases, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, _categories, null!, _fixedExpenses, _purchases, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, _categories, _directExpenses, null!, _purchases, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, _categories, _directExpenses, _fixedExpenses, null!, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, _categories, _directExpenses, _fixedExpenses, _purchases, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteCategoryHandler(_accountAccess, _categories, _directExpenses, _fixedExpenses, _purchases, _budgets, null!));
     }
 }

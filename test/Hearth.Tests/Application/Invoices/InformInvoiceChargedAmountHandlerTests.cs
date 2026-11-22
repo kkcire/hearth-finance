@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Invoices.InformInvoiceChargedAmount;
 using Hearth.Domain.Entities;
@@ -12,20 +13,24 @@ public class InformInvoiceChargedAmountHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly InformInvoiceChargedAmountHandler _handler;
 
     public InformInvoiceChargedAmountHandlerTests()
     {
-        _handler = new InformInvoiceChargedAmountHandler(_accounts, _invoices, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new InformInvoiceChargedAmountHandler(_accountAccess, _invoices, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -156,8 +161,8 @@ public class InformInvoiceChargedAmountHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new InformInvoiceChargedAmountHandler(null!, _invoices, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new InformInvoiceChargedAmountHandler(_accounts, null!, _unitOfWork));
+            () => new InformInvoiceChargedAmountHandler(_accountAccess, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new InformInvoiceChargedAmountHandler(_accounts, _invoices, null!));
+            () => new InformInvoiceChargedAmountHandler(_accountAccess, _invoices, null!));
     }
 }

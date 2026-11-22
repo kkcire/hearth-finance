@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.DeleteIncome;
 using Hearth.Domain.Entities;
@@ -9,13 +10,25 @@ namespace Hearth.Tests.Application.Incomes;
 
 public class DeleteIncomeHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly DeleteIncomeHandler _handler;
 
     public DeleteIncomeHandlerTests()
     {
-        _handler = new DeleteIncomeHandler(_incomes, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new DeleteIncomeHandler(_accountAccess, _incomes, _unitOfWork);
     }
 
     [Theory]
@@ -25,7 +38,7 @@ public class DeleteIncomeHandlerTests
     {
         var income = Income.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             new DateOnly(2026, 10, 28),
             Money.FromDecimal(5000.00m),
             "Salário");
@@ -67,7 +80,8 @@ public class DeleteIncomeHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new DeleteIncomeHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteIncomeHandler(_incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new DeleteIncomeHandler(null!, _incomes, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteIncomeHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteIncomeHandler(_accountAccess, _incomes, null!));
     }
 }

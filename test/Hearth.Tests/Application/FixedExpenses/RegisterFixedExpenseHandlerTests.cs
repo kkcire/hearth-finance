@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.RegisterFixedExpense;
 using Hearth.Domain.Entities;
@@ -12,7 +13,9 @@ public class RegisterFixedExpenseHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 15);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -20,13 +23,15 @@ public class RegisterFixedExpenseHandlerTests
 
     public RegisterFixedExpenseHandlerTests()
     {
-        _handler = new RegisterFixedExpenseHandler(_accounts, _categories, _fixedExpenses, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RegisterFixedExpenseHandler(_accountAccess, _categories, _fixedExpenses, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -163,10 +168,10 @@ public class RegisterFixedExpenseHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new RegisterFixedExpenseHandler(null!, _categories, _fixedExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterFixedExpenseHandler(_accounts, null!, _fixedExpenses, _unitOfWork));
+            () => new RegisterFixedExpenseHandler(_accountAccess, null!, _fixedExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterFixedExpenseHandler(_accounts, _categories, null!, _unitOfWork));
+            () => new RegisterFixedExpenseHandler(_accountAccess, _categories, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterFixedExpenseHandler(_accounts, _categories, _fixedExpenses, null!));
+            () => new RegisterFixedExpenseHandler(_accountAccess, _categories, _fixedExpenses, null!));
     }
 }

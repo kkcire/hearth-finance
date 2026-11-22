@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,13 +10,25 @@ namespace Hearth.Tests.Application.DirectExpenses;
 
 public class DeleteDirectExpenseHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly DeleteDirectExpenseHandler _handler;
 
     public DeleteDirectExpenseHandlerTests()
     {
-        _handler = new DeleteDirectExpenseHandler(_directExpenses, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new DeleteDirectExpenseHandler(_accountAccess, _directExpenses, _unitOfWork);
     }
 
     [Fact]
@@ -23,7 +36,7 @@ public class DeleteDirectExpenseHandlerTests
     {
         var expense = DirectExpense.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(50.00m),
             "Mercado",
@@ -56,7 +69,7 @@ public class DeleteDirectExpenseHandlerTests
     {
         var expense = DirectExpense.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(50.00m),
             "Mercado",
@@ -79,7 +92,8 @@ public class DeleteDirectExpenseHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new DeleteDirectExpenseHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteDirectExpenseHandler(_directExpenses, null!));
+        Assert.Throws<ArgumentNullException>(() => new DeleteDirectExpenseHandler(null!, _directExpenses, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteDirectExpenseHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteDirectExpenseHandler(_accountAccess, _directExpenses, null!));
     }
 }

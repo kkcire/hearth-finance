@@ -1,20 +1,19 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 
 namespace Hearth.Application.Invoices.ListInvoices;
 
 public sealed class ListInvoicesHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IInvoiceRepository _invoices;
 
-    public ListInvoicesHandler(IAccountRepository accounts, IInvoiceRepository invoices)
+    public ListInvoicesHandler(AccountAccessGuard accountAccess, IInvoiceRepository invoices)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(invoices);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _invoices = invoices;
     }
 
@@ -24,8 +23,7 @@ public sealed class ListInvoicesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var invoices = await _invoices.GetByAccountAsync(query.AccountId, cancellationToken);
 

@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.CreateCategory;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,20 +11,24 @@ namespace Hearth.Tests.Application.Categories;
 
 public class CreateCategoryHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly CreateCategoryHandler _handler;
 
     public CreateCategoryHandlerTests()
     {
-        _handler = new CreateCategoryHandler(_accounts, _categories, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new CreateCategoryHandler(_accountAccess, _categories, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -96,7 +101,7 @@ public class CreateCategoryHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new CreateCategoryHandler(null!, _categories, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateCategoryHandler(_accounts, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateCategoryHandler(_accounts, _categories, null!));
+        Assert.Throws<ArgumentNullException>(() => new CreateCategoryHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateCategoryHandler(_accountAccess, _categories, null!));
     }
 }

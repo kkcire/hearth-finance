@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseAmount;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,6 +11,10 @@ namespace Hearth.Tests.Application.CreditCardPurchases;
 
 public class UpdateCreditCardPurchaseAmountHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -17,7 +22,15 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
 
     public UpdateCreditCardPurchaseAmountHandlerTests()
     {
-        _handler = new UpdateCreditCardPurchaseAmountHandler(_purchases, _clock, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateCreditCardPurchaseAmountHandler(_accountAccess, _purchases, _clock, _unitOfWork);
     }
 
     private async Task<CreditCardPurchase> SeedPurchaseAsync()
@@ -25,7 +38,7 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
         // Purchase on 10/10 with closing day 3 -> first invoice closes on 03/11/2026.
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             3,
@@ -87,10 +100,10 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseAmountHandler(null!, _clock, _unitOfWork));
+            () => new UpdateCreditCardPurchaseAmountHandler(_accountAccess, null!, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseAmountHandler(_purchases, null!, _unitOfWork));
+            () => new UpdateCreditCardPurchaseAmountHandler(_accountAccess, _purchases, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseAmountHandler(_purchases, _clock, null!));
+            () => new UpdateCreditCardPurchaseAmountHandler(_accountAccess, _purchases, _clock, null!));
     }
 }

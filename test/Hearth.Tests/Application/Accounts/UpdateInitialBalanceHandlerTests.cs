@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.UpdateInitialBalance;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class UpdateInitialBalanceHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly UpdateInitialBalanceHandler _handler;
 
     public UpdateInitialBalanceHandlerTests()
     {
-        _handler = new UpdateInitialBalanceHandler(_accounts, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateInitialBalanceHandler(_accountAccess, _accounts, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync(decimal initialBalance = 1000.00m)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(initialBalance),
             new DateOnly(2026, 10, 1),
@@ -100,7 +105,7 @@ public class UpdateInitialBalanceHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new UpdateInitialBalanceHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new UpdateInitialBalanceHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new UpdateInitialBalanceHandler(null!, _accounts, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new UpdateInitialBalanceHandler(_accountAccess, _accounts, null!));
     }
 }

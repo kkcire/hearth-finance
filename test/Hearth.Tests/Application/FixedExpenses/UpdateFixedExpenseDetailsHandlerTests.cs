@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.UpdateFixedExpenseDetails;
 using Hearth.Domain.Entities;
@@ -10,6 +11,10 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class UpdateFixedExpenseDetailsHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -17,13 +22,21 @@ public class UpdateFixedExpenseDetailsHandlerTests
 
     public UpdateFixedExpenseDetailsHandlerTests()
     {
-        _handler = new UpdateFixedExpenseDetailsHandler(_categories, _fixedExpenses, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new UpdateFixedExpenseDetailsHandler(_accountAccess, _categories, _fixedExpenses, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingExpense_UpdatesDescriptionAndCategoryAndSaves()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
         var education = Category.Create(Guid.NewGuid(), accountId, "Educação");
         await _categories.AddAsync(services);
@@ -51,7 +64,7 @@ public class UpdateFixedExpenseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_KeepingArchivedCategory_AllowsUpdatingDescription()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
         services.Archive();
         await _categories.AddAsync(services);
@@ -76,7 +89,7 @@ public class UpdateFixedExpenseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_ReassigningToArchivedCategory_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
         var archived = Category.Create(Guid.NewGuid(), accountId, "Antiga");
         archived.Archive();
@@ -122,10 +135,10 @@ public class UpdateFixedExpenseDetailsHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateFixedExpenseDetailsHandler(null!, _fixedExpenses, _unitOfWork));
+            () => new UpdateFixedExpenseDetailsHandler(_accountAccess, null!, _fixedExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateFixedExpenseDetailsHandler(_categories, null!, _unitOfWork));
+            () => new UpdateFixedExpenseDetailsHandler(_accountAccess, _categories, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateFixedExpenseDetailsHandler(_categories, _fixedExpenses, null!));
+            () => new UpdateFixedExpenseDetailsHandler(_accountAccess, _categories, _fixedExpenses, null!));
     }
 }

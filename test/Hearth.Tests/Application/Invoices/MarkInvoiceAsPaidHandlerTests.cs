@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Invoices.MarkInvoiceAsPaid;
 using Hearth.Domain.Entities;
@@ -12,20 +13,24 @@ public class MarkInvoiceAsPaidHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly MarkInvoiceAsPaidHandler _handler;
 
     public MarkInvoiceAsPaidHandlerTests()
     {
-        _handler = new MarkInvoiceAsPaidHandler(_accounts, _invoices, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new MarkInvoiceAsPaidHandler(_accountAccess, _invoices, _unitOfWork);
     }
 
     private async Task<Invoice> SeedInvoiceAsync(decimal? chargedAmount = 500.00m)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -126,8 +131,8 @@ public class MarkInvoiceAsPaidHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new MarkInvoiceAsPaidHandler(null!, _invoices, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkInvoiceAsPaidHandler(_accounts, null!, _unitOfWork));
+            () => new MarkInvoiceAsPaidHandler(_accountAccess, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkInvoiceAsPaidHandler(_accounts, _invoices, null!));
+            () => new MarkInvoiceAsPaidHandler(_accountAccess, _invoices, null!));
     }
 }

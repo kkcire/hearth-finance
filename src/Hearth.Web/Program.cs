@@ -1,5 +1,6 @@
 using System.Globalization;
 using Hearth.Application;
+using Hearth.Application.Abstractions;
 using Hearth.Infrastructure;
 using Hearth.Infrastructure.Time;
 using Hearth.Web.Components;
@@ -32,6 +33,8 @@ builder.Services.AddInfrastructure(connectionString, timeZoneId);
 builder.Services.AddMudServices();
 builder.Services.AddLocalization();
 
+builder.Services.AddScoped<ScopedCurrentUser>();
+builder.Services.AddScoped<ICurrentUser>(sp => sp.GetRequiredService<ScopedCurrentUser>());
 builder.Services.AddScoped<UseCaseExecutor>();
 builder.Services.AddScoped<AccountContext>();
 

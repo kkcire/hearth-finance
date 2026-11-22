@@ -18,12 +18,14 @@ public sealed class Account
 
     private Account(
         Guid id,
+        Guid ownerUserId,
         string name,
         Money initialBalance,
         DateOnly initialBalanceDate,
         CardBillingRule billingRule)
     {
         Id = id;
+        OwnerUserId = ownerUserId;
         Name = name;
         InitialBalance = initialBalance;
         InitialBalanceDate = initialBalanceDate;
@@ -31,6 +33,9 @@ public sealed class Account
     }
 
     public Guid Id { get; }
+
+    /// <summary>The user who owns this account. Kept as OwnerUserId to accommodate future shared accounts.</summary>
+    public Guid OwnerUserId { get; }
 
     public string Name { get; private set; }
 
@@ -50,16 +55,18 @@ public sealed class Account
 
     public static Account Create(
         Guid id,
+        Guid ownerUserId,
         string name,
         Money initialBalance,
         DateOnly initialBalanceDate,
         CardBillingRule billingRule)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(ownerUserId, nameof(ownerUserId), "owner user id");
         var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
         ArgumentNullException.ThrowIfNull(billingRule);
 
-        return new Account(id, validName, initialBalance, initialBalanceDate, billingRule);
+        return new Account(id, ownerUserId, validName, initialBalance, initialBalanceDate, billingRule);
     }
 
     /// <summary>True if an entry dated on the given day respects the initial balance date.</summary>

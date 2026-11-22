@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 
@@ -6,20 +7,20 @@ namespace Hearth.Application.Invoices.MarkInvoiceAsPaid;
 
 public sealed class MarkInvoiceAsPaidHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IInvoiceRepository _invoices;
     private readonly IUnitOfWork _unitOfWork;
 
     public MarkInvoiceAsPaidHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IInvoiceRepository invoices,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(invoices);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _invoices = invoices;
         _unitOfWork = unitOfWork;
     }
@@ -30,11 +31,13 @@ public sealed class MarkInvoiceAsPaidHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        _accountAccess.GetRequiredUserId();
+
         var invoice = await _invoices.GetByIdAsync(command.InvoiceId, cancellationToken)
                       ?? throw new NotFoundException(nameof(Invoice), command.InvoiceId);
 
-        var account = await _accounts.GetByIdAsync(invoice.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), invoice.AccountId);
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+            invoice.AccountId, nameof(Invoice), invoice.Id, cancellationToken);
 
         account.EnsureCanRegisterOn(command.PaidOn);
 

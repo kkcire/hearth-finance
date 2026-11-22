@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.CreateCategoryBudget;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -12,7 +13,9 @@ public class CreateCategoryBudgetHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 15);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -20,13 +23,15 @@ public class CreateCategoryBudgetHandlerTests
 
     public CreateCategoryBudgetHandlerTests()
     {
-        _handler = new CreateCategoryBudgetHandler(_accounts, _categories, _budgets, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new CreateCategoryBudgetHandler(_accountAccess, _categories, _budgets, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
             InitialDate,
@@ -126,8 +131,8 @@ public class CreateCategoryBudgetHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(null!, _categories, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accounts, null!, _budgets, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accounts, _categories, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accounts, _categories, _budgets, null!));
+        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accountAccess, null!, _budgets, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accountAccess, _categories, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateCategoryBudgetHandler(_accountAccess, _categories, _budgets, null!));
     }
 }

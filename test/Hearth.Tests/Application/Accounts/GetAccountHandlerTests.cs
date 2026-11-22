@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.GetAccount;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class GetAccountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly GetAccountHandler _handler;
 
     public GetAccountHandlerTests()
     {
-        _handler = new GetAccountHandler(_accounts);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new GetAccountHandler(_accountAccess);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingAccount_ReturnsDto()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1500.50m),
             new DateOnly(2026, 10, 1),
@@ -60,7 +65,8 @@ public class GetAccountHandlerTests
     public async Task ExecuteAsync_ForwardsCancellationToken()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
             new DateOnly(2026, 10, 1),

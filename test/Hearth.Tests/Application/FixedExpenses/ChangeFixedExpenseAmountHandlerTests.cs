@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.ChangeFixedExpenseAmount;
 using Hearth.Domain.Entities;
@@ -10,7 +11,9 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class ChangeFixedExpenseAmountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 10));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -18,13 +21,15 @@ public class ChangeFixedExpenseAmountHandlerTests
 
     public ChangeFixedExpenseAmountHandlerTests()
     {
-        _handler = new ChangeFixedExpenseAmountHandler(_accounts, _fixedExpenses, _clock, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ChangeFixedExpenseAmountHandler(_accountAccess, _fixedExpenses, _clock, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync(YearMonth? end = null)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             new DateOnly(2026, 1, 1),
@@ -114,10 +119,10 @@ public class ChangeFixedExpenseAmountHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new ChangeFixedExpenseAmountHandler(null!, _fixedExpenses, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new ChangeFixedExpenseAmountHandler(_accounts, null!, _clock, _unitOfWork));
+            () => new ChangeFixedExpenseAmountHandler(_accountAccess, null!, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new ChangeFixedExpenseAmountHandler(_accounts, _fixedExpenses, null!, _unitOfWork));
+            () => new ChangeFixedExpenseAmountHandler(_accountAccess, _fixedExpenses, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new ChangeFixedExpenseAmountHandler(_accounts, _fixedExpenses, _clock, null!));
+            () => new ChangeFixedExpenseAmountHandler(_accountAccess, _fixedExpenses, _clock, null!));
     }
 }

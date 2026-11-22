@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -12,7 +13,9 @@ public class RegisterDirectExpenseHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -20,13 +23,15 @@ public class RegisterDirectExpenseHandlerTests
 
     public RegisterDirectExpenseHandlerTests()
     {
-        _handler = new RegisterDirectExpenseHandler(_accounts, _categories, _directExpenses, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RegisterDirectExpenseHandler(_accountAccess, _categories, _directExpenses, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -202,10 +207,10 @@ public class RegisterDirectExpenseHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new RegisterDirectExpenseHandler(null!, _categories, _directExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(_accounts, null!, _directExpenses, _unitOfWork));
+            () => new RegisterDirectExpenseHandler(_accountAccess, null!, _directExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(_accounts, _categories, null!, _unitOfWork));
+            () => new RegisterDirectExpenseHandler(_accountAccess, _categories, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new RegisterDirectExpenseHandler(_accounts, _categories, _directExpenses, null!));
+            () => new RegisterDirectExpenseHandler(_accountAccess, _categories, _directExpenses, null!));
     }
 }

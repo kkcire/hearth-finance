@@ -1,25 +1,24 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 
 namespace Hearth.Application.CategoryBudgets.ListCategoryBudgets;
 
 public sealed class ListCategoryBudgetsHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly ICategoryBudgetRepository _budgets;
 
     public ListCategoryBudgetsHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         ICategoryBudgetRepository budgets)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(budgets);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _categories = categories;
         _budgets = budgets;
     }
@@ -30,8 +29,7 @@ public sealed class ListCategoryBudgetsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var categories = await _categories.GetByAccountAsync(query.AccountId, cancellationToken);
         var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);

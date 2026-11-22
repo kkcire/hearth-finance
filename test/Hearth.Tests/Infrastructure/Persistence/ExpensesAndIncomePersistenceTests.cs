@@ -23,16 +23,20 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
     private async Task<(Guid AccountId, Guid CategoryId)> SeedAccountAndCategoryAsync()
     {
+        var userId = Guid.CreateVersion7();
         var accountId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
 
         await using var scope = _fixture.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
         var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
+        await users.AddAsync(User.Create(
+            userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
         await categories.AddAsync(Category.Create(categoryId, accountId, "Geral"));
         await uow.SaveChangesAsync();
 

@@ -1,5 +1,5 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
+using Hearth.Application.Authorization;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 
@@ -7,20 +7,20 @@ namespace Hearth.Application.Categories.CreateCategory;
 
 public sealed class CreateCategoryHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCategoryHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _categories = categories;
         _unitOfWork = unitOfWork;
     }
@@ -31,8 +31,7 @@ public sealed class CreateCategoryHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var account = await _accounts.GetByIdAsync(command.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), command.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
         var category = Category.Create(Guid.CreateVersion7(), account.Id, command.Name);
 

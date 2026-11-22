@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.MarkIncomeAsReceived;
 using Hearth.Domain.Entities;
@@ -12,20 +13,24 @@ public class MarkIncomeAsReceivedHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly MarkIncomeAsReceivedHandler _handler;
 
     public MarkIncomeAsReceivedHandlerTests()
     {
-        _handler = new MarkIncomeAsReceivedHandler(_accounts, _incomes, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, _unitOfWork);
     }
 
     private async Task<Income> SeedIncomeAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -109,7 +114,7 @@ public class MarkIncomeAsReceivedHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(null!, _incomes, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accounts, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accounts, _incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, null!));
     }
 }

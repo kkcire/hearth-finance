@@ -1,22 +1,21 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 
 namespace Hearth.Application.FixedExpenses.ListFixedExpenses;
 
 public sealed class ListFixedExpensesHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IFixedExpenseRepository _fixedExpenses;
 
     public ListFixedExpensesHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IFixedExpenseRepository fixedExpenses)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _fixedExpenses = fixedExpenses;
     }
 
@@ -26,8 +25,7 @@ public sealed class ListFixedExpensesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var expenses = await _fixedExpenses.GetByAccountAsync(query.AccountId, cancellationToken);
 

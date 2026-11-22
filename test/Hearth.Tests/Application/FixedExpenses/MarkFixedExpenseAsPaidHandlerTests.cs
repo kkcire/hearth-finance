@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.MarkFixedExpenseAsPaid;
 using Hearth.Domain.Entities;
@@ -12,20 +13,24 @@ public class MarkFixedExpenseAsPaidHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly MarkFixedExpenseAsPaidHandler _handler;
 
     public MarkFixedExpenseAsPaidHandlerTests()
     {
-        _handler = new MarkFixedExpenseAsPaidHandler(_accounts, _fixedExpenses, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
             InitialDate,
@@ -125,8 +130,8 @@ public class MarkFixedExpenseAsPaidHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new MarkFixedExpenseAsPaidHandler(null!, _fixedExpenses, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkFixedExpenseAsPaidHandler(_accounts, null!, _unitOfWork));
+            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, null!, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkFixedExpenseAsPaidHandler(_accounts, _fixedExpenses, null!));
+            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, null!));
     }
 }

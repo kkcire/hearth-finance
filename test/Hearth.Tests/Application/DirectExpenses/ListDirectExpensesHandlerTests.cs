@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.DirectExpenses;
 
 public class ListDirectExpensesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly ListDirectExpensesHandler _handler;
 
     public ListDirectExpensesHandlerTests()
     {
-        _handler = new ListDirectExpensesHandler(_accounts, _directExpenses);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListDirectExpensesHandler(_accountAccess, _directExpenses);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 10, 1),
@@ -78,6 +83,6 @@ public class ListDirectExpensesHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListDirectExpensesHandler(null!, _directExpenses));
-        Assert.Throws<ArgumentNullException>(() => new ListDirectExpensesHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListDirectExpensesHandler(_accountAccess, null!));
     }
 }

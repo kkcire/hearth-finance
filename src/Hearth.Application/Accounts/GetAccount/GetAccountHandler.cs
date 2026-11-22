@@ -1,18 +1,16 @@
-using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 
 namespace Hearth.Application.Accounts.GetAccount;
 
 public sealed class GetAccountHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
 
-    public GetAccountHandler(IAccountRepository accounts)
+    public GetAccountHandler(AccountAccessGuard accountAccess)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
     }
 
     public async Task<AccountDto> ExecuteAsync(
@@ -21,8 +19,7 @@ public sealed class GetAccountHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var account = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         return AccountDto.FromEntity(account);
     }

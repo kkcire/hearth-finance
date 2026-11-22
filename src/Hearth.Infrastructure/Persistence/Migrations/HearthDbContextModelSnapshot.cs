@@ -43,8 +43,15 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(100)")
                         .HasColumnName("name");
 
+                    b.Property<Guid>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
                     b.HasKey("Id")
                         .HasName("pk_accounts");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_accounts_owner_user_id");
 
                     b.ToTable("accounts", (string)null);
                 });
@@ -359,6 +366,13 @@ namespace Hearth.Infrastructure.Persistence.Migrations
 
             modelBuilder.Entity("Hearth.Domain.Entities.Account", b =>
                 {
+                    b.HasOne("Hearth.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_accounts_users_owner_user_id");
+
                     b.OwnsOne("Hearth.Domain.ValueObjects.CardBillingRule", "BillingRule", b1 =>
                         {
                             b1.Property<Guid>("AccountId")

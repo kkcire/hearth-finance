@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetProjectedResult;
 using Hearth.Domain.Entities;
@@ -9,7 +10,9 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetProjectedResultHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
@@ -18,8 +21,9 @@ public class GetProjectedResultHandlerTests
 
     public GetProjectedResultHandlerTests()
     {
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetProjectedResultHandler(
-            _accounts,
+            _accountAccess,
             _incomes,
             _directExpenses,
             _fixedExpenses,
@@ -29,7 +33,8 @@ public class GetProjectedResultHandlerTests
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -138,12 +143,12 @@ public class GetProjectedResultHandlerTests
         Assert.Throws<ArgumentNullException>(() =>
             new GetProjectedResultHandler(null!, _incomes, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetProjectedResultHandler(_accounts, null!, _directExpenses, _fixedExpenses, _purchases));
+            new GetProjectedResultHandler(_accountAccess, null!, _directExpenses, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetProjectedResultHandler(_accounts, _incomes, null!, _fixedExpenses, _purchases));
+            new GetProjectedResultHandler(_accountAccess, _incomes, null!, _fixedExpenses, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetProjectedResultHandler(_accounts, _incomes, _directExpenses, null!, _purchases));
+            new GetProjectedResultHandler(_accountAccess, _incomes, _directExpenses, null!, _purchases));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetProjectedResultHandler(_accounts, _incomes, _directExpenses, _fixedExpenses, null!));
+            new GetProjectedResultHandler(_accountAccess, _incomes, _directExpenses, _fixedExpenses, null!));
     }
 }

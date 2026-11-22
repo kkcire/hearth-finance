@@ -18,6 +18,7 @@ namespace Hearth.Tests.Web;
 /// </summary>
 public abstract class WebTestBase : BunitContext, IAsyncLifetime
 {
+    internal FakeCurrentUser CurrentUser { get; } = new();
     internal InMemoryUserRepository Users { get; } = new();
     internal FakePasswordHasher PasswordHasher { get; } = new();
     internal InMemoryAccountRepository Accounts { get; } = new();
@@ -35,6 +36,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
     {
         JSInterop.Mode = JSRuntimeMode.Loose;
 
+        Services.AddSingleton<ICurrentUser>(CurrentUser);
         Services.AddSingleton<IUserRepository>(Users);
         Services.AddSingleton<IPasswordHasher>(PasswordHasher);
         Services.AddSingleton<IAccountRepository>(Accounts);

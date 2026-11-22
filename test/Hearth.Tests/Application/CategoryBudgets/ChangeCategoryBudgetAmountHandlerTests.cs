@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.ChangeCategoryBudgetAmount;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,6 +10,10 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class ChangeCategoryBudgetAmountHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -16,14 +21,22 @@ public class ChangeCategoryBudgetAmountHandlerTests
 
     public ChangeCategoryBudgetAmountHandlerTests()
     {
-        _handler = new ChangeCategoryBudgetAmountHandler(_budgets, _clock, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ChangeCategoryBudgetAmountHandler(_accountAccess, _budgets, _clock, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ActiveBudget_AppliesFromCurrentCalendarMonthAndSaves()
     {
         var budget = CategoryBudget.Create(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
+            Guid.NewGuid(), _accountId, Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
         await _budgets.AddAsync(budget);
 
         var result = await _handler.ExecuteAsync(new ChangeCategoryBudgetAmountCommand(budget.Id, 200.00m));
@@ -52,8 +65,9 @@ public class ChangeCategoryBudgetAmountHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(null!, _clock, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(_budgets, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(_budgets, _clock, null!));
+        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(null!, _budgets, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(_accountAccess, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(_accountAccess, _budgets, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new ChangeCategoryBudgetAmountHandler(_accountAccess, _budgets, _clock, null!));
     }
 }

@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
@@ -10,7 +11,9 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetBudgetStatusHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
@@ -20,8 +23,9 @@ public class GetBudgetStatusHandlerTests
 
     public GetBudgetStatusHandlerTests()
     {
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetBudgetStatusHandler(
-            _accounts,
+            _accountAccess,
             _categories,
             _budgets,
             _directExpenses,
@@ -33,7 +37,8 @@ public class GetBudgetStatusHandlerTests
     public async Task ExecuteAsync_ReturnsBudgetedCategoriesWithNamesTotalsAndConditionFiltering()
     {
         var account = Account.Create(
-            Guid.NewGuid(), "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
         await _accounts.AddAsync(account);
 
         var transport = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
@@ -96,10 +101,10 @@ public class GetBudgetStatusHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(null!, _categories, _budgets, _directExpenses, _fixedExpenses, _purchases));
-        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accounts, null!, _budgets, _directExpenses, _fixedExpenses, _purchases));
-        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accounts, _categories, null!, _directExpenses, _fixedExpenses, _purchases));
-        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accounts, _categories, _budgets, null!, _fixedExpenses, _purchases));
-        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accounts, _categories, _budgets, _directExpenses, null!, _purchases));
-        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accounts, _categories, _budgets, _directExpenses, _fixedExpenses, null!));
+        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accountAccess, null!, _budgets, _directExpenses, _fixedExpenses, _purchases));
+        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accountAccess, _categories, null!, _directExpenses, _fixedExpenses, _purchases));
+        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accountAccess, _categories, _budgets, null!, _fixedExpenses, _purchases));
+        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accountAccess, _categories, _budgets, _directExpenses, null!, _purchases));
+        Assert.Throws<ArgumentNullException>(() => new GetBudgetStatusHandler(_accountAccess, _categories, _budgets, _directExpenses, _fixedExpenses, null!));
     }
 }

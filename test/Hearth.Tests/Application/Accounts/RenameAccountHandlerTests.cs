@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.RenameAccount;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class RenameAccountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RenameAccountHandler _handler;
 
     public RenameAccountHandlerTests()
     {
-        _handler = new RenameAccountHandler(_accounts, _unitOfWork);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RenameAccountHandler(_accountAccess, _accounts, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta principal")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.FromDecimal(1000.00m),
             new DateOnly(2026, 10, 1),
@@ -99,7 +104,7 @@ public class RenameAccountHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RenameAccountHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RenameAccountHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new RenameAccountHandler(null!, _accounts, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RenameAccountHandler(_accountAccess, _accounts, null!));
     }
 }

@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -9,20 +10,24 @@ namespace Hearth.Tests.Application.CreditCardPurchases;
 
 public class ListCreditCardPurchasesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
     private readonly ListCreditCardPurchasesHandler _handler;
 
     public ListCreditCardPurchasesHandlerTests()
     {
-        _handler = new ListCreditCardPurchasesHandler(_accounts, _purchases, _clock);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListCreditCardPurchasesHandler(_accountAccess, _purchases, _clock);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -115,8 +120,8 @@ public class ListCreditCardPurchasesHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new ListCreditCardPurchasesHandler(null!, _purchases, _clock));
         Assert.Throws<ArgumentNullException>(
-            () => new ListCreditCardPurchasesHandler(_accounts, null!, _clock));
+            () => new ListCreditCardPurchasesHandler(_accountAccess, null!, _clock));
         Assert.Throws<ArgumentNullException>(
-            () => new ListCreditCardPurchasesHandler(_accounts, _purchases, null!));
+            () => new ListCreditCardPurchasesHandler(_accountAccess, _purchases, null!));
     }
 }

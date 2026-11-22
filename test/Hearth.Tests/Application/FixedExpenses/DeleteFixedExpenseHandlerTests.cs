@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.DeleteFixedExpense;
 using Hearth.Domain.Entities;
@@ -9,13 +10,25 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class DeleteFixedExpenseHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly DeleteFixedExpenseHandler _handler;
 
     public DeleteFixedExpenseHandlerTests()
     {
-        _handler = new DeleteFixedExpenseHandler(_fixedExpenses, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new DeleteFixedExpenseHandler(_accountAccess, _fixedExpenses, _unitOfWork);
     }
 
     [Theory]
@@ -25,7 +38,7 @@ public class DeleteFixedExpenseHandlerTests
     {
         var expense = FixedExpense.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             YearMonth.Of(2026, 1),
             null,
             Money.FromDecimal(1000.00m),
@@ -69,7 +82,8 @@ public class DeleteFixedExpenseHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new DeleteFixedExpenseHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new DeleteFixedExpenseHandler(_fixedExpenses, null!));
+        Assert.Throws<ArgumentNullException>(() => new DeleteFixedExpenseHandler(null!, _fixedExpenses, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteFixedExpenseHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new DeleteFixedExpenseHandler(_accountAccess, _fixedExpenses, null!));
     }
 }

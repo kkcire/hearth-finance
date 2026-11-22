@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Invoices.ListInvoices;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.Invoices;
 
 public class ListInvoicesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly ListInvoicesHandler _handler;
 
     public ListInvoicesHandlerTests()
     {
-        _handler = new ListInvoicesHandler(_accounts, _invoices);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListInvoicesHandler(_accountAccess, _invoices);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -88,6 +93,6 @@ public class ListInvoicesHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListInvoicesHandler(null!, _invoices));
-        Assert.Throws<ArgumentNullException>(() => new ListInvoicesHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListInvoicesHandler(_accountAccess, null!));
     }
 }

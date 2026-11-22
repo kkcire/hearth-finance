@@ -8,6 +8,7 @@ namespace Hearth.Tests.Domain.Entities;
 public class AccountTests
 {
     private static readonly DateOnly DefaultDate = new(2026, 10, 1);
+    private static readonly Guid DefaultOwnerUserId = Guid.Parse("01900000-0000-7000-8000-000000000001");
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
@@ -16,9 +17,11 @@ public class AccountTests
         string name = "Conta principal",
         decimal initialBalance = 1500.00m,
         DateOnly? initialDate = null,
-        CardBillingRule? rule = null) =>
+        CardBillingRule? rule = null,
+        Guid? ownerUserId = null) =>
         Account.Create(
             Guid.NewGuid(),
+            ownerUserId ?? DefaultOwnerUserId,
             name,
             M(initialBalance),
             initialDate ?? DefaultDate,
@@ -30,10 +33,12 @@ public class AccountTests
     public void Create_StoresTheGivenValues_AndTrimsTheName()
     {
         var id = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
 
-        var account = Account.Create(id, "  Conta principal  ", M(1500.00m), DefaultDate, Rule3);
+        var account = Account.Create(id, ownerId, "  Conta principal  ", M(1500.00m), DefaultDate, Rule3);
 
         Assert.Equal(id, account.Id);
+        Assert.Equal(ownerId, account.OwnerUserId);
         Assert.Equal("Conta principal", account.Name);
         Assert.Equal(M(1500.00m), account.InitialBalance);
         Assert.Equal(DefaultDate, account.InitialBalanceDate);
@@ -57,7 +62,14 @@ public class AccountTests
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(
-            () => Account.Create(Guid.Empty, "Conta", M(0m), DefaultDate, Rule3));
+            () => Account.Create(Guid.Empty, DefaultOwnerUserId, "Conta", M(0m), DefaultDate, Rule3));
+    }
+
+    [Fact]
+    public void Create_EmptyOwnerUserId_Throws()
+    {
+        Assert.Throws<ArgumentException>(
+            () => Account.Create(Guid.NewGuid(), Guid.Empty, "Conta", M(0m), DefaultDate, Rule3));
     }
 
     [Theory]
@@ -91,7 +103,7 @@ public class AccountTests
     public void Create_NullBillingRule_Throws()
     {
         Assert.Throws<ArgumentNullException>(
-            () => Account.Create(Guid.NewGuid(), "Conta", M(0m), DefaultDate, null!));
+            () => Account.Create(Guid.NewGuid(), DefaultOwnerUserId, "Conta", M(0m), DefaultDate, null!));
     }
 
     [Fact]

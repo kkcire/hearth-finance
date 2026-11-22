@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.ListIncomes;
 using Hearth.Domain.Entities;
@@ -9,19 +10,23 @@ namespace Hearth.Tests.Application.Incomes;
 
 public class ListIncomesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly ListIncomesHandler _handler;
 
     public ListIncomesHandlerTests()
     {
-        _handler = new ListIncomesHandler(_accounts, _incomes);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ListIncomesHandler(_accountAccess, _incomes);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 10, 1),
@@ -84,6 +89,6 @@ public class ListIncomesHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(null!, _incomes));
-        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(_accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(_accountAccess, null!));
     }
 }

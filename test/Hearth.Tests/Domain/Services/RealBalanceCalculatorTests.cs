@@ -7,6 +7,7 @@ namespace Hearth.Tests.Domain.Services;
 
 public class RealBalanceCalculatorTests
 {
+    private static readonly Guid OwnerUserId = Guid.NewGuid();
     private static readonly Guid AccountId = Guid.NewGuid();
     private static readonly Guid OtherAccountId = Guid.NewGuid();
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
@@ -19,7 +20,7 @@ public class RealBalanceCalculatorTests
     private static DateOnly Day(int year, int month, int day) => new(year, month, day);
 
     private static Account NewAccount(decimal initialBalance = 1000.00m, Guid? id = null) =>
-        Account.Create(id ?? AccountId, "Conta", M(initialBalance), InitialDate, Rule3);
+        Account.Create(id ?? AccountId, OwnerUserId, "Conta", M(initialBalance), InitialDate, Rule3);
 
     private static Income NewIncome(
         DateOnly expectedDate,

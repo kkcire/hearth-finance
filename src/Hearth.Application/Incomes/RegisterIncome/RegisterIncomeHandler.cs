@@ -1,5 +1,5 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
+using Hearth.Application.Authorization;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 
@@ -7,20 +7,20 @@ namespace Hearth.Application.Incomes.RegisterIncome;
 
 public sealed class RegisterIncomeHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IIncomeRepository _incomes;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterIncomeHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IIncomeRepository incomes,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(incomes);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _incomes = incomes;
         _unitOfWork = unitOfWork;
     }
@@ -33,8 +33,7 @@ public sealed class RegisterIncomeHandler
 
         var amount = Money.FromDecimal(command.Amount);
 
-        var account = await _accounts.GetByIdAsync(command.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), command.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
         account.EnsureCanRegisterOn(command.ExpectedDate);
 

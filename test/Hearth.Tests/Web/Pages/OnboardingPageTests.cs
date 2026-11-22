@@ -21,7 +21,7 @@ public sealed class OnboardingPageTests : WebTestBase
         await cut.Find("[data-testid='create-account-submit']").ClickAsync();
 
         var navigation = Services.GetRequiredService<NavigationManager>();
-        var savedAccounts = await Accounts.GetAllAsync();
+        var savedAccounts = await Accounts.GetByOwnerAsync(CurrentUser.UserId!.Value);
 
         var created = Assert.Single(savedAccounts);
         Assert.Equal("Conta Erick", created.Name);
@@ -44,7 +44,7 @@ public sealed class OnboardingPageTests : WebTestBase
 
         await cut.Find("[data-testid='create-account-submit']").ClickAsync();
 
-        Assert.Empty(await Accounts.GetAllAsync());
+        Assert.Empty(await Accounts.GetByOwnerAsync(CurrentUser.UserId!.Value));
         Assert.Contains("Informe o nome da conta.", cut.Markup);
     }
 }

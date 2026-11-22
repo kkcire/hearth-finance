@@ -23,8 +23,12 @@ internal sealed class AccountRepository : IAccountRepository
     public Task<Account?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _context.Accounts.FirstOrDefaultAsync(account => account.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Account>> GetAllAsync(CancellationToken cancellationToken = default) =>
-        await _context.Accounts.ToListAsync(cancellationToken);
+    public async Task<IReadOnlyList<Account>> GetByOwnerAsync(
+        Guid ownerUserId,
+        CancellationToken cancellationToken = default) =>
+        await _context.Accounts
+            .Where(account => account.OwnerUserId == ownerUserId)
+            .ToListAsync(cancellationToken);
 
     public Task UpdateAsync(Account account, CancellationToken cancellationToken = default)
     {

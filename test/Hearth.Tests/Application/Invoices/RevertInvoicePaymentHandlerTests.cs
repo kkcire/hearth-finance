@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Invoices.RevertInvoicePayment;
 using Hearth.Domain.Entities;
@@ -9,20 +10,32 @@ namespace Hearth.Tests.Application.Invoices;
 
 public class RevertInvoicePaymentHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RevertInvoicePaymentHandler _handler;
 
     public RevertInvoicePaymentHandlerTests()
     {
-        _handler = new RevertInvoicePaymentHandler(_invoices, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RevertInvoicePaymentHandler(_accountAccess, _invoices, _unitOfWork);
     }
 
     private async Task<Invoice> SeedInvoiceAsync(bool paid)
     {
         var invoice = Invoice.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             BillingCycle.Closing(YearMonth.Of(2026, 10), CardBillingRule.Of(3, 12)));
         invoice.InformChargedAmount(Money.FromDecimal(500.00m));
 
@@ -84,7 +97,8 @@ public class RevertInvoicePaymentHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RevertInvoicePaymentHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RevertInvoicePaymentHandler(_invoices, null!));
+        Assert.Throws<ArgumentNullException>(() => new RevertInvoicePaymentHandler(null!, _invoices, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertInvoicePaymentHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertInvoicePaymentHandler(_accountAccess, _invoices, null!));
     }
 }

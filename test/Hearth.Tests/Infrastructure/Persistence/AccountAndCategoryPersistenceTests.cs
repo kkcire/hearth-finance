@@ -1,8 +1,10 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Accounts.CreateAccount;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
+using Hearth.Tests.Application.Fakes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -24,9 +26,26 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
+    private async Task<Guid> SeedUserAsync(string email = "erick@hearth.app")
+    {
+        var userId = Guid.CreateVersion7();
+
+        await using var scope = _fixture.CreateScope();
+        var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+        var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+        await users.AddAsync(User.Create(
+            userId, "Erick", email, "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
+        await uow.SaveChangesAsync();
+
+        return userId;
+    }
+
     [Fact]
     public async Task AccountRepository_PersistsUpdatesAndReadsBackAllFields()
     {
+        var userId = await SeedUserAsync();
+        var otherUserId = await SeedUserAsync("outro@hearth.app");
         var accountId = Guid.CreateVersion7();
 
         await using (var scope = _fixture.CreateScope())
@@ -36,6 +55,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
 
             var account = Account.Create(
                 accountId,
+                userId,
                 "Conta principal",
                 Money.FromDecimal(-125.45m),
                 new DateOnly(2026, 10, 1),
@@ -52,6 +72,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
 
             var loaded = await accounts.GetByIdAsync(accountId);
             Assert.NotNull(loaded);
+            Assert.Equal(userId, loaded.OwnerUserId);
             Assert.Equal("Conta principal", loaded.Name);
             Assert.Equal(Money.FromDecimal(-125.45m), loaded.InitialBalance);
             Assert.Equal(new DateOnly(2026, 10, 1), loaded.InitialBalanceDate);
@@ -68,9 +89,11 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
         await using (var scope = _fixture.CreateScope())
         {
             var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
-            var all = await accounts.GetAllAsync();
+            var owned = await accounts.GetByOwnerAsync(userId);
+            var others = await accounts.GetByOwnerAsync(otherUserId);
 
-            var reloaded = Assert.Single(all);
+            Assert.Empty(others);
+            var reloaded = Assert.Single(owned);
             Assert.Equal("Nubank", reloaded.Name);
             Assert.Equal(Money.FromDecimal(1500.00m), reloaded.InitialBalance);
             Assert.Equal(new DateOnly(2026, 10, 1), reloaded.InitialBalanceDate);
@@ -81,12 +104,16 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
     [Fact]
     public async Task CreateAccountHandler_SeedsEightDefaultCategoriesInSingleTransaction()
     {
+        var userId = await SeedUserAsync();
         Guid accountId;
 
         await using (var scope = _fixture.CreateScope())
         {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var guard = new AccountAccessGuard(accounts, new FakeCurrentUser(userId));
             var handler = new CreateAccountHandler(
-                scope.ServiceProvider.GetRequiredService<IAccountRepository>(),
+                guard,
+                accounts,
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
 
@@ -109,6 +136,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
     [Fact]
     public async Task CategoryRepository_EnforcesCaseInsensitiveUniqueIndexAndRestrictFk()
     {
+        var userId = await SeedUserAsync();
         var accountId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
 
@@ -119,7 +147,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             await accounts.AddAsync(Account.Create(
-                accountId, "Conta", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
+                accountId, userId, "Conta", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
             await categories.AddAsync(Category.Create(categoryId, accountId, "Alimentação"));
             await uow.SaveChangesAsync();
         }

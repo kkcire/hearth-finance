@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Domain.Entities;
@@ -9,20 +10,24 @@ namespace Hearth.Tests.Application.Invoices;
 
 public class GetInvoiceSummaryHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly GetInvoiceSummaryHandler _handler;
 
     public GetInvoiceSummaryHandlerTests()
     {
-        _handler = new GetInvoiceSummaryHandler(_accounts, _invoices, _purchases);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new GetInvoiceSummaryHandler(_accountAccess, _invoices, _purchases);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta", CardBillingRule? rule = null)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
             new DateOnly(2026, 1, 1),
@@ -218,8 +223,8 @@ public class GetInvoiceSummaryHandlerTests
         Assert.Throws<ArgumentNullException>(
             () => new GetInvoiceSummaryHandler(null!, _invoices, _purchases));
         Assert.Throws<ArgumentNullException>(
-            () => new GetInvoiceSummaryHandler(_accounts, null!, _purchases));
+            () => new GetInvoiceSummaryHandler(_accountAccess, null!, _purchases));
         Assert.Throws<ArgumentNullException>(
-            () => new GetInvoiceSummaryHandler(_accounts, _invoices, null!));
+            () => new GetInvoiceSummaryHandler(_accountAccess, _invoices, null!));
     }
 }

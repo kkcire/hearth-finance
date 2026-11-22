@@ -1,7 +1,6 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -9,7 +8,7 @@ namespace Hearth.Application.Reports.GetBudgetStatus;
 
 public sealed class GetBudgetStatusHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly ICategoryBudgetRepository _budgets;
     private readonly IDirectExpenseRepository _directExpenses;
@@ -17,21 +16,21 @@ public sealed class GetBudgetStatusHandler
     private readonly ICreditCardPurchaseRepository _purchases;
 
     public GetBudgetStatusHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         ICategoryBudgetRepository budgets,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
         ICreditCardPurchaseRepository purchases)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(budgets);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _categories = categories;
         _budgets = budgets;
         _directExpenses = directExpenses;
@@ -66,8 +65,7 @@ public sealed class GetBudgetStatusHandler
             includedConditions = converted;
         }
 
-        var account = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var categories = await _categories.GetByAccountAsync(account.Id, cancellationToken);
         var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);

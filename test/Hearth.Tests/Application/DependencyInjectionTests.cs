@@ -56,6 +56,7 @@ public sealed class DependencyInjectionTests
         var incomes = new InMemoryIncomeRepository();
         var invoices = new InMemoryInvoiceRepository();
 
+        services.AddSingleton<ICurrentUser>(new FakeCurrentUser());
         services.AddSingleton<IUserRepository>(users);
         services.AddSingleton<IPasswordHasher>(new FakePasswordHasher());
         services.AddSingleton<IAccountRepository>(accounts);

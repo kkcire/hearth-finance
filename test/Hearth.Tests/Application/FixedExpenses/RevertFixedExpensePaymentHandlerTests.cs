@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.RevertFixedExpensePayment;
 using Hearth.Domain.Entities;
@@ -9,20 +10,32 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class RevertFixedExpensePaymentHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RevertFixedExpensePaymentHandler _handler;
 
     public RevertFixedExpensePaymentHandlerTests()
     {
-        _handler = new RevertFixedExpensePaymentHandler(_fixedExpenses, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new RevertFixedExpensePaymentHandler(_accountAccess, _fixedExpenses, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync(bool paid)
     {
         var expense = FixedExpense.Create(
             Guid.NewGuid(),
-            Guid.NewGuid(),
+            _accountId,
             YearMonth.Of(2026, 10),
             null,
             Money.FromDecimal(1000.00m),
@@ -87,7 +100,8 @@ public class RevertFixedExpensePaymentHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RevertFixedExpensePaymentHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RevertFixedExpensePaymentHandler(_fixedExpenses, null!));
+        Assert.Throws<ArgumentNullException>(() => new RevertFixedExpensePaymentHandler(null!, _fixedExpenses, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertFixedExpensePaymentHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RevertFixedExpensePaymentHandler(_accountAccess, _fixedExpenses, null!));
     }
 }

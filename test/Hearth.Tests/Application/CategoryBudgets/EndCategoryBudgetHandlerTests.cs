@@ -1,3 +1,4 @@
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.EndCategoryBudget;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,6 +11,10 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class EndCategoryBudgetHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 15));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -17,14 +22,22 @@ public class EndCategoryBudgetHandlerTests
 
     public EndCategoryBudgetHandlerTests()
     {
-        _handler = new EndCategoryBudgetHandler(_budgets, _clock, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new EndCategoryBudgetHandler(_accountAccess, _budgets, _clock, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ValidEndMonth_UpdatesAndSaves()
     {
         var budget = CategoryBudget.Create(
-            Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
+            Guid.NewGuid(), _accountId, Guid.NewGuid(), YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
         await _budgets.AddAsync(budget);
 
         await _handler.ExecuteAsync(new EndCategoryBudgetCommand(budget.Id, 2026, 10));
@@ -37,7 +50,7 @@ public class EndCategoryBudgetHandlerTests
     [Fact]
     public async Task ExecuteAsync_ExtendingIntoAnotherBudgetOfSameCategory_ThrowsDomainException()
     {
-        var accountId = Guid.NewGuid();
+        var accountId = _accountId;
         var categoryId = Guid.NewGuid();
 
         var first = CategoryBudget.Create(
@@ -70,8 +83,9 @@ public class EndCategoryBudgetHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(null!, _clock, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(_budgets, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(_budgets, _clock, null!));
+        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(null!, _budgets, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(_accountAccess, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(_accountAccess, _budgets, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new EndCategoryBudgetHandler(_accountAccess, _budgets, _clock, null!));
     }
 }

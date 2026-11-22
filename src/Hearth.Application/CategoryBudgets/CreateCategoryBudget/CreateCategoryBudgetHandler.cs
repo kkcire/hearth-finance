@@ -1,6 +1,6 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories;
-using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -9,23 +9,23 @@ namespace Hearth.Application.CategoryBudgets.CreateCategoryBudget;
 
 public sealed class CreateCategoryBudgetHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly ICategoryBudgetRepository _budgets;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateCategoryBudgetHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         ICategoryBudgetRepository budgets,
         IUnitOfWork unitOfWork)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(budgets);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _categories = categories;
         _budgets = budgets;
         _unitOfWork = unitOfWork;
@@ -49,8 +49,7 @@ public sealed class CreateCategoryBudgetHandler
             : null;
         var amount = Money.FromDecimal(command.Amount);
 
-        var account = await _accounts.GetByIdAsync(command.AccountId, cancellationToken)
-                      ?? throw new NotFoundException(nameof(Account), command.AccountId);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
         await CategoryValidation.EnsureUsableForAccountAsync(
             _categories, account.Id, command.CategoryId, cancellationToken);

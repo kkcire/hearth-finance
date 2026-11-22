@@ -26,10 +26,14 @@ internal sealed class InMemoryAccountRepository : IAccountRepository
         return Task.FromResult(_accounts.GetValueOrDefault(id));
     }
 
-    public Task<IReadOnlyList<Account>> GetAllAsync(CancellationToken cancellationToken = default)
+    public Task<IReadOnlyList<Account>> GetByOwnerAsync(
+        Guid ownerUserId,
+        CancellationToken cancellationToken = default)
     {
         LastCancellationToken = cancellationToken;
-        IReadOnlyList<Account> result = _accounts.Values.ToList();
+        IReadOnlyList<Account> result = _accounts.Values
+            .Where(account => account.OwnerUserId == ownerUserId)
+            .ToList();
         return Task.FromResult(result);
     }
 

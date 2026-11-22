@@ -1,3 +1,5 @@
+using Hearth.Domain.ValueObjects;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.ArchiveCategory;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -8,19 +10,31 @@ namespace Hearth.Tests.Application.Categories;
 
 public class ArchiveCategoryHandlerTests
 {
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly ArchiveCategoryHandler _handler;
 
     public ArchiveCategoryHandlerTests()
     {
-        _handler = new ArchiveCategoryHandler(_categories, _unitOfWork);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1),
+            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _handler = new ArchiveCategoryHandler(_accountAccess, _categories, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ActiveCategory_ArchivesAndSaves()
     {
-        var category = Category.Create(Guid.NewGuid(), Guid.NewGuid(), "Faculdade");
+        var category = Category.Create(Guid.NewGuid(), _accountId, "Faculdade");
         await _categories.AddAsync(category);
 
         var changed = await _handler.ExecuteAsync(new ArchiveCategoryCommand(category.Id));
@@ -34,7 +48,7 @@ public class ArchiveCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_AlreadyArchived_IsIdempotentAndDoesNotSave()
     {
-        var category = Category.Create(Guid.NewGuid(), Guid.NewGuid(), "Faculdade");
+        var category = Category.Create(Guid.NewGuid(), _accountId, "Faculdade");
         category.Archive();
         await _categories.AddAsync(category);
 
@@ -60,7 +74,8 @@ public class ArchiveCategoryHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new ArchiveCategoryHandler(null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new ArchiveCategoryHandler(_categories, null!));
+        Assert.Throws<ArgumentNullException>(() => new ArchiveCategoryHandler(null!, _categories, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new ArchiveCategoryHandler(_accountAccess, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new ArchiveCategoryHandler(_accountAccess, _categories, null!));
     }
 }

@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
@@ -7,6 +8,7 @@ namespace Hearth.Application.Categories.DeleteCategory;
 
 public sealed class DeleteCategoryHandler
 {
+    private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IFixedExpenseRepository _fixedExpenses;
@@ -15,6 +17,7 @@ public sealed class DeleteCategoryHandler
     private readonly IUnitOfWork _unitOfWork;
 
     public DeleteCategoryHandler(
+        AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
@@ -22,6 +25,7 @@ public sealed class DeleteCategoryHandler
         ICategoryBudgetRepository budgets,
         IUnitOfWork unitOfWork)
     {
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
@@ -29,6 +33,7 @@ public sealed class DeleteCategoryHandler
         ArgumentNullException.ThrowIfNull(budgets);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
+        _accountAccess = accountAccess;
         _categories = categories;
         _directExpenses = directExpenses;
         _fixedExpenses = fixedExpenses;
@@ -43,8 +48,13 @@ public sealed class DeleteCategoryHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
+        _accountAccess.GetRequiredUserId();
+
         var category = await _categories.GetByIdAsync(command.CategoryId, cancellationToken)
                        ?? throw new NotFoundException(nameof(Category), command.CategoryId);
+
+        await _accountAccess.EnsureCanAccessEntityAsync(
+            category.AccountId, nameof(Category), category.Id, cancellationToken);
 
         if (await _directExpenses.AnyByCategoryAsync(category.Id, cancellationToken)
             || await _fixedExpenses.AnyByCategoryAsync(category.Id, cancellationToken)

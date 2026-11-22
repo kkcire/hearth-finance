@@ -1,22 +1,21 @@
 using Hearth.Application.Abstractions;
-using Hearth.Application.Exceptions;
-using Hearth.Domain.Entities;
+using Hearth.Application.Authorization;
 
 namespace Hearth.Application.DirectExpenses.ListDirectExpenses;
 
 public sealed class ListDirectExpensesHandler
 {
-    private readonly IAccountRepository _accounts;
+    private readonly AccountAccessGuard _accountAccess;
     private readonly IDirectExpenseRepository _directExpenses;
 
     public ListDirectExpensesHandler(
-        IAccountRepository accounts,
+        AccountAccessGuard accountAccess,
         IDirectExpenseRepository directExpenses)
     {
-        ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(directExpenses);
 
-        _accounts = accounts;
+        _accountAccess = accountAccess;
         _directExpenses = directExpenses;
     }
 
@@ -26,8 +25,7 @@ public sealed class ListDirectExpensesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accounts.GetByIdAsync(query.AccountId, cancellationToken)
-            ?? throw new NotFoundException(nameof(Account), query.AccountId);
+        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var expenses = await _directExpenses.GetByAccountAsync(query.AccountId, cancellationToken);
 
