@@ -81,21 +81,25 @@ html, body {
 .hearth-auth-brand {
     display: flex;
     align-items: center;
+    justify-content: center;
     gap: 10px;
-    margin-bottom: 26px;
+    width: 100%;
+    margin-bottom: 28px;
 }
 
 .hearth-auth-logo {
-    width: 38px;
-    height: 38px;
+    width: clamp(38px, 11vw, 50px);
+    height: clamp(38px, 11vw, 50px);
     color: #D32F2F;
     flex-shrink: 0;
 }
 
 .hearth-auth-brand-name {
-    font-size: 1.65rem;
+    font-size: clamp(1.6rem, 7.2vw, 2.25rem);
     font-weight: 700;
-    letter-spacing: 0.3px;
+    letter-spacing: 0.2px;
+    line-height: 1.1;
+    white-space: nowrap;
     color: rgba(255, 255, 255, 0.96);
 }
 
