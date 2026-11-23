@@ -72,12 +72,14 @@ public sealed class DashboardPageTests : WebTestBase
             (h, ct) => h.ExecuteAsync(new RegisterFixedExpenseCommand(accountId, 2026, 11, null, null, 200m, "Fixo", categoryId), ct),
             showErrorSnackbar: false);
 
-        // Card purchase on Oct 20 -> cycle Nov 2026 (closing Nov 3)
+        // Card purchase registered on Oct 25 -> cycle Nov 2026 (closing Nov 3, due Nov 12)
+        Clock.Today = new DateOnly(2026, 10, 25);
         await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
             (h, ct) => h.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
                 accountId, cardId, new DateOnly(2026, 10, 20), 400m, 1, 1,
                 PurchaseConditionKind.Custom, "Mãe", "Presente", categoryId), ct),
             showErrorSnackbar: false);
+        Clock.Today = new DateOnly(2026, 11, 20);
 
         var cut = Render<DashboardPage>();
 
@@ -93,5 +95,34 @@ public sealed class DashboardPageTests : WebTestBase
         Assert.NotEmpty(cut.FindAll("[data-testid='dashboard-condition-custom-Mãe']"));
         await cut.Find("[data-testid='dashboard-condition-own']").ClickAsync();
         Assert.Contains("100,00", cut.Find("[data-testid='spending-total']").TextContent);
+        Assert.Equal("true", cut.Find("[data-testid='dashboard-condition-own']").GetAttribute("aria-pressed"));
+        Assert.Equal("false", cut.Find("[data-testid='toggle-origin-fixed']").GetAttribute("aria-pressed"));
+    }
+
+    [Fact]
+    public async Task Dashboard_UsesAccessibleLandmarksAndShowsNoCardSetupStateWhenAccountHasNoCard()
+    {
+        await SeedAccountAsync(initialBalance: 1000m);
+
+        var cut = Render<DashboardPage>();
+
+        Assert.Equal("Painel do Mês", cut.Find("h1").TextContent.Trim());
+        Assert.Equal("Mês anterior", cut.Find("[data-testid='month-prev']").GetAttribute("aria-label"));
+        Assert.Equal("Próximo mês", cut.Find("[data-testid='month-next']").GetAttribute("aria-label"));
+        Assert.NotEmpty(cut.FindAll("[data-testid='dashboard-no-card-state']"));
+        Assert.Equal("/cartao", cut.Find("[data-testid='dashboard-configure-card-link']").GetAttribute("href"));
+    }
+
+    [Fact]
+    public async Task Dashboard_WithActiveCardAndLimit_DisplaysCardLimitSummary()
+    {
+        var accountId = await SeedAccountAsync(initialBalance: 1000m);
+        await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12, name: "Cartão Black", limit: 5000m);
+
+        var cut = Render<DashboardPage>();
+
+        var limitBox = cut.Find("[data-testid='dashboard-card-limit']");
+        Assert.Contains("5.000,00", limitBox.TextContent);
+        Assert.Contains("Cartão Black", cut.Find("[data-testid='dashboard-invoice-card']").TextContent);
     }
 }

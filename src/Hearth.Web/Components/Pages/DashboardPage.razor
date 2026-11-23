@@ -3,6 +3,8 @@
 @inherits AccountPageBase
 @using Hearth.Application.CreditCardPurchases
 @using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases
+@using Hearth.Application.CreditCards
+@using Hearth.Application.CreditCards.GetActiveCreditCard
 @using Hearth.Application.Invoices.GetInvoiceSummary
 @using Hearth.Application.Reports.GetBudgetStatus
 @using Hearth.Application.Reports.GetExpensesByCategory
@@ -10,32 +12,79 @@
 @using Hearth.Application.Reports.GetRealBalance
 @using Hearth.Web.Components.Shared
 
-<PageTitle>Painel do Mês — Hearth</PageTitle>
+<PageTitle>Painel do Mês — Hearth Finance</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-5" Wrap="Wrap.Wrap" Spacing="2">
-    <MudText Typo="Typo.h4" Style="font-weight: 600;">Painel do Mês</MudText>
-    <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
-</MudStack>
+<div class="hearth-dash">
+    <header class="hearth-dash-header">
+        <div class="hearth-dash-title-group">
+            <h1 class="hearth-dash-title">Painel do Mês</h1>
+            <p class="hearth-dash-subtitle">
+                Caixa real até @HearthFormat.Date(_realBalanceUntil) e competência de @HearthFormat.MonthYear(_selectedMonth).
+            </p>
+        </div>
 
-@if (_loading && _realBalance is null)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else
-{
-    <MudGrid Spacing="4" Class="mb-4">
-        @* Esquerda: Saldo Real (Caixa) *@
-        <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="real-balance-card">
-                <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-3" Wrap="Wrap.Wrap" Spacing="2">
-                    <div>
-                        <MudText Typo="Typo.h6" Style="font-weight: 600;">Saldo Real (Caixa)</MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Até @HearthFormat.Date(_realBalanceUntil)
-                        </MudText>
+        <div class="hearth-dash-header-controls">
+            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
+        </div>
+    </header>
+
+    <nav class="hearth-dash-actions" aria-label="Atalhos de lançamento">
+        <a href="/gastos-diretos" class="hearth-quick-action">
+            <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <path d="M10 4.5V15.5M4.5 10H15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+            <span>Gasto direto</span>
+        </a>
+        <a href="/cartao?aba=compras&amp;nova=1" class="hearth-quick-action">
+            <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
+                <path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.6" />
+            </svg>
+            <span>Compra no cartão</span>
+        </a>
+        <a href="/receitas" class="hearth-quick-action">
+            <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <path d="M3.5 14L8 9.5L11.2 12.5L16.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                <path d="M12.8 6.5H16.5V10.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <span>Receita</span>
+        </a>
+        <a href="/despesas-fixas" class="hearth-quick-action">
+            <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                <rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6" />
+                <path d="M6.5 3V6M13.5 3V6M3 8.5H17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            </svg>
+            <span>Despesa fixa</span>
+        </a>
+    </nav>
+
+    @if (_loading && _realBalance is null)
+    {
+        <div class="hearth-dash-skeleton" aria-busy="true" aria-label="Carregando painel financeiro">
+            <div class="hearth-dash-primary-grid">
+                <div class="hearth-card hearth-skeleton-panel"></div>
+                <div class="hearth-card hearth-skeleton-panel"></div>
+            </div>
+            <div class="hearth-dash-secondary-grid">
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
+            </div>
+        </div>
+    }
+    else
+    {
+        @* Linha Primária: Saldo Real (Caixa) e Resultado Projetado (Competência) *@
+        <div class="hearth-dash-primary-grid">
+            @* 1. Saldo Real (Caixa) *@
+            <section class="hearth-card hearth-ledger-card" aria-labelledby="heading-real-balance" data-testid="real-balance-card">
+                <div class="hearth-ledger-head">
+                    <div class="hearth-ledger-title-wrap">
+                        <h2 id="heading-real-balance" class="hearth-card-title">Saldo real (caixa)</h2>
+                        <p class="hearth-card-meta">Posição acumulada até @HearthFormat.Date(_realBalanceUntil)</p>
                     </div>
 
-                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                    <div class="hearth-ledger-date-control">
                         <MudDatePicker Date="HearthFormat.ToDateTime(_realBalanceUntil)"
                                        DateChanged="OnRealBalanceDateChangedAsync"
                                        DateFormat="dd/MM/yyyy"
@@ -43,381 +92,431 @@ else
                                        Variant="Variant.Outlined"
                                        Margin="Margin.Dense"
                                        Editable="true"
-                                       Style="max-width: 155px;"
+                                       Class="hearth-date-picker"
                                        aria-label="Data do saldo real"
                                        data-testid="real-balance-date-input" />
                         @if (_realBalanceUntil != Clock.Today)
                         {
                             <MudButton Size="Size.Small"
-                                       Variant="Variant.Text"
+                                       Variant="Variant.Outlined"
                                        Color="Color.Primary"
+                                       Class="hearth-today-btn"
                                        OnClick="ResetRealBalanceDateAsync"
                                        data-testid="real-balance-today-button">
                                 Hoje
                             </MudButton>
                         }
-                    </MudStack>
-                </MudStack>
-
-                <MudDivider Class="mb-3" />
+                    </div>
+                </div>
 
                 @if (_realBalance is not null)
                 {
-                    <MudStack Spacing="2">
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">Saldo Inicial</MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.InitialBalance)</MudText>
+                    <div class="hearth-kpi-strip">
+                        <div>
+                            <span class="hearth-kpi-caption">Saldo disponível em caixa</span>
+                            <p class="hearth-kpi-value @(GetRealBalanceToneClass(_realBalance.Balance))"
+                               data-testid="real-balance-value">
+                                @HearthFormat.Money(_realBalance.Balance)
+                            </p>
                         </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-positive">(+)</span> Receitas Recebidas
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.Incomes)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Gastos Diretos
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.DirectExpenses)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Despesas Fixas Pagas
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.FixedExpenses)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Faturas Pagas
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_realBalance.CardInvoices)</MudText>
-                        </div>
-                    </MudStack>
 
-                    <MudDivider Class="my-4" />
-
-                    <div class="hearth-statement-row">
-                        <MudText Typo="Typo.h6" Color="Color.Primary" Style="font-weight: 600;">
-                            Saldo Real Atual:
-                        </MudText>
-                        <MudText Typo="Typo.h5"
-                                 Color="@(_realBalance.Balance < 0 ? Color.Error : Color.Primary)"
-                                 Style="font-weight: 700;"
-                                 data-testid="real-balance-value">
-                            @HearthFormat.Money(_realBalance.Balance)
-                        </MudText>
+                        <span class="hearth-status-pill @(GetRealBalancePillClass(_realBalance.Balance))">
+                            @(_realBalance.Balance < 0 ? "Caixa negativo" : "Caixa em dia")
+                        </span>
                     </div>
+
+                    <dl class="hearth-ledger-table">
+                        <div class="hearth-ledger-row">
+                            <dt>Saldo inicial</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_realBalance.InitialBalance)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-positive" aria-hidden="true">+</span> Receitas recebidas</dt>
+                            <dd class="hearth-money hearth-money--positive">@HearthFormat.Money(_realBalance.Incomes)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Gastos diretos</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_realBalance.DirectExpenses)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Despesas fixas pagas</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_realBalance.FixedExpenses)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Faturas pagas</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_realBalance.CardInvoices)</dd>
+                        </div>
+                    </dl>
                 }
-            </MudPaper>
-        </MudItem>
+            </section>
 
-        @* Direita: Resultado Projetado (Competência) *@
-        <MudItem xs="12" md="6">
-            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="projected-result-card">
-                <MudStack Row="true" AlignItems="AlignItems.Start" Justify="Justify.SpaceBetween" Class="mb-3" Wrap="Wrap.Wrap" Spacing="2">
-                    <div>
-                        <MudText Typo="Typo.h6" Style="font-weight: 600;">
-                            Resultado Projetado <MudText Inline="true" Typo="Typo.body2" Color="Color.Secondary">(Competência)</MudText>
-                        </MudText>
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Fechamento de @HearthFormat.MonthYear(_selectedMonth)
-                        </MudText>
+            @* 2. Resultado Projetado (Competência) *@
+            <section class="hearth-card hearth-ledger-card" aria-labelledby="heading-projected-result" data-testid="projected-result-card">
+                <div class="hearth-ledger-head">
+                    <div class="hearth-ledger-title-wrap">
+                        <h2 id="heading-projected-result" class="hearth-card-title">Resultado projetado (competência)</h2>
+                        <p class="hearth-card-meta">Fechamento previsto para @HearthFormat.MonthYear(_selectedMonth)</p>
                     </div>
 
-                    <MudChip T="string" Size="Size.Small" Variant="Variant.Outlined" Color="Color.Default">
-                        @HearthFormat.MonthYear(_selectedMonth)
-                    </MudChip>
-                </MudStack>
-
-                <MudDivider Class="mb-3" />
+                    <span class="hearth-period-tag">@HearthFormat.MonthYear(_selectedMonth)</span>
+                </div>
 
                 @if (_projectedResult is not null)
                 {
-                    <MudStack Spacing="2">
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-positive">(+)</span> Receitas (Previstas)
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.Incomes)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Gastos Diretos
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.DirectExpenses)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Despesas Fixas
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.FixedExpenses)</MudText>
-                        </div>
-                        <div class="hearth-statement-row">
-                            <MudText Typo="Typo.body1">
-                                <span class="hearth-sign-negative">(-)</span> Fatura Calculada
-                            </MudText>
-                            <MudText Typo="Typo.body1">@HearthFormat.Money(_projectedResult.CardInvoice)</MudText>
-                        </div>
-                    </MudStack>
+                    var totalOutflows = _projectedResult.DirectExpenses + _projectedResult.FixedExpenses + _projectedResult.CardInvoice;
+                    var commitmentPct = _projectedResult.Incomes > 0m
+                        ? Math.Round((totalOutflows / _projectedResult.Incomes) * 100m, 1)
+                        : (totalOutflows > 0m ? 100m : 0m);
+                    var commitmentBarWidth = Math.Min(100d, (double)commitmentPct);
 
-                    <MudDivider Class="my-4" />
-
-                    <div class="hearth-statement-row">
-                        <MudText Typo="Typo.h6" Style="font-weight: 600;">
-                            Balanço Previsto do Mês (Resultado):
-                        </MudText>
-                        <div style="text-align: right;">
-                            <MudText Typo="Typo.h5"
-                                     Color="@(_projectedResult.Result < 0 ? Color.Error : Color.Default)"
-                                     Style="font-weight: 700;"
-                                     data-testid="projected-result-value">
+                    <div class="hearth-kpi-strip">
+                        <div>
+                            <span class="hearth-kpi-caption">Balanço previsto do mês</span>
+                            <p class="hearth-kpi-value @(GetProjectedToneClass(_projectedResult.Result))"
+                               data-testid="projected-result-value">
                                 @HearthFormat.Money(_projectedResult.Result)
-                            </MudText>
-                            <MudText Typo="Typo.caption"
-                                     Color="@(_projectedResult.Result > 0 ? Color.Success : _projectedResult.Result < 0 ? Color.Error : Color.Secondary)">
-                                @(_projectedResult.Result > 0 ? "positivo" : _projectedResult.Result < 0 ? "negativo" : "neutro")
-                            </MudText>
+                            </p>
                         </div>
+
+                        <span class="hearth-status-pill @(GetProjectedPillClass(_projectedResult.Result))">
+                            @(_projectedResult.Result > 0 ? "Positivo" : _projectedResult.Result < 0 ? "Negativo" : "Neutro")
+                        </span>
                     </div>
-                }
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
 
-    @* Filtro de condição do cartão aplicado a Orçamentos e Gastos por Categoria *@
-    <MudPaper Elevation="0" Class="pa-3 mb-4 hearth-card">
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Wrap="Wrap.Wrap">
-            <MudText Typo="Typo.body2" Color="Color.Secondary" Class="mr-2">
-                Condição do cartão (relatórios):
-            </MudText>
+                    <dl class="hearth-ledger-table">
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-positive" aria-hidden="true">+</span> Receitas previstas</dt>
+                            <dd class="hearth-money hearth-money--positive">@HearthFormat.Money(_projectedResult.Incomes)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Gastos diretos</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.DirectExpenses)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Despesas fixas</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.FixedExpenses)</dd>
+                        </div>
+                        <div class="hearth-ledger-row">
+                            <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Fatura calculada</dt>
+                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.CardInvoice)</dd>
+                        </div>
+                    </dl>
 
-            <MudButton Size="Size.Small"
-                       Variant="@(_conditionFilter is null ? Variant.Filled : Variant.Outlined)"
-                       Color="@(_conditionFilter is null ? Color.Primary : Color.Default)"
-                       OnClick="() => OnConditionFilterChangedAsync(null)"
-                       data-testid="dashboard-condition-all">
-                Todas
-            </MudButton>
-
-            <MudButton Size="Size.Small"
-                       Variant="@(IsConditionSelected(PurchaseConditionKind.Own, null) ? Variant.Filled : Variant.Outlined)"
-                       Color="@(IsConditionSelected(PurchaseConditionKind.Own, null) ? Color.Primary : Color.Default)"
-                       OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Own))"
-                       data-testid="dashboard-condition-own">
-                Própria
-            </MudButton>
-
-            <MudButton Size="Size.Small"
-                       Variant="@(IsConditionSelected(PurchaseConditionKind.Others, null) ? Variant.Filled : Variant.Outlined)"
-                       Color="@(IsConditionSelected(PurchaseConditionKind.Others, null) ? Color.Primary : Color.Default)"
-                       OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Others))"
-                       data-testid="dashboard-condition-others">
-                Outros
-            </MudButton>
-
-            @foreach (var customName in _customConditionNames)
-            {
-                var nameCopy = customName;
-                <MudButton Size="Size.Small"
-                           Variant="@(IsConditionSelected(PurchaseConditionKind.Custom, nameCopy) ? Variant.Filled : Variant.Outlined)"
-                           Color="@(IsConditionSelected(PurchaseConditionKind.Custom, nameCopy) ? Color.Primary : Color.Default)"
-                           OnClick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Custom, nameCopy))"
-                           data-testid="@($"dashboard-condition-custom-{nameCopy}")">
-                    @nameCopy
-                </MudButton>
-            }
-        </MudStack>
-    </MudPaper>
-
-    @* Linha Inferior: Fatura do Mês, Orçamentos por Categoria e Gastos por Categoria *@
-    <MudGrid Spacing="4">
-        @* 1. Fatura do Mês *@
-        <MudItem xs="12" lg="4">
-            <MudPaper Elevation="0" Class="pa-5 hearth-card d-flex flex-column justify-space-between" Style="height: 100%;" data-testid="dashboard-invoice-card">
-                <div>
-                    <MudText Typo="Typo.h6" Style="font-weight: 600;" GutterBottom="true">
-                        Fatura do Mês (@HearthFormat.ShortMonthYear(_selectedMonth))
-                    </MudText>
-
-                    @if (_invoiceSummary is not null)
-                    {
-                        @if (_invoiceSummary.ClosingDate.HasValue && _invoiceSummary.DueDate.HasValue)
-                        {
-                            <MudText Typo="Typo.caption" Color="Color.Secondary">
-                                Valor calculado · fecha @HearthFormat.Date(_invoiceSummary.ClosingDate) · vence @HearthFormat.Date(_invoiceSummary.DueDate)
-                            </MudText>
-                        }
-                        <MudText Typo="Typo.h4" Style="font-weight: 700;" Class="my-2" data-testid="dashboard-invoice-calculated">
-                            @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
-                        </MudText>
-
-                        <MudStack Spacing="1" Class="mt-3">
-                            <div class="hearth-statement-row">
-                                <MudText Typo="Typo.body2" Color="Color.Secondary">Status:</MudText>
-                                @if (_invoiceSummary.Status == InvoiceStatus.Paid)
+                    <div class="hearth-commitment-box">
+                        <div class="hearth-commitment-head">
+                            <span>Comprometimento da receita</span>
+                            <span class="hearth-money">
+                                @if (_projectedResult.Incomes > 0m)
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
-                                        Paga
-                                    </MudChip>
-                                }
-                                else if (_invoiceSummary.Status == InvoiceStatus.Closed)
-                                {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
-                                        Fechada
-                                    </MudChip>
+                                    @($"{HearthFormat.Money(totalOutflows)} ({HearthFormat.Percentage(commitmentPct)})")
                                 }
                                 else
                                 {
-                                    <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
-                                        Em aberto
-                                    </MudChip>
+                                    @HearthFormat.Money(totalOutflows)
                                 }
-                            </div>
-                        </MudStack>
+                            </span>
+                        </div>
+                        <div class="hearth-meter" role="presentation">
+                            <span class="hearth-meter-fill @(commitmentPct > 100m ? "is-danger" : commitmentPct >= 80m ? "is-warning" : "is-positive")"
+                                  style="width: @(commitmentBarWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
+
+        @* Cabeçalho da seção inferior com filtro de condição do cartão *@
+        <div class="hearth-dash-section-bar">
+            <h2 class="hearth-dash-section-title">Análise de @HearthFormat.MonthYear(_selectedMonth)</h2>
+
+            <div class="hearth-condition-bar" role="group" aria-label="Filtrar relatórios por condição do cartão">
+                <span class="hearth-condition-label">Condição do cartão:</span>
+
+                <div class="hearth-condition-pills">
+                    <button type="button"
+                            class="hearth-filter-pill @(_conditionFilter is null ? "is-active" : null)"
+                            aria-pressed="@(_conditionFilter is null ? "true" : "false")"
+                            @onclick="() => OnConditionFilterChangedAsync(null)"
+                            data-testid="dashboard-condition-all">
+                        Todas
+                    </button>
+
+                    <button type="button"
+                            class="hearth-filter-pill @(IsConditionSelected(PurchaseConditionKind.Own, null) ? "is-active" : null)"
+                            aria-pressed="@(IsConditionSelected(PurchaseConditionKind.Own, null) ? "true" : "false")"
+                            @onclick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Own))"
+                            data-testid="dashboard-condition-own">
+                        Própria
+                    </button>
+
+                    <button type="button"
+                            class="hearth-filter-pill @(IsConditionSelected(PurchaseConditionKind.Others, null) ? "is-active" : null)"
+                            aria-pressed="@(IsConditionSelected(PurchaseConditionKind.Others, null) ? "true" : "false")"
+                            @onclick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Others))"
+                            data-testid="dashboard-condition-others">
+                        Outros
+                    </button>
+
+                    @foreach (var customName in _customConditionNames)
+                    {
+                        var nameCopy = customName;
+                        var isCustomActive = IsConditionSelected(PurchaseConditionKind.Custom, nameCopy);
+                        <button type="button"
+                                class="hearth-filter-pill @(isCustomActive ? "is-active" : null)"
+                                aria-pressed="@(isCustomActive ? "true" : "false")"
+                                @onclick="() => OnConditionFilterChangedAsync(new PurchaseConditionFilter(PurchaseConditionKind.Custom, nameCopy))"
+                                data-testid="@($"dashboard-condition-custom-{nameCopy}")">
+                            @nameCopy
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+
+        @* Linha Secundária: Fatura do Mês, Orçamentos por Categoria, Gastos por Categoria *@
+        <div class="hearth-dash-secondary-grid">
+            @* 1. Fatura do Mês *@
+            <section class="hearth-card hearth-module-card" aria-labelledby="heading-invoice" data-testid="dashboard-invoice-card">
+                <div class="hearth-module-head">
+                    <div>
+                        <h3 id="heading-invoice" class="hearth-card-title">
+                            Fatura do mês (@HearthFormat.ShortMonthYear(_selectedMonth))
+                        </h3>
+                        @if (_activeCard is not null && !string.IsNullOrWhiteSpace(_activeCard.Name))
+                        {
+                            <p class="hearth-card-meta">@_activeCard.Name</p>
+                        }
+                    </div>
+
+                    @if (_invoiceSummary is not null && !_invoiceSummary.IsEmptyWithoutCard)
+                    {
+                        <span class="hearth-status-pill @(GetInvoiceStatusPillClass(_invoiceSummary.Status))">
+                            @GetInvoiceStatusLabel(_invoiceSummary.Status)
+                        </span>
                     }
                 </div>
 
-                <MudButton Variant="Variant.Outlined"
-                           Color="Color.Primary"
-                           FullWidth="true"
-                           EndIcon="@Icons.Material.Filled.ArrowForward"
-                           Href="/cartao/faturas"
-                           Class="mt-4"
-                           data-testid="dashboard-invoices-link">
-                    Visualizar Faturas
-                </MudButton>
-            </MudPaper>
-        </MudItem>
+                @if (_invoiceSummary is null || _invoiceSummary.IsEmptyWithoutCard)
+                {
+                    <div class="hearth-empty-state" data-testid="dashboard-no-card-state">
+                        <p class="hearth-empty-title">Nenhum cartão ativo cadastrado</p>
+                        <p class="hearth-empty-desc">
+                            Adicione seu cartão de crédito com dia de fechamento e vencimento para acompanhar faturas e limite automaticamente.
+                        </p>
+                        <a href="/cartao" class="hearth-secondary-cta" data-testid="dashboard-configure-card-link">
+                            Cadastrar cartão
+                        </a>
+                    </div>
+                }
+                else
+                {
+                    <div class="hearth-invoice-body">
+                        <p class="hearth-module-amount hearth-money" data-testid="dashboard-invoice-calculated">
+                            @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
+                        </p>
 
-        @* 2. Orçamentos por Categoria *@
-        <MudItem xs="12" lg="4">
-            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="dashboard-budgets-card">
-                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-3">
-                    <MudText Typo="Typo.h6" Style="font-weight: 600;">Orçamentos por Categoria</MudText>
-                    <MudButton Size="Size.Small" Variant="Variant.Text" Color="Color.Primary" Href="/orcamentos">
-                        Gerenciar
-                    </MudButton>
-                </MudStack>
+                        <dl class="hearth-invoice-meta-grid">
+                            @if (_invoiceSummary.ClosingDate.HasValue)
+                            {
+                                <div class="hearth-invoice-meta-item">
+                                    <dt>Fechamento</dt>
+                                    <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.ClosingDate)</dd>
+                                </div>
+                            }
+                            @if (_invoiceSummary.DueDate.HasValue)
+                            {
+                                <div class="hearth-invoice-meta-item">
+                                    <dt>Vencimento</dt>
+                                    <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.DueDate)</dd>
+                                </div>
+                            }
+                            <div class="hearth-invoice-meta-item">
+                                <dt>Parcelas no ciclo</dt>
+                                <dd class="hearth-money">@_invoiceSummary.Installments.Count</dd>
+                            </div>
+                        </dl>
+
+                        @if (_activeCard is not null && _activeCard.Limit is > 0m)
+                        {
+                            var limitPct = Math.Round((_activeCard.UsedLimit / _activeCard.Limit.Value) * 100m, 1);
+                            var limitBarWidth = Math.Min(100d, (double)limitPct);
+                            <div class="hearth-limit-box" data-testid="dashboard-card-limit">
+                                <div class="hearth-commitment-head">
+                                    <span>Limite utilizado</span>
+                                    <span class="hearth-money">@HearthFormat.Percentage(limitPct)</span>
+                                </div>
+                                <div class="hearth-meter" role="presentation">
+                                    <span class="hearth-meter-fill @(limitPct >= 90m ? "is-danger" : limitPct >= 75m ? "is-warning" : "is-accent")"
+                                          style="width: @(limitBarWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                                </div>
+                                <div class="hearth-limit-values">
+                                    <span>Usado: <strong class="hearth-money">@HearthFormat.Money(_activeCard.UsedLimit)</strong></span>
+                                    <span>Disponível: <strong class="hearth-money">@HearthFormat.Money(_activeCard.AvailableLimit ?? 0m)</strong></span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="hearth-module-footer">
+                        <a href="/cartao?aba=fatura" class="hearth-secondary-cta" data-testid="dashboard-invoices-link">
+                            Abrir fatura e cartão
+                        </a>
+                    </div>
+                }
+            </section>
+
+            @* 2. Orçamentos por Categoria *@
+            <section class="hearth-card hearth-module-card" aria-labelledby="heading-budgets" data-testid="dashboard-budgets-card">
+                <div class="hearth-module-head">
+                    <div>
+                        <h3 id="heading-budgets" class="hearth-card-title">Orçamentos por categoria</h3>
+                        @if (_budgetStatus is not null && _budgetStatus.Items.Count > 0)
+                        {
+                            <p class="hearth-card-meta" data-testid="dashboard-budgets-summary">
+                                <span class="hearth-money">@HearthFormat.Money(_budgetStatus.TotalSpent)</span>
+                                de
+                                <span class="hearth-money">@HearthFormat.Money(_budgetStatus.TotalBudgeted)</span>
+                                planejados
+                            </p>
+                        }
+                    </div>
+
+                    <a href="/orcamentos" class="hearth-inline-link">Gerenciar</a>
+                </div>
 
                 @if (_budgetStatus is null || _budgetStatus.Items.Count == 0)
                 {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary" Class="py-4">
-                        Nenhum orçamento ativo em @HearthFormat.MonthYear(_selectedMonth).
-                    </MudText>
+                    <div class="hearth-empty-state">
+                        <p class="hearth-empty-title">Nenhum orçamento ativo em @HearthFormat.MonthYear(_selectedMonth)</p>
+                        <p class="hearth-empty-desc">
+                            Defina limites mensais por categoria para acompanhar desvios em tempo real sem bloquear lançamentos.
+                        </p>
+                        <a href="/orcamentos" class="hearth-secondary-cta">Criar orçamento</a>
+                    </div>
                 }
                 else
                 {
-                    <MudStack Spacing="3">
+                    <div class="hearth-budget-list">
                         @foreach (var item in _budgetStatus.Items)
                         {
                             var progressValue = Math.Min(100d, (double)item.UsagePercentage);
-                            <div data-testid="@($"budget-item-{item.CategoryId}")">
-                                <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-1" Spacing="1">
-                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
-                                        <MudText Typo="Typo.body2" Style="font-weight: 500;">@item.CategoryName</MudText>
+                            <div class="hearth-budget-item" data-testid="@($"budget-item-{item.CategoryId}")">
+                                <div class="hearth-budget-row">
+                                    <div class="hearth-budget-name-wrap">
+                                        <span class="hearth-budget-name">@item.CategoryName</span>
                                         @if (item.IsExceeded)
                                         {
-                                            <MudChip T="string" Size="Size.Small" Color="Color.Error" Variant="Variant.Filled" data-testid="budget-exceeded-badge">
+                                            <span class="hearth-exceeded-badge" data-testid="budget-exceeded-badge">
+                                                <svg class="hearth-badge-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                                                    <path d="M8 2.2L14 13H2L8 2.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                                                    <path d="M8 6.2V9.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                                                    <circle cx="8" cy="11.3" r="0.65" fill="currentColor" />
+                                                </svg>
                                                 Estourado
-                                            </MudChip>
+                                            </span>
                                         }
-                                    </MudStack>
+                                    </div>
 
-                                    <MudText Typo="Typo.caption" Color="@(item.IsExceeded ? Color.Error : Color.Secondary)">
+                                    <span class="hearth-budget-numbers hearth-money @(item.IsExceeded ? "is-danger" : null)">
                                         @HearthFormat.Money(item.SpentAmount) / @HearthFormat.Money(item.BudgetAmount)
                                         (@HearthFormat.Percentage(item.UsagePercentage))
-                                    </MudText>
-                                </MudStack>
+                                    </span>
+                                </div>
 
-                                <MudProgressLinear Value="progressValue"
-                                                   Color="@(item.IsExceeded ? Color.Error : Color.Default)"
-                                                   Rounded="true"
-                                                   Size="Size.Medium" />
+                                <div class="hearth-meter" role="presentation">
+                                    <span class="hearth-meter-fill @(item.IsExceeded ? "is-danger" : item.UsagePercentage >= 80m ? "is-warning" : "is-neutral")"
+                                          style="width: @(progressValue.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                                </div>
                             </div>
                         }
-                    </MudStack>
+                    </div>
                 }
-            </MudPaper>
-        </MudItem>
+            </section>
 
-        @* 3. Gastos por Categoria *@
-        <MudItem xs="12" lg="4">
-            <MudPaper Elevation="0" Class="pa-5 hearth-card" Style="height: 100%;" data-testid="dashboard-spending-card">
-                <MudText Typo="Typo.h6" Style="font-weight: 600;" Class="mb-3">Gastos por Categoria</MudText>
+            @* 3. Gastos por Categoria *@
+            <section class="hearth-card hearth-module-card" aria-labelledby="heading-spending" data-testid="dashboard-spending-card">
+                <div class="hearth-module-head">
+                    <div>
+                        <h3 id="heading-spending" class="hearth-card-title">Gastos por categoria</h3>
+                        <p class="hearth-card-meta">Combine origens para filtrar o mês</p>
+                    </div>
+                </div>
 
-                <MudStack Spacing="2" Class="mb-4">
-                    <MudButton Variant="@(_includeCard ? Variant.Filled : Variant.Outlined)"
-                               Color="@(_includeCard ? Color.Primary : Color.Default)"
-                               FullWidth="true"
-                               OnClick="ToggleCardOriginAsync"
-                               Class="hearth-origin-toggle"
-                               data-testid="toggle-origin-card">
-                        <div class="hearth-statement-row" style="width: 100%;">
-                            <span>Cartão</span>
-                            <span>@HearthFormat.Money(_categorySpending?.CardInstallments ?? 0m)</span>
-                        </div>
-                    </MudButton>
+                <div class="hearth-origin-grid" role="group" aria-label="Filtrar gastos por origem">
+                    <button type="button"
+                            class="hearth-origin-btn @(_includeCard ? "is-active" : null)"
+                            aria-pressed="@(_includeCard ? "true" : "false")"
+                            @onclick="ToggleCardOriginAsync"
+                            data-testid="toggle-origin-card">
+                        <span class="hearth-origin-name">Cartão</span>
+                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.CardInstallments ?? 0m)</span>
+                    </button>
 
-                    <MudButton Variant="@(_includeFixed ? Variant.Filled : Variant.Outlined)"
-                               Color="@(_includeFixed ? Color.Primary : Color.Default)"
-                               FullWidth="true"
-                               OnClick="ToggleFixedOriginAsync"
-                               Class="hearth-origin-toggle"
-                               data-testid="toggle-origin-fixed">
-                        <div class="hearth-statement-row" style="width: 100%;">
-                            <span>Fixo</span>
-                            <span>@HearthFormat.Money(_categorySpending?.FixedExpenses ?? 0m)</span>
-                        </div>
-                    </MudButton>
+                    <button type="button"
+                            class="hearth-origin-btn @(_includeFixed ? "is-active" : null)"
+                            aria-pressed="@(_includeFixed ? "true" : "false")"
+                            @onclick="ToggleFixedOriginAsync"
+                            data-testid="toggle-origin-fixed">
+                        <span class="hearth-origin-name">Fixo</span>
+                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.FixedExpenses ?? 0m)</span>
+                    </button>
 
-                    <MudButton Variant="@(_includeDirect ? Variant.Filled : Variant.Outlined)"
-                               Color="@(_includeDirect ? Color.Primary : Color.Default)"
-                               FullWidth="true"
-                               OnClick="ToggleDirectOriginAsync"
-                               Class="hearth-origin-toggle"
-                               data-testid="toggle-origin-direct">
-                        <div class="hearth-statement-row" style="width: 100%;">
-                            <span>Direto</span>
-                            <span>@HearthFormat.Money(_categorySpending?.DirectExpenses ?? 0m)</span>
-                        </div>
-                    </MudButton>
-                </MudStack>
-
-                <MudDivider Class="mb-3" />
+                    <button type="button"
+                            class="hearth-origin-btn @(_includeDirect ? "is-active" : null)"
+                            aria-pressed="@(_includeDirect ? "true" : "false")"
+                            @onclick="ToggleDirectOriginAsync"
+                            data-testid="toggle-origin-direct">
+                        <span class="hearth-origin-name">Direto</span>
+                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.DirectExpenses ?? 0m)</span>
+                    </button>
+                </div>
 
                 @if (_categorySpending is null || _categorySpending.Categories.Count == 0)
                 {
-                    <MudText Typo="Typo.body2" Color="Color.Secondary">
-                        Nenhum gasto registrado para os filtros selecionados.
-                    </MudText>
+                    <div class="hearth-empty-state hearth-empty-state--compact">
+                        <p class="hearth-empty-title">Sem gastos para os filtros atuais</p>
+                        <p class="hearth-empty-desc">
+                            Ative outra origem acima ou registre um novo lançamento neste mês.
+                        </p>
+                    </div>
                 }
                 else
                 {
-                    <MudStack Spacing="2" data-testid="spending-categories-list">
+                    <div class="hearth-spending-list" data-testid="spending-categories-list">
                         @foreach (var item in _categorySpending.Categories)
                         {
-                            <div class="hearth-statement-row">
-                                <MudText Typo="Typo.body2">@item.CategoryName</MudText>
-                                <MudText Typo="Typo.body2" Style="font-weight: 500;">
-                                    @HearthFormat.Money(item.Total)
-                                </MudText>
+                            var sharePct = _categorySpending.Total > 0m
+                                ? Math.Round((item.Total / _categorySpending.Total) * 100m, 1)
+                                : 0m;
+                            var barWidth = Math.Min(100d, (double)sharePct);
+
+                            <div class="hearth-spending-item">
+                                <div class="hearth-spending-row">
+                                    <span class="hearth-spending-name">@item.CategoryName</span>
+                                    <span class="hearth-spending-meta">
+                                        <span class="hearth-spending-pct hearth-money">@HearthFormat.Percentage(sharePct)</span>
+                                        <span class="hearth-spending-amount hearth-money">@HearthFormat.Money(item.Total)</span>
+                                    </span>
+                                </div>
+                                <div class="hearth-meter hearth-meter--slim" role="presentation">
+                                    <span class="hearth-meter-fill is-accent"
+                                          style="width: @(barWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                                </div>
                             </div>
                         }
-                    </MudStack>
+                    </div>
 
-                    <MudDivider Class="my-3" />
-
-                    <div class="hearth-statement-row">
-                        <MudText Typo="Typo.subtitle2" Style="font-weight: 600;">Total filtrado</MudText>
-                        <MudText Typo="Typo.subtitle2" Style="font-weight: 700;" data-testid="spending-total">
+                    <div class="hearth-spending-total-row">
+                        <span>Total filtrado</span>
+                        <strong class="hearth-money" data-testid="spending-total">
                             @HearthFormat.Money(_categorySpending.Total)
-                        </MudText>
+                        </strong>
                     </div>
                 }
-            </MudPaper>
-        </MudItem>
-    </MudGrid>
-}
+            </section>
+        </div>
+    }
+</div>
 
 @code
 {
@@ -433,6 +532,7 @@ else
     private RealBalanceDto? _realBalance;
     private ProjectedResultDto? _projectedResult;
     private InvoiceSummaryDto? _invoiceSummary;
+    private CreditCardDto? _activeCard;
     private BudgetStatusDto? _budgetStatus;
     private CategorySpendingDto? _categorySpending;
     private bool _loading = true;
@@ -448,6 +548,7 @@ else
         _loading = true;
 
         await LoadRealBalanceAsync(cancellationToken);
+        await LoadActiveCardAsync(cancellationToken);
         await LoadCustomConditionNamesAsync(cancellationToken);
         await LoadMonthDataAsync(cancellationToken);
 
@@ -463,6 +564,19 @@ else
         if (result.IsSuccess && result.Value is not null)
         {
             _realBalance = result.Value;
+        }
+    }
+
+    private async Task LoadActiveCardAsync(CancellationToken cancellationToken)
+    {
+        var result = await Executor.ExecuteAsync<GetActiveCreditCardHandler, CreditCardDto?>(
+            (handler, ct) => handler.ExecuteAsync(new GetActiveCreditCardQuery(AccountId), ct),
+            showErrorSnackbar: false,
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess)
+        {
+            _activeCard = result.Value;
         }
     }
 
@@ -602,4 +716,32 @@ else
         _conditionFilter is not null
         && _conditionFilter.Kind == kind
         && string.Equals(_conditionFilter.Name, name, StringComparison.OrdinalIgnoreCase);
+
+    private static string GetRealBalanceToneClass(decimal balance) =>
+        balance < 0m ? "is-danger" : "is-primary";
+
+    private static string GetRealBalancePillClass(decimal balance) =>
+        balance < 0m ? "is-danger" : "is-neutral";
+
+    private static string GetProjectedToneClass(decimal result) =>
+        result > 0m ? "is-positive" : result < 0m ? "is-danger" : "is-primary";
+
+    private static string GetProjectedPillClass(decimal result) =>
+        result > 0m ? "is-positive" : result < 0m ? "is-danger" : "is-neutral";
+
+    private static string GetInvoiceStatusLabel(InvoiceStatus? status) =>
+        status switch
+        {
+            InvoiceStatus.Paid => "Paga",
+            InvoiceStatus.Closed => "Fechada",
+            _ => "Em aberto",
+        };
+
+    private static string GetInvoiceStatusPillClass(InvoiceStatus? status) =>
+        status switch
+        {
+            InvoiceStatus.Paid => "is-positive",
+            InvoiceStatus.Closed => "is-info",
+            _ => "is-warning",
+        };
 }

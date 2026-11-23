@@ -9,7 +9,9 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<MudLayout>
+<a href="#main-content" class="hearth-skip-link">Pular para o conteúdo principal</a>
+
+<MudLayout Class="hearth-app-layout">
     <MudAppBar Elevation="0" Class="hearth-appbar">
         @if (AccountContext.HasAccounts)
         {
@@ -20,13 +22,15 @@
                            OnClick="ToggleDrawer" />
         }
 
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1" Class="ml-1">
-            <MudIcon Icon="@Icons.Material.Filled.LocalFireDepartment"
-                     Color="Color.Primary"
-                     Size="Size.Medium"
-                     data-testid="hearth-logo-icon" />
-            <MudText Typo="Typo.h6" Style="font-weight: 700; letter-spacing: 0.3px;">Hearth Finance</MudText>
-        </MudStack>
+        <a href="/" class="hearth-appbar-brand" aria-label="Hearth Finance — Ir para o painel">
+            <svg class="hearth-appbar-emblem" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false" data-testid="hearth-logo-icon">
+                <path d="M18.6 4.2C18.6 4.2 25.4 9.7 25.4 16.9C25.4 21.1 22.1 24.4 18 24.4C13.9 24.4 10.6 21.1 10.6 16.9C10.6 14.3 11.9 11.7 13.7 9.7C13.5 11.5 14.3 13 15.6 13.5C15.1 10.4 16.3 6.8 18.6 4.2Z" fill="currentColor" />
+                <path d="M18 14.2C19.8 16.1 20.8 18 20.8 19.7C20.8 21.3 19.5 22.6 18 22.6C16.5 22.6 15.2 21.3 15.2 19.7C15.2 18.6 15.8 17.4 16.7 16.4C16.7 17.2 17.1 17.8 17.6 18C17.4 16.8 17.6 15.3 18 14.2Z" fill="#131315" fill-opacity="0.78" />
+                <path d="M9.5 27.6L26.5 24.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.82" />
+                <path d="M9.5 24.6L26.5 27.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.52" />
+            </svg>
+            <span class="hearth-appbar-brand-name" translate="no">Hearth&nbsp;Finance</span>
+        </a>
 
         <MudSpacer />
 
@@ -53,6 +57,7 @@
                      Color="Color.Default"
                      Variant="Variant.Outlined"
                      Size="Size.Small"
+                     Class="hearth-account-chip"
                      Icon="@Icons.Material.Filled.AccountBalanceWallet"
                      data-testid="active-account-chip">
                 Conta: @AccountContext.Current.Name
@@ -66,7 +71,7 @@
                          Size="Size.Small"
                          Color="Color.Secondary"
                          Class="d-none d-sm-inline-flex" />
-                <MudText Typo="Typo.body2" Class="d-none d-sm-inline" data-testid="user-name">
+                <MudText Typo="Typo.body2" Class="d-none d-sm-inline hearth-appbar-user" data-testid="user-name">
                     @_userName
                 </MudText>
                 <form method="post" action="/auth/logout" data-testid="logout-form" style="display: inline;">
@@ -75,6 +80,7 @@
                                Variant="Variant.Text"
                                Color="Color.Inherit"
                                Size="Size.Small"
+                               Class="hearth-logout-btn"
                                StartIcon="@Icons.Material.Filled.Logout"
                                aria-label="Sair da conta"
                                data-testid="logout-button">
@@ -92,8 +98,8 @@
         </MudDrawer>
     }
 
-    <MudMainContent>
-        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="py-6">
+    <MudMainContent id="main-content" Class="hearth-main-content">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge" Class="hearth-main-container">
             @if (!AccountContext.IsInitialized)
             {
                 @if (AccountContext.LoadError is not null)
@@ -150,24 +156,31 @@
         PaletteDark = new PaletteDark
         {
             Primary = "#D32F2F",
-            PrimaryLighten = "#EF5350",
-            PrimaryDarken = "#B71C1C",
-            Secondary = "#EF5350",
-            Background = "#121212",
-            Surface = "#1E1E1E",
-            DrawerBackground = "#181818",
-            DrawerText = "rgba(255, 255, 255, 0.82)",
-            DrawerIcon = "rgba(255, 255, 255, 0.65)",
-            AppbarBackground = "#181818",
-            AppbarText = "rgba(255, 255, 255, 0.92)",
-            TextPrimary = "rgba(255, 255, 255, 0.92)",
-            TextSecondary = "rgba(255, 255, 255, 0.62)",
-            LinesDefault = "rgba(255, 255, 255, 0.08)",
-            Divider = "rgba(255, 255, 255, 0.08)",
-            Success = "#4CAF50",
-            Error = "#EF5350",
-            Warning = "#FFA726",
+            PrimaryLighten = "#FF7A70",
+            PrimaryDarken = "#B92525",
+            Secondary = "#AEACA8",
+            Background = "#0F0F10",
+            Surface = "#171719",
+            DrawerBackground = "#131315",
+            DrawerText = "#D8D6D2",
+            DrawerIcon = "#9A9894",
+            AppbarBackground = "#131315",
+            AppbarText = "#F3F2EF",
+            TextPrimary = "#F3F2EF",
+            TextSecondary = "#AEACA8",
+            LinesDefault = "rgba(243, 242, 239, 0.09)",
+            Divider = "rgba(243, 242, 239, 0.09)",
+            Success = "#5EC269",
+            Error = "#FF7A70",
+            Warning = "#F5B74B",
             Info = "#64B5F6",
+        },
+        Typography = new Typography
+        {
+            Default = new DefaultTypography
+            {
+                FontFamily = ["IBM Plex Sans", "-apple-system", "BlinkMacSystemFont", "Segoe UI", "sans-serif"],
+            },
         },
         LayoutProperties = new LayoutProperties
         {

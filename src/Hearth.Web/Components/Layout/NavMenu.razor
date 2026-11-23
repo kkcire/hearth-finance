@@ -3,14 +3,9 @@
         Painel
     </MudNavLink>
 
-    <MudNavGroup Title="Cartão" Icon="@Icons.Material.Filled.CreditCard" Expanded="true">
-        <MudNavLink Href="/cartao/faturas" Icon="@Icons.Material.Filled.ReceiptLong">
-            Faturas
-        </MudNavLink>
-        <MudNavLink Href="/cartao/compras" Icon="@Icons.Material.Filled.ShoppingBag">
-            Compras
-        </MudNavLink>
-    </MudNavGroup>
+    <MudNavLink Href="/cartao" Match="NavLinkMatch.Prefix" Icon="@Icons.Material.Filled.CreditCard">
+        Cartão
+    </MudNavLink>
 
     <MudNavGroup Title="Lançamentos" Icon="@Icons.Material.Filled.SwapHoriz" Expanded="true">
         <MudNavLink Href="/gastos-diretos" Icon="@Icons.Material.Filled.Payments">

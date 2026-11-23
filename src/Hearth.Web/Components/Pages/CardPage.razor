@@ -1,0 +1,1968 @@
+@page "/cartao"
+@page "/cartao/faturas"
+@page "/cartao/compras"
+@attribute [Authorize]
+@inherits AccountPageBase
+@using Hearth.Application.Categories
+@using Hearth.Application.Categories.ListCategories
+@using Hearth.Application.CreditCardPurchases
+@using Hearth.Application.CreditCardPurchases.DeleteCreditCardPurchase
+@using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases
+@using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase
+@using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseAmount
+@using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate
+@using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails
+@using Hearth.Application.CreditCards
+@using Hearth.Application.CreditCards.ArchiveCreditCard
+@using Hearth.Application.CreditCards.CreateCreditCard
+@using Hearth.Application.CreditCards.DeleteCreditCard
+@using Hearth.Application.CreditCards.GetActiveCreditCard
+@using Hearth.Application.CreditCards.UpdateCreditCard
+@using Hearth.Application.Invoices.GetInvoiceSummary
+@using Hearth.Web.Components.Shared
+@inject NavigationManager Navigation
+
+<PageTitle>Cartão — Hearth Finance</PageTitle>
+
+<div class="hearth-card-page">
+    <header class="hearth-dash-header">
+        <div class="hearth-dash-title-group">
+            <h1 class="hearth-dash-title">Cartão de crédito</h1>
+            <p class="hearth-dash-subtitle">
+                Limite, fatura derivada por ciclo e gestão de compras em um só lugar.
+            </p>
+        </div>
+
+        <div class="hearth-card-page-actions">
+            @if (_activeCard is not null)
+            {
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Default"
+                           StartIcon="@Icons.Material.Filled.Edit"
+                           Class="hearth-btn-clean"
+                           OnClick="StartEditCard"
+                           Disabled="_saving"
+                           data-testid="edit-card-button">
+                    Editar cartão
+                </MudButton>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Add"
+                           Class="hearth-btn-clean"
+                           OnClick="StartCreatePurchase"
+                           Disabled="_saving || ActiveCategories.Count == 0"
+                           data-testid="new-purchase-button">
+                    Nova compra
+                </MudButton>
+            }
+            else if (!_loading)
+            {
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.AddCard"
+                           Class="hearth-btn-clean"
+                           OnClick="StartCreateCard"
+                           Disabled="_saving"
+                           data-testid="new-card-button">
+                    Cadastrar cartão
+                </MudButton>
+            }
+        </div>
+    </header>
+
+    @if (_loading)
+    {
+        <div class="hearth-card-skeleton-hero">
+            <div class="hearth-card hearth-skeleton-panel"></div>
+            <div class="hearth-card hearth-skeleton-panel"></div>
+        </div>
+    }
+    else
+    {
+        @* 1. Hero do Cartão (Cartão físico visual + Resumo de limite / Estado vazio) *@
+        @if (_activeCard is not null)
+        {
+            <section class="hearth-card-hero" aria-label="Resumo do cartão ativo">
+                <button type="button"
+                        class="hearth-physical-card"
+                        @onclick="FocusInvoiceFromCardAsync"
+                        aria-label="Abrir fatura do ciclo atual do cartão @ActiveCardDisplayName"
+                        data-testid="physical-card-button">
+                    <div class="hearth-physical-card-top">
+                        <div class="hearth-physical-card-brand">
+                            <svg class="hearth-physical-card-emblem" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+                                <path d="M18.6 4.2C18.6 4.2 25.4 9.7 25.4 16.9C25.4 21.1 22.1 24.4 18 24.4C13.9 24.4 10.6 21.1 10.6 16.9C10.6 14.3 11.9 11.7 13.7 9.7C13.5 11.5 14.3 13 15.6 13.5C15.1 10.4 16.3 6.8 18.6 4.2Z" fill="currentColor" />
+                                <path d="M18 14.2C19.8 16.1 20.8 18 20.8 19.7C20.8 21.3 19.5 22.6 18 22.6C16.5 22.6 15.2 21.3 15.2 19.7C15.2 18.6 15.8 17.4 16.7 16.4C16.7 17.2 17.1 17.8 17.6 18C17.4 16.8 17.6 15.3 18 14.2Z" fill="#151518" fill-opacity="0.78" />
+                                <path d="M9.5 27.6L26.5 24.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.82" />
+                                <path d="M9.5 24.6L26.5 27.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.52" />
+                            </svg>
+                            <span translate="no">Hearth</span>
+                        </div>
+
+                        <svg class="hearth-physical-card-chip" viewBox="0 0 42 32" fill="none" aria-hidden="true" focusable="false">
+                            <rect x="1" y="1" width="40" height="30" rx="6" stroke="currentColor" stroke-width="1.4" />
+                            <path d="M14 1V31M28 1V31M1 11H14M28 11H41M1 21H14M28 21H41" stroke="currentColor" stroke-width="1.2" opacity="0.7" />
+                        </svg>
+                    </div>
+
+                    <div class="hearth-physical-card-middle">
+                        <span class="hearth-physical-card-name" data-testid="active-card-name">@ActiveCardDisplayName</span>
+                        <span class="hearth-physical-card-account">@(AccountContext.Current?.Name ?? "Conta Principal")</span>
+                    </div>
+
+                    <div class="hearth-physical-card-bottom">
+                        <div class="hearth-physical-card-dates">
+                            <div>
+                                <span class="hearth-physical-card-meta-label">Fechamento</span>
+                                <strong class="hearth-money">Dia @_activeCard.ClosingDay.ToString("D2")</strong>
+                            </div>
+                            <div>
+                                <span class="hearth-physical-card-meta-label">Vencimento</span>
+                                <strong class="hearth-money">Dia @_activeCard.DueDay.ToString("D2")</strong>
+                            </div>
+                        </div>
+
+                        <span class="hearth-physical-card-cue">Ver fatura</span>
+                    </div>
+                </button>
+
+                <div class="hearth-card hearth-card-overview">
+                    @if (_activeCard.Limit is > 0m)
+                    {
+                        var available = _activeCard.AvailableLimit ?? 0m;
+                        var isLimitExceeded = available < 0m;
+                        var usedPct = Math.Round((_activeCard.UsedLimit / _activeCard.Limit.Value) * 100m, 1);
+                        var barWidth = Math.Min(100d, (double)usedPct);
+
+                        <div class="hearth-kpi-strip hearth-card-overview-kpi">
+                            <div>
+                                <span class="hearth-kpi-caption">Limite disponível</span>
+                                <p class="hearth-kpi-value @(isLimitExceeded ? "is-danger" : "is-primary")" data-testid="card-available-limit">
+                                    @HearthFormat.Money(available)
+                                </p>
+                                @if (isLimitExceeded)
+                                {
+                                    <span class="hearth-limit-exceeded-note" data-testid="card-limit-exceeded-note">
+                                        Excedido em @HearthFormat.Money(Math.Abs(available)) — confira compras ou atualize o limite do cartão.
+                                    </span>
+                                }
+                            </div>
+                            <span class="hearth-status-pill @(isLimitExceeded || usedPct >= 90m ? "is-danger" : usedPct >= 75m ? "is-warning" : "is-positive")"
+                                  data-testid="card-limit-status-pill">
+                                @if (isLimitExceeded)
+                                {
+                                    <svg class="hearth-badge-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                                        <path d="M8 2.2L14 13H2L8 2.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
+                                        <path d="M8 6.2V9.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                                        <circle cx="8" cy="11.3" r="0.65" fill="currentColor" />
+                                    </svg>
+                                    @($"Limite excedido ({HearthFormat.Percentage(usedPct)})")
+                                }
+                                else
+                                {
+                                    @($"{HearthFormat.Percentage(usedPct)} utilizado")
+                                }
+                            </span>
+                        </div>
+
+                        <div class="hearth-meter" role="presentation">
+                            <span class="hearth-meter-fill @(usedPct >= 90m ? "is-danger" : usedPct >= 75m ? "is-warning" : "is-accent")"
+                                  style="width: @(barWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                        </div>
+
+                        <dl class="hearth-card-metrics-grid">
+                            <div class="hearth-card-metric">
+                                <dt>Limite total</dt>
+                                <dd class="hearth-money" data-testid="card-total-limit">@HearthFormat.Money(_activeCard.Limit.Value)</dd>
+                            </div>
+                            <div class="hearth-card-metric">
+                                <dt>Limite usado</dt>
+                                <dd class="hearth-money" data-testid="card-used-limit">@HearthFormat.Money(_activeCard.UsedLimit)</dd>
+                            </div>
+                            <div class="hearth-card-metric">
+                                <dt>Fatura em aberto (@HearthFormat.ShortMonthYear(_defaultOpenCycle))</dt>
+                                <dd class="hearth-money">@HearthFormat.Money(_openCycleAmount)</dd>
+                            </div>
+                        </dl>
+                    }
+                    else
+                    {
+                        <div class="hearth-kpi-strip hearth-card-overview-kpi">
+                            <div>
+                                <span class="hearth-kpi-caption">Total comprometido em parcelas futuras</span>
+                                <p class="hearth-kpi-value is-primary" data-testid="card-used-limit">
+                                    @HearthFormat.Money(_activeCard.UsedLimit)
+                                </p>
+                            </div>
+                            <span class="hearth-status-pill is-neutral">Sem limite definido</span>
+                        </div>
+
+                        <dl class="hearth-card-metrics-grid hearth-card-metrics-grid--two">
+                            <div class="hearth-card-metric">
+                                <dt>Fatura em aberto (@HearthFormat.ShortMonthYear(_defaultOpenCycle))</dt>
+                                <dd class="hearth-money">@HearthFormat.Money(_openCycleAmount)</dd>
+                            </div>
+                            <div class="hearth-card-metric">
+                                <dt>Compras vinculadas</dt>
+                                <dd class="hearth-money">@_activeCardPurchaseCount</dd>
+                            </div>
+                        </dl>
+                    }
+
+                    <div class="hearth-card-lifecycle-bar">
+                        @if (_confirmCardAction == CardLifecycleAction.None)
+                        {
+                            <span class="hearth-card-lifecycle-hint">
+                                @if (_activeCardHasPurchases)
+                                {
+                                    @($"Cartão com {_activeCardPurchaseCount} compra(s) vinculada(s).")
+                                }
+                                else
+                                {
+                                    @("Nenhuma compra vinculada a este cartão.")
+                                }
+                            </span>
+
+                            <div class="hearth-card-lifecycle-buttons">
+                                @if (_activeCardHasPurchases)
+                                {
+                                    <button type="button"
+                                            class="hearth-ghost-danger-btn"
+                                            @onclick="() => _confirmCardAction = CardLifecycleAction.Archive"
+                                            disabled="@_saving"
+                                            data-testid="archive-card-button">
+                                        Arquivar cartão
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button"
+                                            class="hearth-ghost-danger-btn"
+                                            @onclick="() => _confirmCardAction = CardLifecycleAction.Delete"
+                                            disabled="@_saving"
+                                            data-testid="delete-card-button">
+                                        Excluir cartão
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else if (_confirmCardAction == CardLifecycleAction.Archive)
+                        {
+                            <div class="hearth-inline-confirm" role="alert" data-testid="confirm-archive-card-panel">
+                                <p>
+                                    Arquivar mantém todas as parcelas e faturas históricas nos cálculos e libera o cadastro de um novo cartão ativo.
+                                </p>
+                                <div class="hearth-inline-confirm-actions">
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Error"
+                                               OnClick="ArchiveCardAsync"
+                                               Disabled="_saving"
+                                               data-testid="confirm-archive-card-button">
+                                        Confirmar arquivamento
+                                    </MudButton>
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Text"
+                                               OnClick="() => _confirmCardAction = CardLifecycleAction.None"
+                                               Disabled="_saving">
+                                        Cancelar
+                                    </MudButton>
+                                </div>
+                            </div>
+                        }
+                        else if (_confirmCardAction == CardLifecycleAction.Delete)
+                        {
+                            <div class="hearth-inline-confirm" role="alert" data-testid="confirm-delete-card-panel">
+                                <p>
+                                    Excluir este cartão permanentemente? Esta ação não pode ser desfeita.
+                                </p>
+                                <div class="hearth-inline-confirm-actions">
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Filled"
+                                               Color="Color.Error"
+                                               OnClick="DeleteCardAsync"
+                                               Disabled="_saving"
+                                               data-testid="confirm-delete-card-button">
+                                        Confirmar exclusão
+                                    </MudButton>
+                                    <MudButton Size="Size.Small"
+                                               Variant="Variant.Text"
+                                               OnClick="() => _confirmCardAction = CardLifecycleAction.None"
+                                               Disabled="_saving">
+                                        Cancelar
+                                    </MudButton>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </section>
+        }
+        else
+        {
+            <section class="hearth-card hearth-card-onboarding" aria-labelledby="heading-create-card" data-testid="no-active-card-panel">
+                <div class="hearth-card-onboarding-visual" aria-hidden="true">
+                    <div class="hearth-physical-card hearth-physical-card--ghost">
+                        <div class="hearth-physical-card-top">
+                            <span translate="no">Hearth</span>
+                            <svg class="hearth-physical-card-chip" viewBox="0 0 42 32" fill="none">
+                                <rect x="1" y="1" width="40" height="30" rx="6" stroke="currentColor" stroke-width="1.4" />
+                            </svg>
+                        </div>
+                        <div class="hearth-physical-card-middle">
+                            <span class="hearth-physical-card-name">Nenhum cartão ativo</span>
+                            <span class="hearth-physical-card-account">Cadastre para lançar compras e acompanhar faturas</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="hearth-card-onboarding-form">
+                    <h2 id="heading-create-card" class="hearth-card-title">Cadastrar cartão de crédito</h2>
+                    <p class="hearth-card-meta">
+                        Informe os dias de fechamento e vencimento (1 a 28). O nome e o limite são opcionais.
+                    </p>
+
+                    @if (!string.IsNullOrWhiteSpace(_cardFormError))
+                    {
+                        <div class="hearth-inline-alert" role="alert" data-testid="card-form-error">
+                            @_cardFormError
+                        </div>
+                    }
+
+                    <MudGrid Spacing="3" Class="mt-1">
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_cardName"
+                                          Label="Nome do cartão (opcional)"
+                                          Placeholder="Ex.: Nubank, Itaú Black"
+                                          Variant="Variant.Outlined"
+                                          MaxLength="@DomainValidation.MaxNameLength"
+                                          Immediate="true"
+                                          Disabled="_saving"
+                                          data-testid="card-name-input" />
+                        </MudItem>
+
+                        <MudItem xs="12" sm="6">
+                            <MudNumericField T="decimal?"
+                                             @bind-Value="_cardLimit"
+                                             Label="Limite total (opcional)"
+                                             Variant="Variant.Outlined"
+                                             Culture="@HearthFormat.PtBr"
+                                             Format="N2"
+                                             Adornment="Adornment.Start"
+                                             AdornmentText="R$"
+                                             HideSpinButtons="true"
+                                             Immediate="true"
+                                             Disabled="_saving"
+                                             data-testid="card-limit-input" />
+                        </MudItem>
+
+                        <MudItem xs="6">
+                            <MudNumericField T="int"
+                                             @bind-Value="_cardClosingDay"
+                                             Label="Dia de fechamento"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="28"
+                                             Immediate="true"
+                                             HelperText="Entre 1 e 28"
+                                             Disabled="_saving"
+                                             data-testid="card-closing-day-input" />
+                        </MudItem>
+
+                        <MudItem xs="6">
+                            <MudNumericField T="int"
+                                             @bind-Value="_cardDueDay"
+                                             Label="Dia de vencimento"
+                                             Variant="Variant.Outlined"
+                                             Min="1"
+                                             Max="28"
+                                             Immediate="true"
+                                             HelperText="Entre 1 e 28"
+                                             Disabled="_saving"
+                                             data-testid="card-due-day-input" />
+                        </MudItem>
+
+                        <MudItem xs="12">
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Class="hearth-btn-clean"
+                                       OnClick="SaveCardAsync"
+                                       Disabled="_saving"
+                                       data-testid="save-card-submit">
+                                @(_saving ? "Salvando…" : "Cadastrar cartão")
+                            </MudButton>
+                        </MudItem>
+                    </MudGrid>
+                </div>
+            </section>
+        }
+
+        @* Painel de edição do cartão ativo *@
+        @if (_showEditCardForm && _activeCard is not null)
+        {
+            <section class="hearth-card hearth-panel-box" aria-labelledby="heading-edit-card" data-testid="edit-card-form">
+                <div class="hearth-module-head">
+                    <div>
+                        <h2 id="heading-edit-card" class="hearth-card-title">Editar cartão</h2>
+                        <p class="hearth-card-meta">
+                            Alterar fechamento ou vencimento vale apenas para novas compras; compras anteriores preservam a regra original.
+                        </p>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(_cardFormError))
+                {
+                    <div class="hearth-inline-alert" role="alert" data-testid="card-form-error">
+                        @_cardFormError
+                    </div>
+                }
+
+                <MudGrid Spacing="3" Class="mt-1">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_cardName"
+                                      Label="Nome do cartão (opcional)"
+                                      Variant="Variant.Outlined"
+                                      MaxLength="@DomainValidation.MaxNameLength"
+                                      Immediate="true"
+                                      Disabled="_saving"
+                                      data-testid="edit-card-name-input" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField T="decimal?"
+                                         @bind-Value="_cardLimit"
+                                         Label="Limite total (opcional)"
+                                         Variant="Variant.Outlined"
+                                         Culture="@HearthFormat.PtBr"
+                                         Format="N2"
+                                         Adornment="Adornment.Start"
+                                         AdornmentText="R$"
+                                         HideSpinButtons="true"
+                                         Immediate="true"
+                                         Disabled="_saving"
+                                         data-testid="edit-card-limit-input" />
+                    </MudItem>
+
+                    <MudItem xs="6" sm="3">
+                        <MudNumericField T="int"
+                                         @bind-Value="_cardClosingDay"
+                                         Label="Dia de fechamento"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="28"
+                                         Immediate="true"
+                                         Disabled="_saving"
+                                         data-testid="edit-card-closing-day-input" />
+                    </MudItem>
+
+                    <MudItem xs="6" sm="3">
+                        <MudNumericField T="int"
+                                         @bind-Value="_cardDueDay"
+                                         Label="Dia de vencimento"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="28"
+                                         Immediate="true"
+                                         Disabled="_saving"
+                                         data-testid="edit-card-due-day-input" />
+                    </MudItem>
+
+                    <MudItem xs="12">
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                            <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Class="hearth-btn-clean"
+                                       OnClick="SaveCardAsync"
+                                       Disabled="_saving"
+                                       data-testid="save-card-submit">
+                                @(_saving ? "Salvando…" : "Salvar alterações")
+                            </MudButton>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </section>
+        }
+
+        @* Formulário de Nova Compra (nunca pré-desabilitado; valida com feedback explícito) *@
+        @if (_showCreatePurchaseForm)
+        {
+            <section class="hearth-card hearth-panel-box" aria-labelledby="heading-new-purchase" data-testid="create-purchase-form">
+                <div class="hearth-module-head">
+                    <div>
+                        <h2 id="heading-new-purchase" class="hearth-card-title">Nova compra no cartão</h2>
+                        <p class="hearth-card-meta">Cartão ativo: @ActiveCardDisplayName</p>
+                    </div>
+                </div>
+
+                @if (_purchaseFormErrors.Count > 0)
+                {
+                    <div class="hearth-inline-alert" role="alert" data-testid="create-purchase-errors">
+                        <p class="hearth-inline-alert-title">Corrija os campos abaixo para registrar a compra:</p>
+                        <ul class="hearth-inline-alert-list">
+                            @foreach (var error in _purchaseFormErrors)
+                            {
+                                <li>@error</li>
+                            }
+                        </ul>
+                    </div>
+                }
+
+                <MudGrid Spacing="3" Class="mt-1">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_description"
+                                      Label="Descrição"
+                                      Variant="Variant.Outlined"
+                                      Required="true"
+                                      MaxLength="@DomainValidation.MaxDescriptionLength"
+                                      Counter="@DomainValidation.MaxDescriptionLength"
+                                      Immediate="true"
+                                      Disabled="_saving"
+                                      data-testid="purchase-description-input" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?"
+                                   @bind-Value="_categoryId"
+                                   Label="Categoria"
+                                   Variant="Variant.Outlined"
+                                   Required="true"
+                                   Disabled="_saving"
+                                   data-testid="purchase-category-select">
+                            @foreach (var category in ActiveCategories)
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">@category.Name</MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudNumericField T="decimal"
+                                         @bind-Value="_amount"
+                                         Label="Valor total"
+                                         Variant="Variant.Outlined"
+                                         Culture="@HearthFormat.PtBr"
+                                         Format="N2"
+                                         Adornment="Adornment.Start"
+                                         AdornmentText="R$"
+                                         HideSpinButtons="true"
+                                         Immediate="true"
+                                         HelperText="Resto de centavos vai na primeira parcela."
+                                         Disabled="_saving"
+                                         data-testid="purchase-amount-input" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="4">
+                        <MudDatePicker @bind-Date="_date"
+                                       Label="Data da compra"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="dd/MM/yyyy"
+                                       Culture="@HearthFormat.PtBr"
+                                       Editable="true"
+                                       Disabled="_saving"
+                                       data-testid="purchase-date-input" />
+                    </MudItem>
+
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField T="int"
+                                         @bind-Value="_installmentCount"
+                                         Label="Parcelas"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="120"
+                                         Immediate="true"
+                                         Disabled="_saving"
+                                         data-testid="purchase-installments-input" />
+                    </MudItem>
+
+                    <MudItem xs="6" sm="2">
+                        <MudNumericField T="int"
+                                         @bind-Value="_initialInstallment"
+                                         Label="Parcela inicial"
+                                         Variant="Variant.Outlined"
+                                         Min="1"
+                                         Max="@Math.Max(1, _installmentCount)"
+                                         Immediate="true"
+                                         HelperText="> 1: anteriores já pagas"
+                                         Disabled="_saving"
+                                         data-testid="purchase-initial-installment-input" />
+                    </MudItem>
+
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="PurchaseConditionKind"
+                                   @bind-Value="_conditionKind"
+                                   Label="Condição"
+                                   Variant="Variant.Outlined"
+                                   Disabled="_saving"
+                                   data-testid="purchase-condition-select">
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Own">Própria</MudSelectItem>
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Others">Outros</MudSelectItem>
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Custom">Personalizado</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+
+                    @if (_conditionKind == PurchaseConditionKind.Custom)
+                    {
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_conditionName"
+                                          Label="Nome da condição"
+                                          Placeholder="Ex.: Mãe, Ana, Trabalho"
+                                          Variant="Variant.Outlined"
+                                          Required="true"
+                                          MaxLength="@DomainValidation.MaxNameLength"
+                                          Immediate="true"
+                                          Disabled="_saving"
+                                          data-testid="purchase-condition-name-input" />
+                        </MudItem>
+                    }
+
+                    @if (GetCreatePurchaseLimitExcess() is { } createLimitExcess && _activeCard?.AvailableLimit is { } createAvailable)
+                    {
+                        <MudItem xs="12">
+                            <div class="hearth-limit-warning" role="status" data-testid="create-purchase-limit-warning">
+                                <svg class="hearth-limit-warning-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                    <path d="M10 2.8L17.6 16.4H2.4L10 2.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                                    <path d="M10 7.6V11.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                                    <circle cx="10" cy="14.1" r="0.85" fill="currentColor" />
+                                </svg>
+                                <div>
+                                    <strong>Esta compra excede o limite disponível atual em @HearthFormat.Money(createLimitExcess)</strong>
+                                    (disponível: <span class="hearth-money">@HearthFormat.Money(createAvailable)</span>).
+                                    Confira se o valor da compra ou o limite cadastrado estão corretos — você ainda pode registrar normalmente.
+                                </div>
+                            </div>
+                        </MudItem>
+                    }
+
+                    <MudItem xs="12">
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                            <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Class="hearth-btn-clean"
+                                       OnClick="CreatePurchaseAsync"
+                                       Disabled="_saving"
+                                       data-testid="create-purchase-submit">
+                                @(_saving ? "Salvando…" : "Registrar compra")
+                            </MudButton>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </section>
+        }
+
+        @* Painéis de edição de compra *@
+        @if (_editingDetails is not null)
+        {
+            <section class="hearth-card hearth-panel-box" data-testid="edit-purchase-details-panel">
+                <h2 class="hearth-card-title">Editar detalhes — @_editingDetails.Description</h2>
+                <MudGrid Spacing="3" Class="mt-1">
+                    <MudItem xs="12" sm="6">
+                        <MudTextField @bind-Value="_editDescription"
+                                      Label="Descrição"
+                                      Variant="Variant.Outlined"
+                                      MaxLength="@DomainValidation.MaxDescriptionLength"
+                                      Immediate="true"
+                                      Disabled="_saving"
+                                      data-testid="edit-purchase-description-input" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="Guid?" @bind-Value="_editCategoryId" Label="Categoria" Variant="Variant.Outlined" Disabled="_saving">
+                            @foreach (var category in _allCategories.Where(c => !c.IsArchived || c.Id == _editingDetails.CategoryId))
+                            {
+                                <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
+                                    @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
+                                </MudSelectItem>
+                            }
+                        </MudSelect>
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudSelect T="PurchaseConditionKind" @bind-Value="_editConditionKind" Label="Condição" Variant="Variant.Outlined" Disabled="_saving">
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Own">Própria</MudSelectItem>
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Others">Outros</MudSelectItem>
+                            <MudSelectItem T="PurchaseConditionKind" Value="PurchaseConditionKind.Custom">Personalizado</MudSelectItem>
+                        </MudSelect>
+                    </MudItem>
+                    @if (_editConditionKind == PurchaseConditionKind.Custom)
+                    {
+                        <MudItem xs="12" sm="6">
+                            <MudTextField @bind-Value="_editConditionName"
+                                          Label="Nome da condição"
+                                          Variant="Variant.Outlined"
+                                          MaxLength="@DomainValidation.MaxNameLength"
+                                          Immediate="true"
+                                          Disabled="_saving" />
+                        </MudItem>
+                    }
+                    <MudItem xs="12">
+                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                            <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                            <MudButton Variant="Variant.Filled"
+                                       Color="Color.Primary"
+                                       Class="hearth-btn-clean"
+                                       OnClick="SaveDetailsAsync"
+                                       Disabled="_saving || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue || (_editConditionKind == PurchaseConditionKind.Custom && string.IsNullOrWhiteSpace(_editConditionName))"
+                                       data-testid="save-purchase-details">
+                                Salvar detalhes
+                            </MudButton>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </section>
+        }
+
+        @if (_editingAmount is not null)
+        {
+            <section class="hearth-card hearth-panel-box" data-testid="edit-purchase-amount-panel">
+                <h2 class="hearth-card-title">Alterar valor — @_editingAmount.Description</h2>
+                <MudGrid Spacing="3" Class="mt-1 align-center">
+                    <MudItem xs="12" sm="6">
+                        <MudNumericField T="decimal"
+                                         @bind-Value="_editNewAmount"
+                                         Label="Novo valor total"
+                                         Variant="Variant.Outlined"
+                                         Culture="@HearthFormat.PtBr"
+                                         Format="N2"
+                                         Adornment="Adornment.Start"
+                                         AdornmentText="R$"
+                                         HideSpinButtons="true"
+                                         Immediate="true"
+                                         Disabled="_saving"
+                                         data-testid="edit-purchase-amount-input" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="hearth-btn-clean" OnClick="SaveAmountAsync" Disabled="_saving || _editNewAmount <= 0" data-testid="save-purchase-amount">
+                                Salvar valor
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                        </MudStack>
+                    </MudItem>
+                    @if (GetEditAmountLimitExcess() is { } editLimitExcess && _activeCard?.AvailableLimit is { } editAvailable)
+                    {
+                        <MudItem xs="12">
+                            <div class="hearth-limit-warning" role="status" data-testid="edit-purchase-limit-warning">
+                                <svg class="hearth-limit-warning-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                                    <path d="M10 2.8L17.6 16.4H2.4L10 2.8Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                                    <path d="M10 7.6V11.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                                    <circle cx="10" cy="14.1" r="0.85" fill="currentColor" />
+                                </svg>
+                                <div>
+                                    <strong>O novo valor excede o limite disponível atual em @HearthFormat.Money(editLimitExcess)</strong>
+                                    (disponível: <span class="hearth-money">@HearthFormat.Money(editAvailable)</span>).
+                                    Confira o valor ou o limite cadastrado — você ainda pode salvar normalmente.
+                                </div>
+                            </div>
+                        </MudItem>
+                    }
+                </MudGrid>
+            </section>
+        }
+
+        @if (_editingDate is not null)
+        {
+            <section class="hearth-card hearth-panel-box" data-testid="edit-purchase-date-panel">
+                <h2 class="hearth-card-title">Alterar data — @_editingDate.Description</h2>
+                <MudGrid Spacing="3" Class="mt-1 align-center">
+                    <MudItem xs="12" sm="6">
+                        <MudDatePicker @bind-Date="_editNewDate"
+                                       Label="Nova data da compra"
+                                       Variant="Variant.Outlined"
+                                       DateFormat="dd/MM/yyyy"
+                                       Culture="@HearthFormat.PtBr"
+                                       Editable="true"
+                                       Disabled="_saving"
+                                       data-testid="edit-purchase-date-input" />
+                    </MudItem>
+                    <MudItem xs="12" sm="6">
+                        <MudStack Row="true" Spacing="2">
+                            <MudButton Variant="Variant.Filled" Color="Color.Primary" Class="hearth-btn-clean" OnClick="SaveDateAsync" Disabled="_saving || !_editNewDate.HasValue" data-testid="save-purchase-date">
+                                Salvar data
+                            </MudButton>
+                            <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                        </MudStack>
+                    </MudItem>
+                </MudGrid>
+            </section>
+        }
+
+        @* 2. Abas Fatura | Compras (visíveis quando há cartão ativo OU histórico arquivado) *@
+        @if (_activeCard is not null || _purchases.Count > 0)
+        {
+            @if (_activeCard is null && _purchases.Count > 0)
+            {
+                <div class="hearth-history-notice" role="status">
+                    Você não tem um cartão ativo no momento. As faturas e compras de cartões arquivados continuam disponíveis abaixo.
+                </div>
+            }
+
+            <div id="cartao-conteudo" class="hearth-card-tabs-bar" role="tablist" aria-label="Seções do cartão">
+                <button type="button"
+                        id="tab-fatura"
+                        role="tab"
+                        class="hearth-tab-btn @(_activeTab == CardTab.Invoice ? "is-active" : null)"
+                        aria-selected="@(_activeTab == CardTab.Invoice ? "true" : "false")"
+                        aria-controls="panel-fatura"
+                        @onclick="() => SelectTab(CardTab.Invoice)"
+                        data-testid="card-tab-invoice">
+                    Fatura
+                </button>
+
+                <button type="button"
+                        id="tab-compras"
+                        role="tab"
+                        class="hearth-tab-btn @(_activeTab == CardTab.Purchases ? "is-active" : null)"
+                        aria-selected="@(_activeTab == CardTab.Purchases ? "true" : "false")"
+                        aria-controls="panel-compras"
+                        @onclick="() => SelectTab(CardTab.Purchases)"
+                        data-testid="card-tab-purchases">
+                    Compras
+                    <span class="hearth-tab-count hearth-money">@_purchases.Count</span>
+                </button>
+            </div>
+
+            @if (_activeTab == CardTab.Invoice)
+            {
+                <section id="panel-fatura"
+                         role="tabpanel"
+                         aria-labelledby="tab-fatura"
+                         class="hearth-card hearth-tab-panel"
+                         data-testid="card-invoice-panel">
+                    <div class="hearth-invoice-panel-head">
+                        <div>
+                            <div class="hearth-invoice-title-row">
+                                <h2 class="hearth-card-title">
+                                    Fatura de @HearthFormat.MonthYear(_selectedCycle)
+                                </h2>
+                                @if (_invoiceSummary?.Status is not null)
+                                {
+                                    <span class="hearth-status-pill @(GetInvoiceStatusPillClass(_invoiceSummary.Status))" data-testid="invoice-status-chip">
+                                        @GetInvoiceStatusLabel(_invoiceSummary.Status)
+                                    </span>
+                                }
+                            </div>
+
+                            @if (_invoiceSummary is not null && _invoiceSummary.StartDate.HasValue && _invoiceSummary.EndDate.HasValue && _invoiceSummary.ClosingDate.HasValue && _invoiceSummary.DueDate.HasValue)
+                            {
+                                <dl class="hearth-invoice-cycle-meta">
+                                    <div>
+                                        <dt>Período</dt>
+                                        <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.StartDate) a @HearthFormat.Date(_invoiceSummary.EndDate)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Fechamento</dt>
+                                        <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.ClosingDate)</dd>
+                                    </div>
+                                    <div>
+                                        <dt>Vencimento</dt>
+                                        <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.DueDate)</dd>
+                                    </div>
+                                </dl>
+                            }
+                        </div>
+
+                        <MonthNavigator Month="_selectedCycle" MonthChanged="OnCycleChangedAsync" Disabled="_loadingInvoice" />
+                    </div>
+
+                    @if (_invoiceSummary is not null)
+                    {
+                        <div class="hearth-kpi-strip hearth-invoice-kpi">
+                            <div>
+                                <span class="hearth-kpi-caption">Total calculado da fatura</span>
+                                <p class="hearth-kpi-value is-primary" data-testid="invoice-calculated-amount">
+                                    @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
+                                </p>
+                            </div>
+                            <span class="hearth-period-tag hearth-money">
+                                @_invoiceSummary.Installments.Count parcela(s) neste ciclo
+                            </span>
+                        </div>
+
+                        @if (_invoiceSummary.Installments.Count == 0)
+                        {
+                            <div class="hearth-empty-state hearth-empty-state--compact">
+                                <p class="hearth-empty-title">Nenhuma parcela neste ciclo de fechamento</p>
+                                <p class="hearth-empty-desc">
+                                    Use as setas acima para consultar outros ciclos ou registre uma compra no cartão.
+                                </p>
+                                @if (_activeCard is not null && ActiveCategories.Count > 0)
+                                {
+                                    <div>
+                                        <MudButton Variant="Variant.Outlined"
+                                                   Color="Color.Primary"
+                                                   Class="hearth-btn-clean"
+                                                   OnClick="StartCreatePurchase">
+                                            Nova compra
+                                        </MudButton>
+                                    </div>
+                                }
+                            </div>
+                        }
+                        else
+                        {
+                            <MudTable Items="_invoiceSummary.Installments" Hover="true" Dense="true" Elevation="0" Class="hearth-table">
+                                <HeaderContent>
+                                    <MudTh Style="width: 115px;">Data</MudTh>
+                                    <MudTh>Descrição</MudTh>
+                                    <MudTh>Categoria</MudTh>
+                                    <MudTh>Condição</MudTh>
+                                    <MudTh Style="width: 100px;">Parcela</MudTh>
+                                    <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
+                                </HeaderContent>
+                                <RowTemplate>
+                                    <MudTd DataLabel="Data" Class="hearth-money">@HearthFormat.Date(context.PurchaseDate)</MudTd>
+                                    <MudTd DataLabel="Descrição">@context.Description</MudTd>
+                                    <MudTd DataLabel="Categoria">@GetCategoryName(context.CategoryId)</MudTd>
+                                    <MudTd DataLabel="Condição">
+                                        <span class="hearth-period-tag">
+                                            @HearthFormat.ConditionLabel(context.ConditionKind, context.ConditionName)
+                                        </span>
+                                    </MudTd>
+                                    <MudTd DataLabel="Parcela" Class="hearth-money">@($"{context.InstallmentNumber}/{context.InstallmentCount}")</MudTd>
+                                    <MudTd DataLabel="Valor" Style="text-align: right; font-weight: 600;" Class="hearth-money">
+                                        @HearthFormat.Money(context.Amount)
+                                    </MudTd>
+                                </RowTemplate>
+                            </MudTable>
+                        }
+                    }
+                </section>
+            }
+            else
+            {
+                <section id="panel-compras"
+                         role="tabpanel"
+                         aria-labelledby="tab-compras"
+                         class="hearth-card hearth-tab-panel"
+                         data-testid="card-purchases-panel">
+                    <div class="hearth-purchases-toolbar">
+                        <div class="hearth-condition-bar" role="group" aria-label="Filtrar compras por condição">
+                            <span class="hearth-condition-label">Condição:</span>
+                            <div class="hearth-condition-pills">
+                                <button type="button"
+                                        class="hearth-filter-pill @(_conditionFilter is null ? "is-active" : null)"
+                                        aria-pressed="@(_conditionFilter is null ? "true" : "false")"
+                                        @onclick="() => SetConditionFilter(null)"
+                                        data-testid="filter-condition-all">
+                                    Todas
+                                </button>
+
+                                <button type="button"
+                                        class="hearth-filter-pill @(IsSelectedFilter(PurchaseConditionKind.Own, null) ? "is-active" : null)"
+                                        aria-pressed="@(IsSelectedFilter(PurchaseConditionKind.Own, null) ? "true" : "false")"
+                                        @onclick="() => SetConditionFilter((PurchaseConditionKind.Own, null))"
+                                        data-testid="filter-condition-own">
+                                    Própria
+                                </button>
+
+                                <button type="button"
+                                        class="hearth-filter-pill @(IsSelectedFilter(PurchaseConditionKind.Others, null) ? "is-active" : null)"
+                                        aria-pressed="@(IsSelectedFilter(PurchaseConditionKind.Others, null) ? "true" : "false")"
+                                        @onclick="() => SetConditionFilter((PurchaseConditionKind.Others, null))"
+                                        data-testid="filter-condition-others">
+                                    Outros
+                                </button>
+
+                                @foreach (var customName in DistinctCustomNames)
+                                {
+                                    var nameCopy = customName;
+                                    var isActive = IsSelectedFilter(PurchaseConditionKind.Custom, nameCopy);
+                                    <button type="button"
+                                            class="hearth-filter-pill @(isActive ? "is-active" : null)"
+                                            aria-pressed="@(isActive ? "true" : "false")"
+                                            @onclick="() => SetConditionFilter((PurchaseConditionKind.Custom, nameCopy))"
+                                            data-testid="@($"filter-condition-custom-{nameCopy}")">
+                                        @nameCopy
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        <span class="hearth-purchases-total hearth-money">
+                            @FilteredPurchases.Count compra(s) — <strong>@HearthFormat.Money(FilteredPurchases.Sum(p => p.Amount))</strong>
+                        </span>
+                    </div>
+
+                    <MudTable Items="FilteredPurchases" Hover="true" Dense="true" Elevation="0" Class="hearth-table">
+                        <HeaderContent>
+                            <MudTh Style="width: 110px;">Data</MudTh>
+                            <MudTh>Descrição</MudTh>
+                            <MudTh>Categoria</MudTh>
+                            <MudTh>Condição</MudTh>
+                            <MudTh>Parcelas</MudTh>
+                            <MudTh>Status</MudTh>
+                            <MudTh Style="text-align: right;">Valor total</MudTh>
+                            <MudTh Style="width: 240px; text-align: right;">Ações</MudTh>
+                        </HeaderContent>
+                        <RowTemplate>
+                            <MudTd DataLabel="Data" Class="hearth-money">@HearthFormat.Date(context.Date)</MudTd>
+                            <MudTd DataLabel="Descrição">@context.Description</MudTd>
+                            <MudTd DataLabel="Categoria">@GetCategoryName(context.CategoryId)</MudTd>
+                            <MudTd DataLabel="Condição">
+                                <span class="hearth-period-tag">
+                                    @HearthFormat.ConditionLabel(context.ConditionKind, context.ConditionName)
+                                </span>
+                            </MudTd>
+                            <MudTd DataLabel="Parcelas" Class="hearth-money">
+                                @if (context.InitialInstallment > 1)
+                                {
+                                    <span>@($"{context.InstallmentCount}x (início {context.InitialInstallment}/{context.InstallmentCount})")</span>
+                                }
+                                else
+                                {
+                                    <span>@($"{context.InstallmentCount}x")</span>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Status">
+                                @if (context.IsLocked)
+                                {
+                                    <span class="hearth-status-pill is-warning">Travada</span>
+                                }
+                                else
+                                {
+                                    <span class="hearth-status-pill is-positive">Aberta</span>
+                                }
+                            </MudTd>
+                            <MudTd DataLabel="Valor total" Style="text-align: right; font-weight: 600;" Class="hearth-money">
+                                @HearthFormat.Money(context.Amount)
+                            </MudTd>
+                            <MudTd DataLabel="Ações" Style="text-align: right;">
+                                @if (_confirmDeletePurchaseId == context.Id)
+                                {
+                                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                        <MudButton Size="Size.Small"
+                                                   Variant="Variant.Filled"
+                                                   Color="Color.Error"
+                                                   OnClick="() => DeletePurchaseAsync(context.Id)"
+                                                   Disabled="_saving"
+                                                   data-testid="@($"confirm-delete-purchase-{context.Id}")">
+                                            Confirmar
+                                        </MudButton>
+                                        <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => _confirmDeletePurchaseId = null" Disabled="_saving">
+                                            Cancelar
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                        <MudIconButton Icon="@(_expandedPurchaseId == context.Id ? Icons.Material.Filled.ExpandLess : Icons.Material.Filled.ExpandMore)"
+                                                       Size="Size.Small"
+                                                       title="Ver parcelas"
+                                                       aria-label="Ver parcelas"
+                                                       OnClick="() => ToggleExpand(context.Id)"
+                                                       data-testid="@($"expand-purchase-{context.Id}")" />
+
+                                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                                       Size="Size.Small"
+                                                       title="Editar detalhes"
+                                                       aria-label="Editar detalhes"
+                                                       OnClick="() => StartEditDetails(context)"
+                                                       Disabled="_saving"
+                                                       data-testid="@($"edit-details-purchase-{context.Id}")" />
+
+                                        <MudIconButton Icon="@Icons.Material.Filled.AttachMoney"
+                                                       Size="Size.Small"
+                                                       Color="Color.Primary"
+                                                       title="@(context.IsLocked ? "Valor travado após fechamento da 1ª parcela ativa" : "Alterar valor")"
+                                                       aria-label="Alterar valor"
+                                                       OnClick="() => StartEditAmount(context)"
+                                                       Disabled="_saving || context.IsLocked"
+                                                       data-testid="@($"edit-amount-purchase-{context.Id}")" />
+
+                                        <MudIconButton Icon="@Icons.Material.Filled.CalendarMonth"
+                                                       Size="Size.Small"
+                                                       Color="Color.Primary"
+                                                       title="@(context.IsLocked ? "Data travada após fechamento da 1ª parcela ativa" : "Alterar data")"
+                                                       aria-label="Alterar data"
+                                                       OnClick="() => StartEditDate(context)"
+                                                       Disabled="_saving || context.IsLocked"
+                                                       data-testid="@($"edit-date-purchase-{context.Id}")" />
+
+                                        <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                       Size="Size.Small"
+                                                       Color="Color.Error"
+                                                       title="Excluir compra"
+                                                       aria-label="Excluir compra"
+                                                       OnClick="() => _confirmDeletePurchaseId = context.Id"
+                                                       Disabled="_saving"
+                                                       data-testid="@($"delete-purchase-{context.Id}")" />
+                                    </MudStack>
+                                }
+                            </MudTd>
+                        </RowTemplate>
+                        <ChildRowContent>
+                            @if (_expandedPurchaseId == context.Id)
+                            {
+                                <MudTr>
+                                    <td colspan="8" class="pa-3">
+                                        <p class="hearth-expanded-title">Parcelas de "@context.Description"</p>
+                                        <MudSimpleTable Dense="true" Elevation="0">
+                                            <thead>
+                                                <tr>
+                                                    <th>Parcela</th>
+                                                    <th>Ciclo (fechamento)</th>
+                                                    <th>Vencimento</th>
+                                                    <th>Situação</th>
+                                                    <th style="text-align: right;">Valor</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                @foreach (var installment in context.Installments)
+                                                {
+                                                    <tr>
+                                                        <td class="hearth-money">@($"{installment.Number}/{context.InstallmentCount}")</td>
+                                                        <td class="hearth-money">@HearthFormat.ShortMonthYear(installment.ClosingYear, installment.ClosingMonth)</td>
+                                                        <td class="hearth-money">@HearthFormat.Date(installment.DueDate)</td>
+                                                        <td>
+                                                            @if (installment.IsPreviouslyPaid)
+                                                            {
+                                                                <span class="hearth-status-pill is-neutral">Já paga</span>
+                                                            }
+                                                            else
+                                                            {
+                                                                <span class="hearth-status-pill is-info">Na fatura</span>
+                                                            }
+                                                        </td>
+                                                        <td style="text-align: right;" class="hearth-money">@HearthFormat.Money(installment.Amount)</td>
+                                                    </tr>
+                                                }
+                                            </tbody>
+                                        </MudSimpleTable>
+                                    </td>
+                                </MudTr>
+                            }
+                        </ChildRowContent>
+                        <NoRecordsContent>
+                            <div class="hearth-empty-state hearth-empty-state--compact">
+                                <p class="hearth-empty-title">Nenhuma compra registrada</p>
+                                <p class="hearth-empty-desc">
+                                    Clique em "Nova compra" para adicionar o primeiro lançamento neste cartão.
+                                </p>
+                            </div>
+                        </NoRecordsContent>
+                    </MudTable>
+                </section>
+            }
+        }
+    }
+</div>
+
+@code
+{
+    private enum CardTab
+    {
+        Invoice,
+        Purchases,
+    }
+
+    private enum CardLifecycleAction
+    {
+        None,
+        Archive,
+        Delete,
+    }
+
+    [SupplyParameterFromQuery(Name = "aba")]
+    public string? RequestedTab { get; set; }
+
+    [SupplyParameterFromQuery(Name = "nova")]
+    public bool OpenNewOnLoad { get; set; }
+
+    private CardTab _activeTab = CardTab.Invoice;
+    private bool _hasInitializedRouteState;
+    private bool _hasManualCycleSelection;
+
+    private CreditCardDto? _activeCard;
+    private InvoiceSummaryDto? _invoiceSummary;
+    private YearMonth _selectedCycle = YearMonth.Of(2026, 1);
+    private YearMonth _defaultOpenCycle = YearMonth.Of(2026, 1);
+    private decimal _openCycleAmount;
+
+    private IReadOnlyList<CreditCardPurchaseDto> _purchases = [];
+    private IReadOnlyList<CategoryDto> _allCategories = [];
+    private Dictionary<Guid, string> _categoryNames = [];
+
+    private bool _loading = true;
+    private bool _loadingInvoice;
+    private bool _saving;
+
+    // Card create/edit form state
+    private bool _showEditCardForm;
+    private CardLifecycleAction _confirmCardAction = CardLifecycleAction.None;
+    private string _cardName = string.Empty;
+    private int _cardClosingDay = 3;
+    private int _cardDueDay = 12;
+    private decimal? _cardLimit;
+    private string? _cardFormError;
+
+    // Purchase create form state
+    private bool _showCreatePurchaseForm;
+    private readonly List<string> _purchaseFormErrors = [];
+    private string _description = string.Empty;
+    private Guid? _categoryId;
+    private decimal _amount;
+    private DateTime? _date;
+    private int _installmentCount = 1;
+    private int _initialInstallment = 1;
+    private PurchaseConditionKind _conditionKind = PurchaseConditionKind.Own;
+    private string _conditionName = string.Empty;
+
+    // Purchase filters & edit panels
+    private (PurchaseConditionKind Kind, string? Name)? _conditionFilter;
+    private Guid? _expandedPurchaseId;
+    private CreditCardPurchaseDto? _editingDetails;
+    private string _editDescription = string.Empty;
+    private Guid? _editCategoryId;
+    private PurchaseConditionKind _editConditionKind = PurchaseConditionKind.Own;
+    private string _editConditionName = string.Empty;
+
+    private CreditCardPurchaseDto? _editingAmount;
+    private decimal _editNewAmount;
+
+    private CreditCardPurchaseDto? _editingDate;
+    private DateTime? _editNewDate;
+
+    private Guid? _confirmDeletePurchaseId;
+
+    private string ActiveCardDisplayName =>
+        string.IsNullOrWhiteSpace(_activeCard?.Name) ? "Cartão de crédito" : _activeCard!.Name!;
+
+    private int _activeCardPurchaseCount =>
+        _activeCard is null ? 0 : _purchases.Count(p => p.CreditCardId == _activeCard.Id);
+
+    private bool _activeCardHasPurchases => _activeCardPurchaseCount > 0;
+
+    private IReadOnlyList<CategoryDto> ActiveCategories =>
+        _allCategories.Where(c => !c.IsArchived).ToList();
+
+    private IReadOnlyList<string> DistinctCustomNames =>
+        _purchases
+            .Where(p => p.ConditionKind == PurchaseConditionKind.Custom && !string.IsNullOrWhiteSpace(p.ConditionName))
+            .Select(p => p.ConditionName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(name => name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<CreditCardPurchaseDto> FilteredPurchases =>
+        _conditionFilter is null
+            ? _purchases
+            : _purchases.Where(MatchesFilter).ToList();
+
+    protected override void OnParametersSet()
+    {
+        var relativePath = Navigation.ToBaseRelativePath(Navigation.Uri).Split('?', '#')[0].Trim('/');
+
+        if (!_hasInitializedRouteState)
+        {
+            _hasInitializedRouteState = true;
+            _activeTab = ResolveInitialTab(relativePath, RequestedTab, OpenNewOnLoad);
+        }
+        else if (!string.IsNullOrWhiteSpace(RequestedTab))
+        {
+            _activeTab = string.Equals(RequestedTab, "compras", StringComparison.OrdinalIgnoreCase)
+                ? CardTab.Purchases
+                : CardTab.Invoice;
+        }
+    }
+
+    private static CardTab ResolveInitialTab(string relativePath, string? requestedTab, bool openNewOnLoad)
+    {
+        if (openNewOnLoad)
+        {
+            return CardTab.Purchases;
+        }
+
+        if (!string.IsNullOrWhiteSpace(requestedTab))
+        {
+            return string.Equals(requestedTab, "compras", StringComparison.OrdinalIgnoreCase)
+                ? CardTab.Purchases
+                : CardTab.Invoice;
+        }
+
+        if (string.Equals(relativePath, "cartao/compras", StringComparison.OrdinalIgnoreCase))
+        {
+            return CardTab.Purchases;
+        }
+
+        return CardTab.Invoice;
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var cardResult = await Executor.ExecuteAsync<GetActiveCreditCardHandler, CreditCardDto?>(
+            (handler, ct) => handler.ExecuteAsync(new GetActiveCreditCardQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        var purchasesResult = await Executor.ExecuteAsync<ListCreditCardPurchasesHandler, IReadOnlyList<CreditCardPurchaseDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCreditCardPurchasesQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
+        var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(IncludeArchived: true), ct),
+            cancellationToken: cancellationToken);
+
+        if (cardResult.IsSuccess)
+        {
+            _activeCard = cardResult.Value;
+        }
+
+        if (purchasesResult.IsSuccess && purchasesResult.Value is not null)
+        {
+            _purchases = purchasesResult.Value;
+        }
+
+        if (categoriesResult.IsSuccess && categoriesResult.Value is not null)
+        {
+            _allCategories = categoriesResult.Value;
+            _categoryNames = _allCategories.ToDictionary(c => c.Id, c => c.Name);
+        }
+
+        _defaultOpenCycle = _activeCard is not null
+            ? BillingCycle.ForPurchase(
+                Clock.Today,
+                CardBillingRule.Of(_activeCard.ClosingDay, _activeCard.DueDay)).ClosingMonth
+            : YearMonth.From(Clock.Today);
+
+        if (!_hasManualCycleSelection)
+        {
+            _selectedCycle = _defaultOpenCycle;
+        }
+
+        await LoadInvoiceSummaryAsync(cancellationToken);
+
+        if (_selectedCycle == _defaultOpenCycle && _invoiceSummary is not null)
+        {
+            _openCycleAmount = _invoiceSummary.CalculatedAmount;
+        }
+        else if (_activeCard is not null)
+        {
+            var openResult = await Executor.ExecuteAsync<GetInvoiceSummaryHandler, InvoiceSummaryDto>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new GetInvoiceSummaryQuery(AccountId, _defaultOpenCycle.Year, _defaultOpenCycle.Month), ct),
+                showErrorSnackbar: false,
+                cancellationToken: cancellationToken);
+
+            if (openResult.IsSuccess && openResult.Value is not null)
+            {
+                _openCycleAmount = openResult.Value.CalculatedAmount;
+            }
+        }
+        else
+        {
+            _openCycleAmount = 0m;
+        }
+
+        if (OpenNewOnLoad && !_showCreatePurchaseForm && _activeCard is not null && ActiveCategories.Count > 0)
+        {
+            OpenNewOnLoad = false;
+            StartCreatePurchase();
+        }
+
+        _loading = false;
+    }
+
+    private async Task LoadInvoiceSummaryAsync(CancellationToken cancellationToken)
+    {
+        _loadingInvoice = true;
+
+        var summaryResult = await Executor.ExecuteAsync<GetInvoiceSummaryHandler, InvoiceSummaryDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetInvoiceSummaryQuery(AccountId, _selectedCycle.Year, _selectedCycle.Month), ct),
+            cancellationToken: cancellationToken);
+
+        if (summaryResult.IsSuccess && summaryResult.Value is not null)
+        {
+            _invoiceSummary = summaryResult.Value;
+        }
+
+        _loadingInvoice = false;
+    }
+
+    private void SelectTab(CardTab tab)
+    {
+        if (_activeTab == tab)
+        {
+            return;
+        }
+
+        _activeTab = tab;
+        var tabQuery = tab == CardTab.Purchases ? "compras" : "fatura";
+        Navigation.NavigateTo($"/cartao?aba={tabQuery}", replace: true);
+    }
+
+    private async Task FocusInvoiceFromCardAsync()
+    {
+        _activeTab = CardTab.Invoice;
+        if (_selectedCycle != _defaultOpenCycle)
+        {
+            _hasManualCycleSelection = false;
+            _selectedCycle = _defaultOpenCycle;
+            await LoadInvoiceSummaryAsync(ComponentCancellationToken);
+        }
+
+        Navigation.NavigateTo("/cartao?aba=fatura", replace: true);
+    }
+
+    private async Task OnCycleChangedAsync(YearMonth cycle)
+    {
+        _hasManualCycleSelection = true;
+        _selectedCycle = cycle;
+        await LoadInvoiceSummaryAsync(ComponentCancellationToken);
+    }
+
+    private void CancelPanels()
+    {
+        _showEditCardForm = false;
+        _showCreatePurchaseForm = false;
+        _purchaseFormErrors.Clear();
+        _cardFormError = null;
+        _editingDetails = null;
+        _editingAmount = null;
+        _editingDate = null;
+        _confirmDeletePurchaseId = null;
+        _confirmCardAction = CardLifecycleAction.None;
+    }
+
+    private void StartCreateCard()
+    {
+        CancelPanels();
+        _cardName = string.Empty;
+        _cardClosingDay = 3;
+        _cardDueDay = 12;
+        _cardLimit = null;
+    }
+
+    private void StartEditCard()
+    {
+        if (_activeCard is null)
+        {
+            return;
+        }
+
+        CancelPanels();
+        _cardName = _activeCard.Name ?? string.Empty;
+        _cardClosingDay = _activeCard.ClosingDay;
+        _cardDueDay = _activeCard.DueDay;
+        _cardLimit = _activeCard.Limit;
+        _showEditCardForm = true;
+    }
+
+    private async Task SaveCardAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _cardFormError = null;
+
+        if (_cardClosingDay is < 1 or > 28)
+        {
+            _cardFormError = "O dia de fechamento deve estar entre 1 e 28.";
+            return;
+        }
+
+        if (_cardDueDay is < 1 or > 28)
+        {
+            _cardFormError = "O dia de vencimento deve estar entre 1 e 28.";
+            return;
+        }
+
+        if (_cardLimit.HasValue && _cardLimit.Value <= 0m)
+        {
+            _cardFormError = "Se informado, o limite do cartão deve ser maior que zero.";
+            return;
+        }
+
+        var trimmedName = string.IsNullOrWhiteSpace(_cardName) ? null : _cardName.Trim();
+        _saving = true;
+
+        try
+        {
+            if (_activeCard is null)
+            {
+                var command = new CreateCreditCardCommand(
+                    AccountId,
+                    _cardClosingDay,
+                    _cardDueDay,
+                    trimmedName,
+                    _cardLimit);
+
+                var result = await Executor.ExecuteAsync<CreateCreditCardHandler, Guid>(
+                    (handler, ct) => handler.ExecuteAsync(command, ct),
+                    successMessage: "Cartão cadastrado.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    _hasManualCycleSelection = false;
+                    CancelPanels();
+                }
+            }
+            else
+            {
+                var command = new UpdateCreditCardCommand(
+                    _activeCard.Id,
+                    _cardClosingDay,
+                    _cardDueDay,
+                    trimmedName,
+                    _cardLimit);
+
+                var result = await Executor.ExecuteAsync<UpdateCreditCardHandler>(
+                    (handler, ct) => handler.ExecuteAsync(command, ct),
+                    successMessage: "Cartão atualizado.",
+                    cancellationToken: ComponentCancellationToken);
+
+                if (result.IsSuccess)
+                {
+                    _hasManualCycleSelection = false;
+                    CancelPanels();
+                }
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ArchiveCardAsync()
+    {
+        if (_saving || _activeCard is null)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var cardId = _activeCard.Id;
+            var result = await Executor.ExecuteAsync<ArchiveCreditCardHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(new ArchiveCreditCardCommand(cardId), ct),
+                successMessage: "Cartão arquivado. Você já pode cadastrar um novo cartão ativo.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _hasManualCycleSelection = false;
+                CancelPanels();
+                StartCreateCard();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteCardAsync()
+    {
+        if (_saving || _activeCard is null)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var cardId = _activeCard.Id;
+            var result = await Executor.ExecuteAsync<DeleteCreditCardHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteCreditCardCommand(cardId), ct),
+                successMessage: "Cartão excluído.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _hasManualCycleSelection = false;
+                CancelPanels();
+                StartCreateCard();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartCreatePurchase()
+    {
+        if (_activeCard is null)
+        {
+            return;
+        }
+
+        CancelPanels();
+        _activeTab = CardTab.Purchases;
+        _description = string.Empty;
+        _categoryId = ActiveCategories.FirstOrDefault()?.Id;
+        _amount = 0m;
+        _date = HearthFormat.ToDateTime(Clock.Today);
+        _installmentCount = 1;
+        _initialInstallment = 1;
+        _conditionKind = PurchaseConditionKind.Own;
+        _conditionName = string.Empty;
+        _showCreatePurchaseForm = true;
+    }
+
+    private async Task CreatePurchaseAsync()
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _purchaseFormErrors.Clear();
+
+        if (_activeCard is null)
+        {
+            _purchaseFormErrors.Add("Cadastre um cartão de crédito ativo antes de registrar compras.");
+        }
+
+        if (string.IsNullOrWhiteSpace(_description))
+        {
+            _purchaseFormErrors.Add("Informe uma descrição para a compra.");
+        }
+
+        if (!_categoryId.HasValue)
+        {
+            _purchaseFormErrors.Add("Selecione uma categoria.");
+        }
+
+        if (_amount <= 0m)
+        {
+            _purchaseFormErrors.Add("Informe um valor total maior que zero.");
+        }
+
+        if (!_date.HasValue)
+        {
+            _purchaseFormErrors.Add("Informe a data da compra.");
+        }
+
+        if (_installmentCount < 1)
+        {
+            _purchaseFormErrors.Add("A quantidade de parcelas deve ser pelo menos 1.");
+        }
+
+        if (_initialInstallment < 1 || _initialInstallment > _installmentCount)
+        {
+            _purchaseFormErrors.Add("A parcela inicial deve estar entre 1 e o total de parcelas.");
+        }
+
+        if (_conditionKind == PurchaseConditionKind.Custom && string.IsNullOrWhiteSpace(_conditionName))
+        {
+            _purchaseFormErrors.Add("Informe o nome da condição personalizada.");
+        }
+
+        if (_purchaseFormErrors.Count > 0)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var command = new RegisterCreditCardPurchaseCommand(
+                AccountId,
+                _activeCard!.Id,
+                HearthFormat.ToDateOnly(_date!.Value),
+                _amount,
+                _installmentCount,
+                _initialInstallment,
+                _conditionKind,
+                _conditionKind == PurchaseConditionKind.Custom ? _conditionName.Trim() : null,
+                _description.Trim(),
+                _categoryId!.Value);
+
+            var result = await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(command, ct),
+                successMessage: "Compra no cartão registrada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _showCreatePurchaseForm = false;
+                _purchaseFormErrors.Clear();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void SetConditionFilter((PurchaseConditionKind Kind, string? Name)? filter) =>
+        _conditionFilter = filter;
+
+    private bool IsSelectedFilter(PurchaseConditionKind kind, string? name) =>
+        _conditionFilter.HasValue
+        && _conditionFilter.Value.Kind == kind
+        && string.Equals(_conditionFilter.Value.Name, name, StringComparison.OrdinalIgnoreCase);
+
+    private bool MatchesFilter(CreditCardPurchaseDto purchase)
+    {
+        if (!_conditionFilter.HasValue)
+        {
+            return true;
+        }
+
+        var (kind, name) = _conditionFilter.Value;
+        return kind == PurchaseConditionKind.Custom
+            ? purchase.ConditionKind == PurchaseConditionKind.Custom
+              && string.Equals(purchase.ConditionName, name, StringComparison.OrdinalIgnoreCase)
+            : purchase.ConditionKind == kind;
+    }
+
+    private void ToggleExpand(Guid purchaseId) =>
+        _expandedPurchaseId = _expandedPurchaseId == purchaseId ? null : purchaseId;
+
+    private void StartEditDetails(CreditCardPurchaseDto purchase)
+    {
+        CancelPanels();
+        _editingDetails = purchase;
+        _editDescription = purchase.Description;
+        _editCategoryId = purchase.CategoryId;
+        _editConditionKind = purchase.ConditionKind;
+        _editConditionName = purchase.ConditionName ?? string.Empty;
+    }
+
+    private async Task SaveDetailsAsync()
+    {
+        if (_saving || _editingDetails is null || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var command = new UpdateCreditCardPurchaseDetailsCommand(
+                _editingDetails.Id,
+                _editDescription.Trim(),
+                _editCategoryId.Value,
+                _editConditionKind,
+                _editConditionKind == PurchaseConditionKind.Custom ? _editConditionName.Trim() : null);
+
+            var result = await Executor.ExecuteAsync<UpdateCreditCardPurchaseDetailsHandler>(
+                (handler, ct) => handler.ExecuteAsync(command, ct),
+                successMessage: "Detalhes da compra atualizados.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _editingDetails = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartEditAmount(CreditCardPurchaseDto purchase)
+    {
+        CancelPanels();
+        _editingAmount = purchase;
+        _editNewAmount = purchase.Amount;
+    }
+
+    private async Task SaveAmountAsync()
+    {
+        if (_saving || _editingAmount is null || _editNewAmount <= 0)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var id = _editingAmount.Id;
+            var result = await Executor.ExecuteAsync<UpdateCreditCardPurchaseAmountHandler>(
+                (handler, ct) => handler.ExecuteAsync(new UpdateCreditCardPurchaseAmountCommand(id, _editNewAmount), ct),
+                successMessage: "Valor da compra atualizado.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _editingAmount = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void StartEditDate(CreditCardPurchaseDto purchase)
+    {
+        CancelPanels();
+        _editingDate = purchase;
+        _editNewDate = HearthFormat.ToDateTime(purchase.Date);
+    }
+
+    private async Task SaveDateAsync()
+    {
+        if (_saving || _editingDate is null || !_editNewDate.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var id = _editingDate.Id;
+            var newDate = HearthFormat.ToDateOnly(_editNewDate.Value);
+            var result = await Executor.ExecuteAsync<UpdateCreditCardPurchaseDateHandler>(
+                (handler, ct) => handler.ExecuteAsync(new UpdateCreditCardPurchaseDateCommand(id, newDate), ct),
+                successMessage: "Data da compra atualizada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _editingDate = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeletePurchaseAsync(Guid purchaseId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteCreditCardPurchaseHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteCreditCardPurchaseCommand(purchaseId), ct),
+                successMessage: "Compra excluída.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeletePurchaseId = null;
+                if (_expandedPurchaseId == purchaseId)
+                {
+                    _expandedPurchaseId = null;
+                }
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private decimal? GetCreatePurchaseLimitExcess()
+    {
+        if (_activeCard?.Limit is not > 0m
+            || !_activeCard.AvailableLimit.HasValue
+            || _amount <= 0m
+            || !_date.HasValue
+            || _installmentCount < 1
+            || _initialInstallment < 1
+            || _initialInstallment > _installmentCount)
+        {
+            return null;
+        }
+
+        var rule = CardBillingRule.Of(_activeCard.ClosingDay, _activeCard.DueDay);
+        var firstCycle = BillingCycle.ForPurchase(HearthFormat.ToDateOnly(_date.Value), rule);
+        var splits = Money.FromDecimal(_amount).Split(_installmentCount);
+
+        var draftUsage = 0m;
+        for (var i = _initialInstallment - 1; i < splits.Count; i++)
+        {
+            if (firstCycle.AddCycles(i).DueDate > Clock.Today)
+            {
+                draftUsage += splits[i].Amount;
+            }
+        }
+
+        var excess = draftUsage - _activeCard.AvailableLimit.Value;
+        return excess > 0m ? excess : null;
+    }
+
+    private decimal? GetEditAmountLimitExcess()
+    {
+        if (_editingAmount is null
+            || _activeCard is null
+            || _activeCard.Id != _editingAmount.CreditCardId
+            || _activeCard.Limit is not > 0m
+            || !_activeCard.AvailableLimit.HasValue
+            || _editNewAmount <= 0m
+            || _editingAmount.InstallmentCount < 1)
+        {
+            return null;
+        }
+
+        var currentUsage = _editingAmount.Installments
+            .Where(i => !i.IsPreviouslyPaid && i.DueDate > Clock.Today)
+            .Sum(i => i.Amount);
+
+        var newSplits = Money.FromDecimal(_editNewAmount).Split(_editingAmount.InstallmentCount);
+        var newUsage = 0m;
+        for (var i = 0; i < _editingAmount.Installments.Count && i < newSplits.Count; i++)
+        {
+            var inst = _editingAmount.Installments[i];
+            if (!inst.IsPreviouslyPaid && inst.DueDate > Clock.Today)
+            {
+                newUsage += newSplits[i].Amount;
+            }
+        }
+
+        var delta = newUsage - currentUsage;
+        var excess = delta - _activeCard.AvailableLimit.Value;
+        return excess > 0m ? excess : null;
+    }
+
+    private string GetCategoryName(Guid categoryId) =>
+        _categoryNames.GetValueOrDefault(categoryId, "—");
+
+    private static string GetInvoiceStatusLabel(InvoiceStatus? status) =>
+        status switch
+        {
+            InvoiceStatus.Paid => "Paga",
+            InvoiceStatus.Closed => "Fechada",
+            _ => "Em aberto",
+        };
+
+    private static string GetInvoiceStatusPillClass(InvoiceStatus? status) =>
+        status switch
+        {
+            InvoiceStatus.Paid => "is-positive",
+            InvoiceStatus.Closed => "is-info",
+            _ => "is-warning",
+        };
+}

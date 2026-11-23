@@ -1,26 +1,28 @@
-<MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+<div class="hearth-month-nav" role="group" aria-label="Navegação de mês">
     <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
-                   Size="Size.Small"
-                   Variant="Variant.Outlined"
+                   Size="Size.Medium"
+                   Variant="Variant.Text"
+                   Class="hearth-month-nav-btn"
                    title="Mês anterior"
+                   aria-label="Mês anterior"
                    OnClick="PreviousMonthAsync"
                    Disabled="Disabled"
                    data-testid="month-prev" />
 
-    <MudText Typo="Typo.subtitle1"
-             Style="min-width: 168px; text-align: center; font-weight: 500;"
-             data-testid="month-label">
+    <span class="hearth-month-nav-label" aria-live="polite" data-testid="month-label">
         @HearthFormat.MonthYear(Month)
-    </MudText>
+    </span>
 
     <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
-                   Size="Size.Small"
-                   Variant="Variant.Outlined"
+                   Size="Size.Medium"
+                   Variant="Variant.Text"
+                   Class="hearth-month-nav-btn"
                    title="Próximo mês"
+                   aria-label="Próximo mês"
                    OnClick="NextMonthAsync"
                    Disabled="Disabled"
                    data-testid="month-next" />
-</MudStack>
+</div>
 
 @code
 {

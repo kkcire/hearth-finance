@@ -42,8 +42,6 @@ public sealed class MainLayoutTests : WebTestBase
         Assert.Contains("Conta Erick", cut.Markup);
         Assert.Contains("Painel", cut.Markup);
         Assert.Contains("Cartão", cut.Markup);
-        Assert.Contains("Faturas", cut.Markup);
-        Assert.Contains("Compras", cut.Markup);
         Assert.Contains("Lançamentos", cut.Markup);
         Assert.Contains("Planejamento", cut.Markup);
         Assert.Contains("Conta", cut.Markup);
