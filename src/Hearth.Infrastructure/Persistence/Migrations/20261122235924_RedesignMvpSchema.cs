@@ -13,52 +13,15 @@ namespace Hearth.Infrastructure.Persistence.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "fk_categories_accounts_account_id",
-                table: "categories");
-
-            migrationBuilder.DropTable(
-                name: "invoices");
-
-            migrationBuilder.DropIndex(
-                name: "ix_categories_account_id",
-                table: "categories");
-
-            migrationBuilder.DropIndex(
-                name: "ux_categories_account_id_normalized_name",
-                table: "categories");
-
-            migrationBuilder.DropColumn(
-                name: "account_id",
-                table: "categories");
-
-            migrationBuilder.DropColumn(
-                name: "closing_day",
-                table: "accounts");
-
-            migrationBuilder.DropColumn(
-                name: "due_day",
-                table: "accounts");
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "credit_card_id",
-                table: "credit_card_purchases",
-                type: "uuid",
-                nullable: false,
-                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
-
-            migrationBuilder.AddColumn<Guid>(
-                name: "owner_user_id",
-                table: "categories",
-                type: "uuid",
-                nullable: true);
-
             migrationBuilder.AddColumn<bool>(
                 name: "is_initial_balance_confirmed",
                 table: "accounts",
                 type: "boolean",
                 nullable: false,
                 defaultValue: false);
+
+            // Existing accounts already completed the previous onboarding flow.
+            migrationBuilder.Sql("UPDATE accounts SET is_initial_balance_confirmed = true;");
 
             migrationBuilder.CreateTable(
                 name: "credit_cards",
@@ -83,6 +46,68 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         onDelete: ReferentialAction.Restrict);
                 });
 
+            migrationBuilder.AddColumn<Guid>(
+                name: "credit_card_id",
+                table: "credit_card_purchases",
+                type: "uuid",
+                nullable: false,
+                defaultValue: new Guid("00000000-0000-0000-0000-000000000000"));
+
+            // Create a credit card from each account's legacy billing rule if that account has purchases,
+            // then link existing purchases to the created card before enforcing the foreign key.
+            migrationBuilder.Sql("""
+                INSERT INTO credit_cards (id, account_id, name, closing_day, due_day, "limit", is_archived)
+                SELECT gen_random_uuid(), a.id, 'Cartão Principal', a.closing_day, a.due_day, NULL, false
+                FROM accounts a
+                WHERE EXISTS (SELECT 1 FROM credit_card_purchases p WHERE p.account_id = a.id);
+
+                UPDATE credit_card_purchases p
+                SET credit_card_id = cc.id
+                FROM credit_cards cc
+                WHERE cc.account_id = p.account_id;
+                """);
+
+            // Backfill categories.owner_user_id from accounts before dropping categories.account_id.
+            migrationBuilder.AddColumn<Guid>(
+                name: "owner_user_id",
+                table: "categories",
+                type: "uuid",
+                nullable: true);
+
+            migrationBuilder.Sql("""
+                UPDATE categories c
+                SET owner_user_id = a.owner_user_id
+                FROM accounts a
+                WHERE c.account_id = a.id;
+                """);
+
+            migrationBuilder.DropForeignKey(
+                name: "fk_categories_accounts_account_id",
+                table: "categories");
+
+            migrationBuilder.DropIndex(
+                name: "ix_categories_account_id",
+                table: "categories");
+
+            migrationBuilder.DropIndex(
+                name: "ux_categories_account_id_normalized_name",
+                table: "categories");
+
+            migrationBuilder.DropColumn(
+                name: "account_id",
+                table: "categories");
+
+            migrationBuilder.DropTable(
+                name: "invoices");
+
+            migrationBuilder.DropColumn(
+                name: "closing_day",
+                table: "accounts");
+
+            migrationBuilder.DropColumn(
+                name: "due_day",
+                table: "accounts");
+
             migrationBuilder.InsertData(
                 table: "categories",
                 columns: new[] { "id", "is_archived", "name", "owner_user_id" },
@@ -97,6 +122,121 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     { new Guid("01900000-0000-7000-8000-000000000107"), false, "Compras", null },
                     { new Guid("01900000-0000-7000-8000-000000000108"), false, "Pessoal", null }
                 });
+
+            // Remap references from legacy per-account copies of the 8 default categories to the new global IDs,
+            // then deduplicate custom categories shared across multiple accounts of the same user.
+            migrationBuilder.Sql("""
+                UPDATE direct_expenses d
+                SET category_id = sys.id
+                FROM categories old_cat
+                JOIN categories sys ON sys.owner_user_id IS NULL AND sys.normalized_name = old_cat.normalized_name
+                WHERE d.category_id = old_cat.id AND old_cat.owner_user_id IS NOT NULL;
+
+                UPDATE fixed_expenses f
+                SET category_id = sys.id
+                FROM categories old_cat
+                JOIN categories sys ON sys.owner_user_id IS NULL AND sys.normalized_name = old_cat.normalized_name
+                WHERE f.category_id = old_cat.id AND old_cat.owner_user_id IS NOT NULL;
+
+                UPDATE credit_card_purchases p
+                SET category_id = sys.id
+                FROM categories old_cat
+                JOIN categories sys ON sys.owner_user_id IS NULL AND sys.normalized_name = old_cat.normalized_name
+                WHERE p.category_id = old_cat.id AND old_cat.owner_user_id IS NOT NULL;
+
+                UPDATE category_budgets b
+                SET category_id = sys.id
+                FROM categories old_cat
+                JOIN categories sys ON sys.owner_user_id IS NULL AND sys.normalized_name = old_cat.normalized_name
+                WHERE b.category_id = old_cat.id AND old_cat.owner_user_id IS NOT NULL;
+
+                DELETE FROM categories old_cat
+                USING categories sys
+                WHERE old_cat.owner_user_id IS NOT NULL
+                  AND sys.owner_user_id IS NULL
+                  AND sys.normalized_name = old_cat.normalized_name;
+
+                WITH canonical AS (
+                    SELECT owner_user_id, normalized_name, MIN(id::text)::uuid AS keep_id
+                    FROM categories
+                    WHERE owner_user_id IS NOT NULL
+                    GROUP BY owner_user_id, normalized_name
+                    HAVING COUNT(*) > 1
+                ),
+                duplicates AS (
+                    SELECT c.id AS old_id, can.keep_id
+                    FROM categories c
+                    JOIN canonical can
+                      ON can.owner_user_id = c.owner_user_id
+                     AND can.normalized_name = c.normalized_name
+                    WHERE c.id <> can.keep_id
+                )
+                UPDATE direct_expenses d SET category_id = dup.keep_id FROM duplicates dup WHERE d.category_id = dup.old_id;
+
+                WITH canonical AS (
+                    SELECT owner_user_id, normalized_name, MIN(id::text)::uuid AS keep_id
+                    FROM categories
+                    WHERE owner_user_id IS NOT NULL
+                    GROUP BY owner_user_id, normalized_name
+                    HAVING COUNT(*) > 1
+                ),
+                duplicates AS (
+                    SELECT c.id AS old_id, can.keep_id
+                    FROM categories c
+                    JOIN canonical can
+                      ON can.owner_user_id = c.owner_user_id
+                     AND can.normalized_name = c.normalized_name
+                    WHERE c.id <> can.keep_id
+                )
+                UPDATE fixed_expenses f SET category_id = dup.keep_id FROM duplicates dup WHERE f.category_id = dup.old_id;
+
+                WITH canonical AS (
+                    SELECT owner_user_id, normalized_name, MIN(id::text)::uuid AS keep_id
+                    FROM categories
+                    WHERE owner_user_id IS NOT NULL
+                    GROUP BY owner_user_id, normalized_name
+                    HAVING COUNT(*) > 1
+                ),
+                duplicates AS (
+                    SELECT c.id AS old_id, can.keep_id
+                    FROM categories c
+                    JOIN canonical can
+                      ON can.owner_user_id = c.owner_user_id
+                     AND can.normalized_name = c.normalized_name
+                    WHERE c.id <> can.keep_id
+                )
+                UPDATE credit_card_purchases p SET category_id = dup.keep_id FROM duplicates dup WHERE p.category_id = dup.old_id;
+
+                WITH canonical AS (
+                    SELECT owner_user_id, normalized_name, MIN(id::text)::uuid AS keep_id
+                    FROM categories
+                    WHERE owner_user_id IS NOT NULL
+                    GROUP BY owner_user_id, normalized_name
+                    HAVING COUNT(*) > 1
+                ),
+                duplicates AS (
+                    SELECT c.id AS old_id, can.keep_id
+                    FROM categories c
+                    JOIN canonical can
+                      ON can.owner_user_id = c.owner_user_id
+                     AND can.normalized_name = c.normalized_name
+                    WHERE c.id <> can.keep_id
+                )
+                UPDATE category_budgets b SET category_id = dup.keep_id FROM duplicates dup WHERE b.category_id = dup.old_id;
+
+                WITH canonical AS (
+                    SELECT owner_user_id, normalized_name, MIN(id::text)::uuid AS keep_id
+                    FROM categories
+                    WHERE owner_user_id IS NOT NULL
+                    GROUP BY owner_user_id, normalized_name
+                    HAVING COUNT(*) > 1
+                )
+                DELETE FROM categories c
+                USING canonical can
+                WHERE c.owner_user_id = can.owner_user_id
+                  AND c.normalized_name = can.normalized_name
+                  AND c.id <> can.keep_id;
+                """);
 
             migrationBuilder.CreateIndex(
                 name: "ix_credit_card_purchases_credit_card_id",
