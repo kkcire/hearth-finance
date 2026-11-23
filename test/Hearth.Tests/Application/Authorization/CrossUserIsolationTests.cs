@@ -114,7 +114,7 @@ public sealed class CrossUserIsolationTests
         await Assert.ThrowsAsync<NotFoundException>(() => new GetAccountHandler(userBGuard).ExecuteAsync(new GetAccountQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new RenameAccountHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new RenameAccountCommand(account.Id, "Hack")));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateInitialBalanceHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new UpdateInitialBalanceCommand(account.Id, 0m)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new ConfirmInitialBalanceHandler(userBGuard, _accounts, _clock, _unitOfWork).ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 0m, new DateOnly(2026, 11, 20))));
+        await Assert.ThrowsAsync<NotFoundException>(() => new ConfirmInitialBalanceHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 0m)));
 
         // Categories (custom category owned by User A)
         await Assert.ThrowsAsync<NotFoundException>(() => new RenameCategoryHandler(userBGuard, _categories, _unitOfWork).ExecuteAsync(new RenameCategoryCommand(category.Id, "Hack")));

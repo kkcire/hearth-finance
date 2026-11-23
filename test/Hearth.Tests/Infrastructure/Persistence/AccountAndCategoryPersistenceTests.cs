@@ -78,10 +78,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             Assert.Equal(new DateOnly(2026, 10, 1), loaded.InitialBalanceDate);
             Assert.False(loaded.IsInitialBalanceConfirmed);
 
-            loaded.ConfirmInitialBalance(
-                Money.FromDecimal(1200.00m),
-                new DateOnly(2026, 10, 5),
-                new DateOnly(2026, 10, 10));
+            loaded.ConfirmInitialBalance(Money.FromDecimal(1200.00m));
             loaded.Rename("Nubank");
             loaded.UpdateInitialBalance(Money.FromDecimal(1500.00m));
 
@@ -99,7 +96,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var reloaded = Assert.Single(owned);
             Assert.Equal("Nubank", reloaded.Name);
             Assert.Equal(Money.FromDecimal(1500.00m), reloaded.InitialBalance);
-            Assert.Equal(new DateOnly(2026, 10, 5), reloaded.InitialBalanceDate);
+            Assert.Equal(new DateOnly(2026, 10, 1), reloaded.InitialBalanceDate);
             Assert.True(reloaded.IsInitialBalanceConfirmed);
         }
     }
@@ -133,10 +130,11 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var handler = new CreateAccountHandler(
                 guard,
                 accounts,
+                new FakeClock(new DateOnly(2026, 10, 1)),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
 
             accountId = await handler.ExecuteAsync(new CreateAccountCommand(
-                "Principal", 500.00m, new DateOnly(2026, 10, 1)));
+                "Principal", 500.00m));
         }
 
         await using (var scope = _fixture.CreateScope())

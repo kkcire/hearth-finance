@@ -9,19 +9,23 @@ public sealed class CreateAccountHandler
 {
     private readonly AccountAccessGuard _accountAccess;
     private readonly IAccountRepository _accounts;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public CreateAccountHandler(
         AccountAccessGuard accountAccess,
         IAccountRepository accounts,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(accounts);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _accounts = accounts;
+        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -39,7 +43,7 @@ public sealed class CreateAccountHandler
             ownerUserId,
             command.Name,
             initialBalance,
-            command.InitialBalanceDate,
+            _clock.Today,
             command.IsInitialBalanceConfirmed);
 
         await _accounts.AddAsync(account, cancellationToken);

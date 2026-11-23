@@ -83,52 +83,36 @@ public class AccountTests
     }
 
     [Fact]
-    public void ConfirmInitialBalance_WithPastOrTodayDate_SetsBalanceDateAndLocksConfirmation()
+    public void ConfirmInitialBalance_SetsBalanceKeepsCreationDateAndLocksConfirmation()
     {
-        var today = new DateOnly(2026, 11, 22);
-        var account = NewAccount(initialBalance: 0m, initialDate: today, isConfirmed: false);
+        var createdOn = new DateOnly(2026, 11, 22);
+        var account = NewAccount(initialBalance: 0m, initialDate: createdOn, isConfirmed: false);
 
-        account.ConfirmInitialBalance(M(2500.50m), new DateOnly(2026, 11, 1), today);
+        account.ConfirmInitialBalance(M(2500.50m));
 
         Assert.Equal(M(2500.50m), account.InitialBalance);
-        Assert.Equal(new DateOnly(2026, 11, 1), account.InitialBalanceDate);
+        Assert.Equal(createdOn, account.InitialBalanceDate);
         Assert.True(account.IsInitialBalanceConfirmed);
-    }
-
-    [Fact]
-    public void ConfirmInitialBalance_WithFutureDate_ThrowsDomainExceptionAndLeavesUnconfirmed()
-    {
-        var today = new DateOnly(2026, 11, 22);
-        var account = NewAccount(initialBalance: 0m, initialDate: today, isConfirmed: false);
-
-        Assert.Throws<DomainException>(() =>
-            account.ConfirmInitialBalance(M(500m), new DateOnly(2026, 11, 23), today));
-
-        Assert.False(account.IsInitialBalanceConfirmed);
-        Assert.Equal(Money.Zero, account.InitialBalance);
-        Assert.Equal(today, account.InitialBalanceDate);
     }
 
     [Fact]
     public void ConfirmInitialBalance_WhenAlreadyConfirmed_ThrowsDomainException()
     {
-        var today = new DateOnly(2026, 11, 22);
         var account = NewAccount(initialBalance: 100m, initialDate: new DateOnly(2026, 11, 1), isConfirmed: true);
 
-        Assert.Throws<DomainException>(() =>
-            account.ConfirmInitialBalance(M(200m), new DateOnly(2026, 11, 5), today));
+        Assert.Throws<DomainException>(() => account.ConfirmInitialBalance(M(200m)));
     }
 
     [Fact]
-    public void SkipInitialBalance_SetsZeroFromTodayAndMarksConfirmed()
+    public void SkipInitialBalance_SetsZeroKeepsCreationDateAndMarksConfirmed()
     {
-        var today = new DateOnly(2026, 11, 22);
-        var account = NewAccount(initialBalance: 100m, initialDate: new DateOnly(2026, 10, 1), isConfirmed: false);
+        var createdOn = new DateOnly(2026, 11, 22);
+        var account = NewAccount(initialBalance: 100m, initialDate: createdOn, isConfirmed: false);
 
-        account.SkipInitialBalance(today);
+        account.SkipInitialBalance();
 
         Assert.Equal(Money.Zero, account.InitialBalance);
-        Assert.Equal(today, account.InitialBalanceDate);
+        Assert.Equal(createdOn, account.InitialBalanceDate);
         Assert.True(account.IsInitialBalanceConfirmed);
     }
 

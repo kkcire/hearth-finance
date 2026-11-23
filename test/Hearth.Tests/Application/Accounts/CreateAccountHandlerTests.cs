@@ -11,24 +11,24 @@ public class CreateAccountHandlerTests
     private readonly InMemoryAccountRepository _accounts = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
+    private readonly FakeClock _clock = new(new DateOnly(2026, 10, 1));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly CreateAccountHandler _handler;
 
     public CreateAccountHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new CreateAccountHandler(_accountAccess, _accounts, _unitOfWork);
+        _handler = new CreateAccountHandler(_accountAccess, _accounts, _clock, _unitOfWork);
     }
 
     private static CreateAccountCommand ValidCommand(
         string name = "Conta principal",
         decimal initialBalance = 1500.00m,
-        DateOnly? initialBalanceDate = null,
         bool isConfirmed = true) =>
-        new(name, initialBalance, initialBalanceDate ?? new DateOnly(2026, 10, 1), isConfirmed);
+        new(name, initialBalance, isConfirmed);
 
     [Fact]
-    public async Task ExecuteAsync_ValidCommand_CreatesPersistsAndReturnsAccountId()
+    public async Task ExecuteAsync_ValidCommand_CreatesWithCreationDatePersistsAndReturnsAccountId()
     {
         var command = ValidCommand(name: "  Nubank  ", initialBalance: 2345.67m);
 
@@ -43,7 +43,7 @@ public class CreateAccountHandlerTests
         Assert.Equal(FakeCurrentUser.DefaultUserId, saved.OwnerUserId);
         Assert.Equal("Nubank", saved.Name);
         Assert.Equal(Money.FromDecimal(2345.67m), saved.InitialBalance);
-        Assert.Equal(new DateOnly(2026, 10, 1), saved.InitialBalanceDate);
+        Assert.Equal(_clock.Today, saved.InitialBalanceDate);
         Assert.True(saved.IsInitialBalanceConfirmed);
     }
 
@@ -72,8 +72,9 @@ public class CreateAccountHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _accounts, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, _accounts, null!));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(null!, _accounts, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, _accounts, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new CreateAccountHandler(_accountAccess, _accounts, _clock, null!));
     }
 }

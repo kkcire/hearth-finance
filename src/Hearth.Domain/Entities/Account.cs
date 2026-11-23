@@ -42,10 +42,10 @@ public sealed class Account
     public Money InitialBalance { get; private set; }
 
     /// <summary>
-    /// The date the initial balance refers to. No entry can be registered before it, except the
-    /// earlier installments of purchases already in progress. It becomes immutable once confirmed.
+    /// The account creation date (reference date of the initial balance). No entry can be registered
+    /// before it, except the earlier installments of purchases already in progress. Always immutable.
     /// </summary>
-    public DateOnly InitialBalanceDate { get; private set; }
+    public DateOnly InitialBalanceDate { get; }
 
     /// <summary>
     /// True once the user has either confirmed or explicitly skipped the initial balance setup.
@@ -88,12 +88,10 @@ public sealed class Account
     }
 
     /// <summary>
-    /// Completes the one-time initial balance setup, locking <see cref="InitialBalanceDate"/>.
+    /// Completes the one-time initial balance setup using the account's creation date.
     /// </summary>
-    /// <exception cref="DomainException">
-    /// The initial balance was already confirmed, or <paramref name="initialBalanceDate"/> is in the future.
-    /// </exception>
-    public void ConfirmInitialBalance(Money initialBalance, DateOnly initialBalanceDate, DateOnly today)
+    /// <exception cref="DomainException">The initial balance was already confirmed.</exception>
+    public void ConfirmInitialBalance(Money initialBalance)
     {
         if (IsInitialBalanceConfirmed)
         {
@@ -101,22 +99,16 @@ public sealed class Account
                 "The initial balance has already been confirmed. Use UpdateInitialBalance to change the amount.");
         }
 
-        if (initialBalanceDate > today)
-        {
-            throw new DomainException("The initial balance date cannot be in the future.");
-        }
-
         InitialBalance = initialBalance;
-        InitialBalanceDate = initialBalanceDate;
         IsInitialBalanceConfirmed = true;
     }
 
     /// <summary>
-    /// Skips the initial balance setup by recording zero starting from <paramref name="today"/>.
+    /// Skips the initial balance setup by recording zero starting from the account's creation date.
     /// </summary>
-    public void SkipInitialBalance(DateOnly today)
+    public void SkipInitialBalance()
     {
-        ConfirmInitialBalance(Money.Zero, today, today);
+        ConfirmInitialBalance(Money.Zero);
     }
 
     public void Rename(string name)

@@ -10,16 +10,17 @@ namespace Hearth.Tests.Application.Accounts;
 
 public sealed class ConfirmInitialBalanceHandlerTests
 {
+    private static readonly DateOnly CreatedDate = new(2026, 11, 22);
+
     private readonly InMemoryAccountRepository _accounts = new();
     private readonly FakeCurrentUser _currentUser = new();
-    private readonly FakeClock _clock = new(new DateOnly(2026, 11, 22));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly ConfirmInitialBalanceHandler _handler;
 
     public ConfirmInitialBalanceHandlerTests()
     {
         var guard = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new ConfirmInitialBalanceHandler(guard, _accounts, _clock, _unitOfWork);
+        _handler = new ConfirmInitialBalanceHandler(guard, _accounts, _unitOfWork);
     }
 
     private async Task<Account> SeedUnconfirmedAccountAsync()
@@ -29,59 +30,45 @@ public sealed class ConfirmInitialBalanceHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta Principal",
             Money.Zero,
-            _clock.Today,
+            CreatedDate,
             isInitialBalanceConfirmed: false);
         await _accounts.AddAsync(account);
         return account;
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithValidBalanceAndPastDate_ConfirmsAndSaves()
+    public async Task ExecuteAsync_WithValidBalance_ConfirmsKeepsCreationDateAndSaves()
     {
         var account = await SeedUnconfirmedAccountAsync();
 
-        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(
-            account.Id, 2450.75m, new DateOnly(2026, 11, 1)));
+        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 2450.75m));
 
         Assert.Equal(Money.FromDecimal(2450.75m), account.InitialBalance);
-        Assert.Equal(new DateOnly(2026, 11, 1), account.InitialBalanceDate);
+        Assert.Equal(CreatedDate, account.InitialBalanceDate);
         Assert.True(account.IsInitialBalanceConfirmed);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithSkipTrue_SetsZeroFromTodayAndMarksConfirmed()
+    public async Task ExecuteAsync_WithSkipTrue_SetsZeroKeepsCreationDateAndMarksConfirmed()
     {
         var account = await SeedUnconfirmedAccountAsync();
 
-        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(
-            account.Id, 999m, new DateOnly(2026, 10, 1), Skip: true));
+        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 999m, Skip: true));
 
         Assert.Equal(Money.Zero, account.InitialBalance);
-        Assert.Equal(_clock.Today, account.InitialBalanceDate);
+        Assert.Equal(CreatedDate, account.InitialBalanceDate);
         Assert.True(account.IsInitialBalanceConfirmed);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_WithFutureDate_ThrowsDomainExceptionAndDoesNotSave()
-    {
-        var account = await SeedUnconfirmedAccountAsync();
-
-        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new ConfirmInitialBalanceCommand(account.Id, 100m, new DateOnly(2026, 11, 23))));
-
-        Assert.False(account.IsInitialBalanceConfirmed);
-        Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
     [Fact]
     public async Task ExecuteAsync_WhenAlreadyConfirmed_ThrowsDomainException()
     {
         var account = await SeedUnconfirmedAccountAsync();
-        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 0m, _clock.Today, Skip: true));
+        await _handler.ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 0m, Skip: true));
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new ConfirmInitialBalanceCommand(account.Id, 500m, _clock.Today)));
+            new ConfirmInitialBalanceCommand(account.Id, 500m)));
     }
 }

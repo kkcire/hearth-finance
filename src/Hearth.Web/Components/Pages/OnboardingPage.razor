@@ -47,18 +47,6 @@
                                      Disabled="_saving"
                                      data-testid="initial-balance-input" />
 
-                    <MudDatePicker @bind-Date="_initialBalanceDate"
-                                   Label="Data do saldo inicial"
-                                   Variant="Variant.Outlined"
-                                   DateFormat="dd/MM/yyyy"
-                                   Culture="@HearthFormat.PtBr"
-                                   Editable="true"
-                                   Required="true"
-                                   RequiredError="Informe a data do saldo inicial."
-                                   HelperText="A data do saldo inicial não poderá ser alterada depois de criada."
-                                   Disabled="_saving"
-                                   data-testid="initial-balance-date-input" />
-
                     @if (!string.IsNullOrWhiteSpace(_errorMessage))
                     {
                         <MudAlert Severity="Severity.Warning" data-testid="onboarding-error">
@@ -104,15 +92,12 @@
     private MudForm? _form;
     private string _name = string.Empty;
     private decimal _initialBalance;
-    private DateTime? _initialBalanceDate;
     private bool _saving;
     private string? _errorMessage;
     private string? _userName;
 
     protected override async Task OnInitializedAsync()
     {
-        _initialBalanceDate = HearthFormat.ToDateTime(Clock.Today);
-
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         if (HearthAuth.TryReadUser(authState.User, out _, out var name, out _))
         {
@@ -144,20 +129,13 @@
             return;
         }
 
-        if (!_initialBalanceDate.HasValue)
-        {
-            _errorMessage = "Informe a data do saldo inicial.";
-            return;
-        }
-
         _saving = true;
 
         try
         {
             var command = new CreateAccountCommand(
                 _name.Trim(),
-                _initialBalance,
-                HearthFormat.ToDateOnly(_initialBalanceDate.Value));
+                _initialBalance);
 
             var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
                 (handler, ct) => handler.ExecuteAsync(command, ct),

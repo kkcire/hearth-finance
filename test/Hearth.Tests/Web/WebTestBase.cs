@@ -85,21 +85,22 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         bool initializeContext = true)
     {
         var date = initialBalanceDate ?? new DateOnly(2026, 1, 1);
+        var account = Hearth.Domain.Entities.Account.Create(
+            Guid.CreateVersion7(),
+            CurrentUser.UserId!.Value,
+            name,
+            Hearth.Domain.ValueObjects.Money.FromDecimal(initialBalance),
+            date,
+            isInitialBalanceConfirmed: true);
 
-        var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
-            (handler, ct) => handler.ExecuteAsync(
-                new CreateAccountCommand(name, initialBalance, date),
-                ct),
-            showErrorSnackbar: false);
-
-        Assert.True(result.IsSuccess, result.ErrorMessage);
+        await Accounts.AddAsync(account);
 
         if (initializeContext)
         {
-            await AccountContext.ReloadAsync(result.Value);
+            await AccountContext.ReloadAsync(account.Id);
         }
 
-        return result.Value;
+        return account.Id;
     }
 
     protected async Task<Guid> SeedCreditCardAsync(
