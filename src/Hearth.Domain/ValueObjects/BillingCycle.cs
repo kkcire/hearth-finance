@@ -41,17 +41,41 @@ public sealed record BillingCycle
     public DateOnly EndDate => ClosingDate.AddDays(-1);
 
     /// <summary>
+    /// The calendar month in which the invoice is due: the closing month when the due day
+    /// comes after the closing day, and the following month otherwise.
+    /// </summary>
+    public YearMonth DueMonth =>
+        Rule.DueDay > Rule.ClosingDay ? ClosingMonth : ClosingMonth.AddMonths(1);
+
+    /// <summary>
     /// The date the invoice is due: the first occurrence of the due day after the closing date.
-    /// It is in the closing month when the due day comes after the closing day, and in the
-    /// following month otherwise (including when both days are equal).
     /// </summary>
     public DateOnly DueDate
     {
         get
         {
-            var dueMonth = Rule.DueDay > Rule.ClosingDay ? ClosingMonth : ClosingMonth.AddMonths(1);
+            var dueMonth = DueMonth;
             return new DateOnly(dueMonth.Year, dueMonth.Month, Rule.DueDay);
         }
+    }
+
+    /// <summary>
+    /// Derives the lifecycle status of this billing cycle on <paramref name="today"/>:
+    /// open before closing, closed from closing until due, and paid from the due date onward.
+    /// </summary>
+    public InvoiceStatus GetStatus(DateOnly today)
+    {
+        if (today >= DueDate)
+        {
+            return InvoiceStatus.Paid;
+        }
+
+        if (today >= ClosingDate)
+        {
+            return InvoiceStatus.Closed;
+        }
+
+        return InvoiceStatus.Open;
     }
 
     /// <summary>Returns the cycle that closes in the given month.</summary>

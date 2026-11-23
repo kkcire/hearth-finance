@@ -9,19 +9,23 @@ public sealed class RegisterIncomeHandler
 {
     private readonly AccountAccessGuard _accountAccess;
     private readonly IIncomeRepository _incomes;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterIncomeHandler(
         AccountAccessGuard accountAccess,
         IIncomeRepository incomes,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(incomes);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _incomes = incomes;
+        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -51,7 +55,7 @@ public sealed class RegisterIncomeHandler
 
         if (command.ReceivedOn is { } received)
         {
-            income.MarkAsReceived(received);
+            income.MarkAsReceived(received, _clock.Today);
         }
 
         await _incomes.AddAsync(income, cancellationToken);

@@ -2,6 +2,7 @@ using Hearth.Application.Accounts.UpdateInitialBalance;
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
 using Xunit;
@@ -22,17 +23,33 @@ public class UpdateInitialBalanceHandlerTests
         _handler = new UpdateInitialBalanceHandler(_accountAccess, _accounts, _unitOfWork);
     }
 
-    private async Task<Account> SeedAccountAsync(decimal initialBalance = 1000.00m)
+    private async Task<Account> SeedAccountAsync(
+        decimal initialBalance = 1000.00m,
+        bool isConfirmed = true)
     {
         var account = Account.Create(
             Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(initialBalance),
-            new DateOnly(2026, 10, 1));
+            new DateOnly(2026, 10, 1),
+            isConfirmed);
 
         await _accounts.AddAsync(account);
         return account;
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnconfirmedAccount_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        var account = await SeedAccountAsync(1000.00m, isConfirmed: false);
+
+        await Assert.ThrowsAsync<DomainException>(
+            () => _handler.ExecuteAsync(new UpdateInitialBalanceCommand(account.Id, 2500.00m)));
+
+        Assert.Equal(Money.FromDecimal(1000.00m), account.InitialBalance);
+        Assert.Equal(0, _accounts.UpdateCount);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
     [Theory]

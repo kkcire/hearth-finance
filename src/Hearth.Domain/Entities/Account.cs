@@ -42,8 +42,9 @@ public sealed class Account
     public Money InitialBalance { get; private set; }
 
     /// <summary>
-    /// The account creation date (reference date of the initial balance). No entry can be registered
-    /// before it, except the earlier installments of purchases already in progress. Always immutable.
+    /// The account creation date (reference date of the initial balance). Direct cash movements
+    /// cannot be registered before it; credit card purchases are validated by their first active
+    /// installment due date. Always immutable.
     /// </summary>
     public DateOnly InitialBalanceDate { get; }
 
@@ -118,9 +119,17 @@ public sealed class Account
 
     /// <summary>
     /// Corrects the initial balance amount. The date is kept, so no registered entry becomes invalid.
+    /// Requires the initial balance to have been confirmed or skipped first.
     /// </summary>
+    /// <exception cref="DomainException">The initial balance has not been confirmed or skipped yet.</exception>
     public void UpdateInitialBalance(Money newInitialBalance)
     {
+        if (!IsInitialBalanceConfirmed)
+        {
+            throw new DomainException(
+                "The initial balance must be confirmed or skipped before it can be updated.");
+        }
+
         InitialBalance = newInitialBalance;
     }
 }

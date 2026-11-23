@@ -132,13 +132,13 @@ public class CategorySpendingCalculatorTests
         Assert.Equal(FoodCategoryId, item.CategoryId);
         Assert.Equal(M(120.50m), item.DirectExpenses);
         Assert.Equal(M(300.00m), item.FixedExpenses);
-        Assert.Equal(M(33.33m), item.CardInstallments);
-        Assert.Equal(M(453.83m), item.Total);
+        Assert.Equal(M(33.34m), item.CardInstallments);
+        Assert.Equal(M(453.84m), item.Total);
 
         Assert.Equal(M(120.50m), result.DirectExpenses);
         Assert.Equal(M(300.00m), result.FixedExpenses);
-        Assert.Equal(M(33.33m), result.CardInstallments);
-        Assert.Equal(M(453.83m), result.Total);
+        Assert.Equal(M(33.34m), result.CardInstallments);
+        Assert.Equal(M(453.84m), result.Total);
     }
 
     [Fact]
@@ -161,7 +161,7 @@ public class CategorySpendingCalculatorTests
     {
         var rent = NewFixed(YM(2026, 1), null, 1000.00m, ServicesCategoryId);
         rent.ChangeAmount(M(1200.00m), Day(2026, 7, 10));
-        rent.MarkAsPaid(YM(2026, 7), Day(2026, 8, 2));
+        rent.MarkAsPaid(YM(2026, 7), Day(2026, 8, 2), Day(2026, 12, 31));
 
         var june = Calc(YM(2026, 6), fixedExpenses: new[] { rent });
         var july = Calc(YM(2026, 7), fixedExpenses: new[] { rent });
@@ -259,6 +259,20 @@ public class CategorySpendingCalculatorTests
         Assert.Equal(Money.Zero, onlyDirect.FixedExpenses);
         Assert.Equal(Money.Zero, onlyDirect.CardInstallments);
         Assert.Equal(FoodCategoryId, Assert.Single(onlyDirect.Categories).CategoryId);
+
+        var onlyFixed = Calc(
+            YM(2026, 11),
+            direct: new[] { direct },
+            fixedExpenses: new[] { fixedExpense },
+            purchases: new[] { purchase },
+            includeDirect: false,
+            includeFixed: true,
+            includeCard: false);
+
+        Assert.Equal(Money.Zero, onlyFixed.DirectExpenses);
+        Assert.Equal(M(200.00m), onlyFixed.FixedExpenses);
+        Assert.Equal(Money.Zero, onlyFixed.CardInstallments);
+        Assert.Equal(ServicesCategoryId, Assert.Single(onlyFixed.Categories).CategoryId);
 
         var none = Calc(
             YM(2026, 11),
@@ -450,7 +464,7 @@ public class CategorySpendingCalculatorTests
                 accountId);
             if (random.Next(2) == 0)
             {
-                fixedExpense.MarkAsPaid(start, Day(2026, 1, 1).AddDays(random.Next(0, 700)));
+                fixedExpense.MarkAsPaid(start, Day(2026, 1, 1).AddDays(random.Next(0, 700)), Day(2028, 12, 31));
             }
 
             fixeds.Add(fixedExpense);

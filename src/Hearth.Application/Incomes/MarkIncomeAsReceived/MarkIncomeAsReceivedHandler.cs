@@ -9,19 +9,23 @@ public sealed class MarkIncomeAsReceivedHandler
 {
     private readonly AccountAccessGuard _accountAccess;
     private readonly IIncomeRepository _incomes;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public MarkIncomeAsReceivedHandler(
         AccountAccessGuard accountAccess,
         IIncomeRepository incomes,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(incomes);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _incomes = incomes;
+        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -41,7 +45,7 @@ public sealed class MarkIncomeAsReceivedHandler
 
         account.EnsureCanRegisterOn(command.ReceivedOn);
 
-        var changed = income.MarkAsReceived(command.ReceivedOn);
+        var changed = income.MarkAsReceived(command.ReceivedOn, _clock.Today);
 
         if (changed)
         {

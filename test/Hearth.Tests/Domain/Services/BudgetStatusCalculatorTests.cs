@@ -114,4 +114,75 @@ public class BudgetStatusCalculatorTests
             Array.Empty<FixedExpense>(),
             Array.Empty<CreditCardPurchase>()));
     }
+
+    [Fact]
+    public void Calculate_GuardClauses_RejectEmptyAndNullArguments()
+    {
+        var month = YM(2026, 11);
+
+        Assert.Throws<ArgumentException>(() => BudgetStatusCalculator.Calculate(Guid.Empty, month, [], [], [], []));
+        Assert.Throws<ArgumentNullException>(() => BudgetStatusCalculator.Calculate(AccountId, null!, [], [], [], []));
+        Assert.Throws<ArgumentNullException>(() => BudgetStatusCalculator.Calculate(AccountId, month, null!, [], [], []));
+        Assert.Throws<ArgumentNullException>(() => BudgetStatusCalculator.Calculate(AccountId, month, [], null!, [], []));
+        Assert.Throws<ArgumentNullException>(() => BudgetStatusCalculator.Calculate(AccountId, month, [], [], null!, []));
+        Assert.Throws<ArgumentNullException>(() => BudgetStatusCalculator.Calculate(AccountId, month, [], [], [], null!));
+    }
+
+    [Fact]
+    public void Calculate_RespectsSourceFlags_Exact100PercentNotExceeded_AwayFromZeroRounding_AndTieBreakers()
+    {
+        // Exact 100% (Food: 200/200 -> IsExceeded == false)
+        var foodBudget = CategoryBudget.Create(Guid.NewGuid(), AccountId, FoodId, YM(2026, 1), null, M(200m));
+        // Midpoint rounding AwayFromZero: 1 / 800 = 0.125% -> 0.13m (ToEven would give 0.12m)
+        var transportBudget = CategoryBudget.Create(Guid.NewGuid(), AccountId, TransportId, YM(2026, 1), null, M(800m));
+        // Tie on UsagePercentage (100%) with higher SpentAmount (Leisure: 300/300 comes before Food: 200/200)
+        var leisureBudget = CategoryBudget.Create(Guid.NewGuid(), AccountId, LeisureId, YM(2026, 1), null, M(300m));
+
+        var directFood = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 5), M(200m), "Mercado", FoodId);
+        var fixedTransport = FixedExpense.Create(Guid.NewGuid(), AccountId, YM(2026, 1), null, M(1m), "Taxa", TransportId);
+        var cardLeisure = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(300m), 1, 1, Rule3, PurchaseCondition.Own, "Show", LeisureId);
+
+        var status = BudgetStatusCalculator.Calculate(
+            AccountId,
+            YM(2026, 11),
+            [foodBudget, transportBudget, leisureBudget],
+            [directFood],
+            [fixedTransport],
+            [cardLeisure]);
+
+        // Order: Leisure (100%, 300) > Food (100%, 200) > Transport (0.13%, 1)
+        Assert.Equal(LeisureId, status.Items[0].CategoryId);
+        Assert.False(status.Items[0].IsExceeded);
+        Assert.Equal(100.00m, status.Items[0].UsagePercentage);
+
+        Assert.Equal(FoodId, status.Items[1].CategoryId);
+        Assert.False(status.Items[1].IsExceeded);
+        Assert.Equal(100.00m, status.Items[1].UsagePercentage);
+
+        Assert.Equal(TransportId, status.Items[2].CategoryId);
+        Assert.Equal(0.13m, status.Items[2].UsagePercentage);
+
+        // Source flags disabled
+        var onlyFixed = BudgetStatusCalculator.Calculate(
+            AccountId,
+            YM(2026, 11),
+            [foodBudget, transportBudget, leisureBudget],
+            [directFood],
+            [fixedTransport],
+            [cardLeisure],
+            includeDirectExpenses: false,
+            includeFixedExpenses: true,
+            includeCardInstallments: false);
+
+        Assert.Equal(M(1m), onlyFixed.TotalSpent);
+
+        // Structural equality & GetHashCode on BudgetStatus
+        var same = BudgetStatusCalculator.Calculate(
+            AccountId, YM(2026, 11), [foodBudget, transportBudget, leisureBudget],
+            [directFood], [fixedTransport], [cardLeisure]);
+        Assert.Equal(status, same);
+        Assert.Equal(status.GetHashCode(), same.GetHashCode());
+        Assert.NotEqual(status, onlyFixed);
+    }
 }

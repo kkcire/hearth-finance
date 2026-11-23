@@ -15,9 +15,9 @@ public static class ProjectedResultCalculator
     /// </summary>
     /// <remarks>
     /// Incomes count by their expected date, even if they are not received yet. The invoice is the
-    /// one of the cycle closing in the month, calculated from the installments, never the amount
-    /// charged by the bank. Direct expenses count by their date. Fixed expenses count when active in
-    /// the month, at the amount of that month, whether or not they were paid.
+    /// derived sum of installments in the cycle closing in the month. Direct expenses count by their
+    /// date. Fixed expenses count when active in the month, at the amount of that month, whether or
+    /// not they were paid.
     /// </remarks>
     public static ProjectedResult Calculate(
         Guid accountId,

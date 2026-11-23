@@ -43,8 +43,8 @@ public class ListFixedExpensesHandlerTests
         var rent = FixedExpense.Create(
             Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", Guid.NewGuid());
         rent.ChangeAmount(Money.FromDecimal(1200.00m), new DateOnly(2026, 7, 10));
-        rent.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 5));
-        rent.MarkAsPaid(YearMonth.Of(2026, 6), new DateOnly(2026, 6, 5));
+        rent.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 5), new DateOnly(2026, 12, 31));
+        rent.MarkAsPaid(YearMonth.Of(2026, 6), new DateOnly(2026, 6, 5), new DateOnly(2026, 12, 31));
 
         var internet = FixedExpense.Create(
             Guid.NewGuid(), account.Id, YearMonth.Of(2026, 5), YearMonth.Of(2026, 12), Money.FromDecimal(99.90m), "Internet", Guid.NewGuid());

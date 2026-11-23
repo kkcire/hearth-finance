@@ -119,7 +119,7 @@ public class ProjectedResultCalculatorTests
     {
         var expected = NewIncome(Day(2026, 11, 5), 100.00m);
         var received = NewIncome(Day(2026, 11, 5), 100.00m);
-        received.MarkAsReceived(Day(2026, 11, 5));
+        received.MarkAsReceived(Day(2026, 11, 5), Day(2026, 12, 31));
 
         Assert.Equal(M(100.00m), Calc(YM(2026, 11), incomes: new[] { expected }).Incomes);
         Assert.Equal(M(100.00m), Calc(YM(2026, 11), incomes: new[] { received }).Incomes);
@@ -131,7 +131,7 @@ public class ProjectedResultCalculatorTests
     {
         // Expected on 28/10, received on 02/11: October by accrual.
         var income = NewIncome(Day(2026, 10, 28), 5000.00m);
-        income.MarkAsReceived(Day(2026, 11, 2));
+        income.MarkAsReceived(Day(2026, 11, 2), Day(2026, 12, 31));
 
         Assert.Equal(M(5000.00m), Calc(YM(2026, 10), incomes: new[] { income }).Incomes);
         Assert.Equal(Money.Zero, Calc(YM(2026, 11), incomes: new[] { income }).Incomes);
@@ -194,7 +194,7 @@ public class ProjectedResultCalculatorTests
     {
         var unpaid = NewFixed(YM(2026, 1), null, 1000.00m);
         var paid = NewFixed(YM(2026, 1), null, 1000.00m);
-        paid.MarkAsPaid(YM(2026, 10), Day(2026, 10, 5));
+        paid.MarkAsPaid(YM(2026, 10), Day(2026, 10, 5), Day(2026, 12, 31));
 
         Assert.Equal(M(1000.00m), Calc(YM(2026, 10), fixedExpenses: new[] { unpaid }).FixedExpenses);
         Assert.Equal(M(1000.00m), Calc(YM(2026, 10), fixedExpenses: new[] { paid }).FixedExpenses);
@@ -205,7 +205,7 @@ public class ProjectedResultCalculatorTests
     {
         // October's expense paid on 02/11: October by accrual.
         var expense = NewFixed(YM(2026, 1), YM(2026, 10), 1000.00m);
-        expense.MarkAsPaid(YM(2026, 10), Day(2026, 11, 2));
+        expense.MarkAsPaid(YM(2026, 10), Day(2026, 11, 2), Day(2026, 12, 31));
 
         Assert.Equal(M(1000.00m), Calc(YM(2026, 10), fixedExpenses: new[] { expense }).FixedExpenses);
         Assert.Equal(Money.Zero, Calc(YM(2026, 11), fixedExpenses: new[] { expense }).FixedExpenses);
@@ -245,9 +245,9 @@ public class ProjectedResultCalculatorTests
         var purchases = new[] { purchase };
 
         Assert.Equal(Money.Zero, Calc(YM(2026, 10), purchases: purchases).CardInvoice);
-        Assert.Equal(M(33.33m), Calc(YM(2026, 11), purchases: purchases).CardInvoice);
+        Assert.Equal(M(33.34m), Calc(YM(2026, 11), purchases: purchases).CardInvoice);
         Assert.Equal(M(33.33m), Calc(YM(2026, 12), purchases: purchases).CardInvoice);
-        Assert.Equal(M(33.34m), Calc(YM(2027, 1), purchases: purchases).CardInvoice);
+        Assert.Equal(M(33.33m), Calc(YM(2027, 1), purchases: purchases).CardInvoice);
         Assert.Equal(Money.Zero, Calc(YM(2027, 2), purchases: purchases).CardInvoice);
     }
 
@@ -354,9 +354,9 @@ public class ProjectedResultCalculatorTests
     public void Calculate_UsesCompetenceDates_NotPaymentOrReceiptDates()
     {
         var income = NewIncome(Day(2026, 10, 28), 5000.00m);
-        income.MarkAsReceived(Day(2026, 11, 2));
+        income.MarkAsReceived(Day(2026, 11, 2), Day(2026, 12, 31));
         var rent = NewFixed(YM(2026, 10), YM(2026, 10), 1000.00m);
-        rent.MarkAsPaid(YM(2026, 10), Day(2026, 11, 2));
+        rent.MarkAsPaid(YM(2026, 10), Day(2026, 11, 2), Day(2026, 12, 31));
 
         var october = Calc(YM(2026, 10), incomes: new[] { income }, fixedExpenses: new[] { rent });
         var november = Calc(YM(2026, 11), incomes: new[] { income }, fixedExpenses: new[] { rent });
@@ -439,7 +439,7 @@ public class ProjectedResultCalculatorTests
             var income = NewIncome(RandomDate(random), RandomAmount(random), accountId: accountId);
             if (random.Next(2) == 0)
             {
-                income.MarkAsReceived(RandomDate(random));
+                income.MarkAsReceived(RandomDate(random), Day(2028, 12, 31));
             }
 
             incomes.Add(income);
@@ -461,7 +461,7 @@ public class ProjectedResultCalculatorTests
 
             if (random.Next(2) == 0)
             {
-                fixedExpense.MarkAsPaid(start, RandomDate(random));
+                fixedExpense.MarkAsPaid(start, RandomDate(random), Day(2028, 12, 31));
             }
 
             fixeds.Add(fixedExpense);

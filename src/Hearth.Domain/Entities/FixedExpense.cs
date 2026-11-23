@@ -55,11 +55,14 @@ public sealed class FixedExpense
 
     /// <summary>Amounts in order of effective month. The first entry always starts at <see cref="StartMonth"/>.</summary>
     public IReadOnlyList<AmountChange> AmountHistory =>
-        _amountHistory.OrderBy(change => change.EffectiveFrom).ToList().AsReadOnly();
+        MonthlyAmountSchedule.OrderHistory(_amountHistory);
 
     /// <summary>The payment date of each paid month.</summary>
     public IReadOnlyDictionary<YearMonth, DateOnly> Payments =>
         _payments.ToDictionary(payment => payment.Month, payment => payment.PaidOn).AsReadOnly();
+
+    /// <summary>Allocation-free internal read access to payments for domain calculators.</summary>
+    internal IReadOnlyList<FixedExpensePayment> GetPaymentEntries() => _payments;
 
     public static FixedExpense Create(
         Guid id,
@@ -72,14 +75,7 @@ public sealed class FixedExpense
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
-        ArgumentNullException.ThrowIfNull(startMonth);
-
-        if (endMonth is not null && endMonth < startMonth)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(endMonth), endMonth, "The end month cannot be before the start month.");
-        }
-
+        MonthlyAmountSchedule.ValidatePeriod(startMonth, endMonth);
         DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "expense amount");
         var validDescription = DomainValidation.ValidateRequiredText(
             description, nameof(description), DomainValidation.MaxDescriptionLength);
@@ -92,37 +88,14 @@ public sealed class FixedExpense
     /// The first month that can still be changed: the current calendar month.
     /// Past calendar months are frozen and never change.
     /// </summary>
-    public static YearMonth FirstOpenMonth(DateOnly today) => YearMonth.From(today);
+    public static YearMonth FirstOpenMonth(DateOnly today) => MonthlyAmountSchedule.FirstOpenMonth(today);
 
-    public bool IsActiveIn(YearMonth month)
-    {
-        ArgumentNullException.ThrowIfNull(month);
-
-        return month >= StartMonth && (EndMonth is null || month <= EndMonth);
-    }
+    public bool IsActiveIn(YearMonth month) =>
+        MonthlyAmountSchedule.IsActiveIn(StartMonth, EndMonth, month);
 
     /// <summary>The amount of the given month, or null if the expense is not active in it.</summary>
-    public Money? AmountIn(YearMonth month)
-    {
-        if (!IsActiveIn(month))
-        {
-            return null;
-        }
-
-        AmountChange? latest = null;
-        foreach (var change in _amountHistory)
-        {
-            if (change.EffectiveFrom <= month
-                && (latest is null || change.EffectiveFrom > latest.EffectiveFrom))
-            {
-                latest = change;
-            }
-        }
-
-        return latest is not null
-            ? latest.Amount
-            : throw new InvalidOperationException("The amount history does not cover the start month.");
-    }
+    public Money? AmountIn(YearMonth month) =>
+        MonthlyAmountSchedule.AmountIn(StartMonth, EndMonth, _amountHistory, month);
 
     /// <summary>
     /// Changes the amount from the first open month onward, keeping the history of earlier months.
@@ -136,14 +109,11 @@ public sealed class FixedExpense
     {
         DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "expense amount");
 
-        var firstOpen = FirstOpenMonth(today);
-        var effectiveFrom = firstOpen > StartMonth ? firstOpen : StartMonth;
-
-        if (EndMonth is not null && effectiveFrom > EndMonth)
-        {
-            throw new DomainException(
-                "The expense has already ended for every month that can still be changed.");
-        }
+        var effectiveFrom = MonthlyAmountSchedule.ResolveEffectiveChangeMonth(
+            StartMonth,
+            EndMonth,
+            today,
+            "The expense has already ended for every month that can still be changed.");
 
         if (_payments.Any(payment => payment.Month >= effectiveFrom))
         {
@@ -151,9 +121,7 @@ public sealed class FixedExpense
                 "A month affected by this change is already paid. Revert the payment first.");
         }
 
-        _amountHistory.RemoveAll(change => change.EffectiveFrom >= effectiveFrom);
-        _amountHistory.Add(new AmountChange(effectiveFrom, newAmount));
-
+        MonthlyAmountSchedule.ApplyAmountChange(_amountHistory, effectiveFrom, newAmount);
         return effectiveFrom;
     }
 
@@ -164,30 +132,16 @@ public sealed class FixedExpense
     /// <exception cref="DomainException">The change would affect a frozen or paid month.</exception>
     public void End(YearMonth lastMonth, DateOnly today)
     {
-        ArgumentNullException.ThrowIfNull(lastMonth);
+        var hasChange = MonthlyAmountSchedule.ValidateEndChange(
+            StartMonth,
+            EndMonth,
+            lastMonth,
+            today,
+            "Months that are already frozen cannot be changed.");
 
-        if (lastMonth < StartMonth)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(lastMonth), lastMonth, "The last month cannot be before the start month.");
-        }
-
-        if (EndMonth == lastMonth)
+        if (!hasChange)
         {
             return;
-        }
-
-        var lastUnchangedMonth =
-            EndMonth is { } currentEnd && currentEnd < lastMonth ? currentEnd : lastMonth;
-
-        if (lastUnchangedMonth < YearMonth.Of(YearMonth.MaxYear, 12))
-        {
-            var firstChangedMonth = lastUnchangedMonth.AddMonths(1);
-
-            if (firstChangedMonth < FirstOpenMonth(today))
-            {
-                throw new DomainException("Months that are already frozen cannot be changed.");
-            }
         }
 
         if (_payments.Any(payment => payment.Month > lastMonth))
@@ -202,12 +156,18 @@ public sealed class FixedExpense
     /// <summary>
     /// Marks the month as paid. Idempotent: if it is already paid, nothing changes and the
     /// original date is kept, so repeating the operation never counts it twice.
+    /// Paying a future competence month in advance is allowed as long as <paramref name="paidOn"/> is not in the future.
     /// </summary>
     /// <returns>True if the state changed; false if the month was already paid.</returns>
-    /// <exception cref="DomainException">The expense is not active in the month.</exception>
-    public bool MarkAsPaid(YearMonth month, DateOnly paidOn)
+    /// <exception cref="DomainException">The expense is not active in the month or the payment date is in the future.</exception>
+    public bool MarkAsPaid(YearMonth month, DateOnly paidOn, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(month);
+
+        if (paidOn > today)
+        {
+            throw new DomainException("A fixed expense cannot be marked as paid on a future date.");
+        }
 
         if (!IsActiveIn(month))
         {

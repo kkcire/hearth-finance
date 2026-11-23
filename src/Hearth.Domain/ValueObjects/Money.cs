@@ -51,7 +51,7 @@ public readonly record struct Money : IComparable<Money>
 
     /// <summary>
     /// Splits this amount into <paramref name="parts"/> installments. Every installment
-    /// has the same value except the last one, which absorbs the remaining cents, so the
+    /// has the same value except the first one, which absorbs the remaining cents, so the
     /// sum of the installments is exactly equal to the original amount.
     /// </summary>
     /// <exception cref="ArgumentOutOfRangeException">The number of parts is not positive.</exception>
@@ -83,12 +83,12 @@ public readonly record struct Money : IComparable<Money>
         var remainderCents = totalCents - (baseCents * parts);
 
         var result = new Money[parts];
-        for (var i = 0; i < parts - 1; i++)
+        result[0] = FromCents(baseCents + remainderCents);
+
+        for (var i = 1; i < parts; i++)
         {
             result[i] = FromCents(baseCents);
         }
-
-        result[parts - 1] = FromCents(baseCents + remainderCents);
 
         return result;
     }

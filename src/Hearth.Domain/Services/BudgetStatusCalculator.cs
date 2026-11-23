@@ -22,38 +22,35 @@ public static class BudgetStatusCalculator
         bool includeCardInstallments = true,
         IReadOnlyCollection<PurchaseCondition>? includedConditions = null)
     {
+        var filter = SpendingFilter.Create(
+            includeDirectExpenses,
+            includeFixedExpenses,
+            includeCardInstallments,
+            includedConditions);
+
+        return Calculate(accountId, month, budgets, directExpenses, fixedExpenses, purchases, filter);
+    }
+
+    public static BudgetStatus Calculate(
+        Guid accountId,
+        YearMonth month,
+        IEnumerable<CategoryBudget> budgets,
+        IEnumerable<DirectExpense> directExpenses,
+        IEnumerable<FixedExpense> fixedExpenses,
+        IEnumerable<CreditCardPurchase> purchases,
+        SpendingFilter filter)
+    {
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(month);
         ArgumentNullException.ThrowIfNull(budgets);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
+        ArgumentNullException.ThrowIfNull(filter);
 
-        var activeBudgets = new Dictionary<Guid, Money>();
-        foreach (var budget in budgets)
-        {
-            if (budget.AccountId != accountId || budget.AmountIn(month) is not { } amount)
-            {
-                continue;
-            }
-
-            if (!activeBudgets.TryAdd(budget.CategoryId, amount))
-            {
-                throw new DomainException(
-                    "Multiple budgets are active for the same category in this month.");
-            }
-        }
-
+        var activeBudgets = CollectActiveBudgets(accountId, month, budgets);
         var spending = CategorySpendingCalculator.Calculate(
-            accountId,
-            month,
-            directExpenses,
-            fixedExpenses,
-            purchases,
-            includeDirectExpenses,
-            includeFixedExpenses,
-            includeCardInstallments,
-            includedConditions);
+            accountId, month, directExpenses, fixedExpenses, purchases, filter);
 
         var spentByCategory = spending.Categories.ToDictionary(item => item.CategoryId, item => item.Total);
 
@@ -71,5 +68,28 @@ public static class BudgetStatusCalculator
         var totalSpent = Money.Sum(items.Select(item => item.SpentAmount));
 
         return new BudgetStatus(month, items.AsReadOnly(), totalBudgeted, totalSpent);
+    }
+
+    private static Dictionary<Guid, Money> CollectActiveBudgets(
+        Guid accountId,
+        YearMonth month,
+        IEnumerable<CategoryBudget> budgets)
+    {
+        var activeBudgets = new Dictionary<Guid, Money>();
+        foreach (var budget in budgets)
+        {
+            if (budget.AccountId != accountId || budget.AmountIn(month) is not { } amount)
+            {
+                continue;
+            }
+
+            if (!activeBudgets.TryAdd(budget.CategoryId, amount))
+            {
+                throw new DomainException(
+                    "Multiple budgets are active for the same category in this month.");
+            }
+        }
+
+        return activeBudgets;
     }
 }

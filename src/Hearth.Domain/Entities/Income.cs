@@ -1,3 +1,4 @@
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Domain.Entities;
@@ -77,8 +78,14 @@ public sealed class Income
     /// and the original date is kept, so repeating the operation never counts it twice.
     /// </summary>
     /// <returns>True if the state changed; false if it was already received.</returns>
-    public bool MarkAsReceived(DateOnly receivedOn)
+    /// <exception cref="DomainException">The received date is in the future relative to <paramref name="today"/>.</exception>
+    public bool MarkAsReceived(DateOnly receivedOn, DateOnly today)
     {
+        if (receivedOn > today)
+        {
+            throw new DomainException("An income cannot be marked as received on a future date.");
+        }
+
         if (IsReceived)
         {
             return false;
@@ -104,13 +111,27 @@ public sealed class Income
         return true;
     }
 
+    /// <exception cref="DomainException">The income is already marked as received.</exception>
     public void UpdateExpectedDate(DateOnly newExpectedDate)
     {
+        if (IsReceived)
+        {
+            throw new DomainException(
+                "The expected date of a received income cannot be changed. Revert it to expected first.");
+        }
+
         ExpectedDate = newExpectedDate;
     }
 
+    /// <exception cref="DomainException">The income is already marked as received.</exception>
     public void UpdateAmount(Money newAmount)
     {
+        if (IsReceived)
+        {
+            throw new DomainException(
+                "The amount of a received income cannot be changed. Revert it to expected first.");
+        }
+
         DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "income amount");
 
         Amount = newAmount;

@@ -43,13 +43,49 @@ public class BillingCycleTests
     // ---------- Cycle dates ----------
 
     [Fact]
-    public void Dates_ClosingInOctober2026_WithClosingDay3()
+    public void Dates_ClosingInOctober2026_WithClosingDay3AndDueDay12()
     {
-        var cycle = Cycle(2026, 10);
+        var cycle = Cycle(2026, 10, CardBillingRule.Of(3, 12));
 
         Assert.Equal(new DateOnly(2026, 9, 3), cycle.StartDate);
         Assert.Equal(new DateOnly(2026, 10, 2), cycle.EndDate);
         Assert.Equal(new DateOnly(2026, 10, 3), cycle.ClosingDate);
+        Assert.Equal(new DateOnly(2026, 10, 12), cycle.DueDate);
+    }
+
+    [Theory]
+    [InlineData(2026, 10, 3, 12, 2026, 10, 12)]  // DueDay > ClosingDay: same month
+    [InlineData(2026, 10, 3, 3, 2026, 11, 3)]    // DueDay == ClosingDay: next month
+    [InlineData(2026, 10, 25, 5, 2026, 11, 5)]   // DueDay < ClosingDay: next month
+    [InlineData(2026, 12, 25, 5, 2027, 1, 5)]    // DueDay < ClosingDay across year rollover
+    [InlineData(2026, 12, 10, 10, 2027, 1, 10)]  // DueDay == ClosingDay across year rollover
+    public void DueDate_IsFirstOccurrenceOfDueDayAfterClosingDate(
+        int closingYear, int closingMonth, int closingDay, int dueDay,
+        int expectedDueYear, int expectedDueMonth, int expectedDueDay)
+    {
+        var cycle = BillingCycle.Closing(
+            YearMonth.Of(closingYear, closingMonth),
+            CardBillingRule.Of(closingDay, dueDay));
+
+        Assert.Equal(new DateOnly(expectedDueYear, expectedDueMonth, expectedDueDay), cycle.DueDate);
+        Assert.Equal(YearMonth.Of(expectedDueYear, expectedDueMonth), cycle.DueMonth);
+        Assert.True(cycle.DueDate > cycle.ClosingDate);
+    }
+
+    [Fact]
+    public void GetStatus_TransitionsAtClosingDateAndDueDate_IncludingDueDateInFollowingMonth()
+    {
+        var sameMonth = BillingCycle.Closing(YearMonth.Of(2026, 11), CardBillingRule.Of(3, 12)); // closes Nov 3, due Nov 12
+        Assert.Equal(InvoiceStatus.Open, sameMonth.GetStatus(new DateOnly(2026, 11, 2)));
+        Assert.Equal(InvoiceStatus.Closed, sameMonth.GetStatus(new DateOnly(2026, 11, 3)));
+        Assert.Equal(InvoiceStatus.Closed, sameMonth.GetStatus(new DateOnly(2026, 11, 11)));
+        Assert.Equal(InvoiceStatus.Paid, sameMonth.GetStatus(new DateOnly(2026, 11, 12)));
+
+        var nextMonth = BillingCycle.Closing(YearMonth.Of(2026, 12), CardBillingRule.Of(25, 5)); // closes Dec 25, due Jan 5 2027
+        Assert.Equal(InvoiceStatus.Open, nextMonth.GetStatus(new DateOnly(2026, 12, 24)));
+        Assert.Equal(InvoiceStatus.Closed, nextMonth.GetStatus(new DateOnly(2026, 12, 25)));
+        Assert.Equal(InvoiceStatus.Closed, nextMonth.GetStatus(new DateOnly(2027, 1, 4)));
+        Assert.Equal(InvoiceStatus.Paid, nextMonth.GetStatus(new DateOnly(2027, 1, 5)));
     }
 
     [Fact]
@@ -249,10 +285,15 @@ public class BillingCycleTests
     [Fact]
     public void AddCycles_OutsideTheSupportedRange_Throws()
     {
-        Assert.Throws<ArgumentOutOfRangeException>(() => Cycle(9999, 12).AddCycles(1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Cycle(1, 2).AddCycles(-1));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Cycle(2026, 10).AddCycles(int.MaxValue));
-        Assert.Throws<ArgumentOutOfRangeException>(() => Cycle(2026, 10).AddCycles(int.MinValue));
+        // Use a valid 9999-12 cycle (DueDay > ClosingDay) so AddCycles(1) is actually invoked.
+        var lastValidCycle = Cycle(9999, 12, CardBillingRule.Of(3, 12));
+        var firstValidCycle = Cycle(1, 2, CardBillingRule.Of(3, 12));
+        var midCycle = Cycle(2026, 10, CardBillingRule.Of(3, 12));
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => lastValidCycle.AddCycles(1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => firstValidCycle.AddCycles(-1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => midCycle.AddCycles(int.MaxValue));
+        Assert.Throws<ArgumentOutOfRangeException>(() => midCycle.AddCycles(int.MinValue));
     }
 
     // ---------- Main invariants ----------
@@ -322,17 +363,19 @@ public class BillingCycleTests
     }
 
     [Theory]
-    [InlineData(2026, 12, 15, 1)]
-    [InlineData(2026, 10, 2, 5)]
-    [InlineData(2026, 10, 3, 24)]
-    [InlineData(2028, 2, 29, 12)]
-    public void AddCycles_MatchesClosingOfTheShiftedMonth(int year, int month, int day, int cycles)
+    [InlineData(2026, 12, 15, 1, 2027, 2, 3)]
+    [InlineData(2026, 10, 2, 5, 2027, 3, 3)]
+    [InlineData(2026, 10, 3, 24, 2028, 11, 3)]
+    [InlineData(2028, 2, 29, 12, 2029, 3, 3)]
+    public void AddCycles_ShiftsClosingDateByExactCalendarMonths(
+        int year, int month, int day, int cycles, int expectedYear, int expectedMonth, int expectedDay)
     {
-        var first = BillingCycle.ForPurchase(new DateOnly(year, month, day), Rule3);
+        var first = BillingCycle.ForPurchase(new DateOnly(year, month, day), CardBillingRule.Of(3, 12));
 
-        var viaCycles = first.AddCycles(cycles);
-        var viaMonths = BillingCycle.Closing(first.ClosingMonth.AddMonths(cycles), Rule3);
+        var shifted = first.AddCycles(cycles);
 
-        Assert.Equal(viaMonths, viaCycles);
+        Assert.Equal(YearMonth.Of(expectedYear, expectedMonth), shifted.ClosingMonth);
+        Assert.Equal(new DateOnly(expectedYear, expectedMonth, expectedDay), shifted.ClosingDate);
+        Assert.Equal(new DateOnly(expectedYear, expectedMonth, 12), shifted.DueDate);
     }
 }

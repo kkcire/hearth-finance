@@ -1,8 +1,8 @@
 namespace Hearth.Domain.ValueObjects;
 
 /// <summary>
-/// One entry in the amount history of a fixed expense: the amount that applies from the
-/// given month until the next entry. Created only by the fixed expense that owns it.
+/// One entry in the amount history of a recurring monthly schedule (fixed expense or category
+/// budget): the amount that applies from the given month until the next entry.
 /// </summary>
 public sealed record AmountChange
 {

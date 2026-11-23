@@ -42,7 +42,7 @@ public class ListIncomesHandlerTests
 
         var older = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 5), Money.FromDecimal(200.00m), "Pix");
-        older.MarkAsReceived(new DateOnly(2026, 10, 6));
+        older.MarkAsReceived(new DateOnly(2026, 10, 6), new DateOnly(2026, 12, 31));
 
         var newer = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário");

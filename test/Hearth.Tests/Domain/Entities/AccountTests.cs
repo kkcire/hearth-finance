@@ -96,11 +96,13 @@ public class AccountTests
     }
 
     [Fact]
-    public void ConfirmInitialBalance_WhenAlreadyConfirmed_ThrowsDomainException()
+    public void ConfirmInitialBalance_WhenAlreadyConfirmed_ThrowsDomainExceptionAndPreservesBalance()
     {
         var account = NewAccount(initialBalance: 100m, initialDate: new DateOnly(2026, 11, 1), isConfirmed: true);
 
         Assert.Throws<DomainException>(() => account.ConfirmInitialBalance(M(200m)));
+        Assert.Throws<DomainException>(account.SkipInitialBalance);
+        Assert.Equal(M(100m), account.InitialBalance);
     }
 
     [Fact]
@@ -141,5 +143,23 @@ public class AccountTests
         Assert.Equal(M(-100m), account.InitialBalance);
         Assert.Equal(new DateOnly(2026, 10, 1), account.InitialBalanceDate);
         Assert.True(account.IsInitialBalanceConfirmed);
+
+        var exactMaxName = new string('a', DomainValidation.MaxNameLength);
+        account.Rename($" {exactMaxName} ");
+        Assert.Equal(exactMaxName, account.Name);
+
+        Assert.ThrowsAny<ArgumentException>(() => account.Rename("   "));
+        Assert.Throws<ArgumentException>(() => account.Rename(new string('b', DomainValidation.MaxNameLength + 1)));
+        Assert.Equal(exactMaxName, account.Name);
+    }
+
+    [Fact]
+    public void UpdateInitialBalance_WhenNotConfirmed_ThrowsDomainExceptionAndPreservesBalance()
+    {
+        var account = NewAccount(initialBalance: 1500m, isConfirmed: false);
+
+        Assert.Throws<DomainException>(() => account.UpdateInitialBalance(M(2000m)));
+        Assert.Equal(M(1500m), account.InitialBalance);
+        Assert.False(account.IsInitialBalanceConfirmed);
     }
 }

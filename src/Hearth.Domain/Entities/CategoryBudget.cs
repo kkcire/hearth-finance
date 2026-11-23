@@ -49,7 +49,7 @@ public sealed class CategoryBudget
 
     /// <summary>Monthly limits in order of effective month. The first entry always starts at <see cref="StartMonth"/>.</summary>
     public IReadOnlyList<AmountChange> AmountHistory =>
-        _amountHistory.OrderBy(change => change.EffectiveFrom).ToList().AsReadOnly();
+        MonthlyAmountSchedule.OrderHistory(_amountHistory);
 
     public static CategoryBudget Create(
         Guid id,
@@ -62,14 +62,7 @@ public sealed class CategoryBudget
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
-        ArgumentNullException.ThrowIfNull(startMonth);
-
-        if (endMonth is not null && endMonth < startMonth)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(endMonth), endMonth, "The end month cannot be before the start month.");
-        }
-
+        MonthlyAmountSchedule.ValidatePeriod(startMonth, endMonth);
         DomainValidation.EnsurePositiveAmount(amount, nameof(amount), "budget amount");
 
         return new CategoryBudget(id, accountId, categoryId, startMonth, endMonth, amount);
@@ -79,27 +72,17 @@ public sealed class CategoryBudget
     /// The first month that can still be changed: the current calendar month.
     /// Past calendar months remain untouched to preserve historical targets.
     /// </summary>
-    public static YearMonth FirstOpenMonth(DateOnly today) => YearMonth.From(today);
+    public static YearMonth FirstOpenMonth(DateOnly today) => MonthlyAmountSchedule.FirstOpenMonth(today);
 
-    public bool IsActiveIn(YearMonth month)
-    {
-        ArgumentNullException.ThrowIfNull(month);
-
-        return month >= StartMonth && (EndMonth is null || month <= EndMonth);
-    }
+    public bool IsActiveIn(YearMonth month) =>
+        MonthlyAmountSchedule.IsActiveIn(StartMonth, EndMonth, month);
 
     /// <summary>
     /// True if this budget's active range shares at least one month with <c>[otherStart, otherEnd]</c>.
     /// </summary>
     public bool OverlapsWith(YearMonth otherStart, YearMonth? otherEnd)
     {
-        ArgumentNullException.ThrowIfNull(otherStart);
-
-        if (otherEnd is not null && otherEnd < otherStart)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(otherEnd), otherEnd, "The end month cannot be before the start month.");
-        }
+        MonthlyAmountSchedule.ValidatePeriod(otherStart, otherEnd);
 
         return (EndMonth is null || otherStart <= EndMonth)
                && (otherEnd is null || StartMonth <= otherEnd);
@@ -113,27 +96,8 @@ public sealed class CategoryBudget
     }
 
     /// <summary>The monthly target of the given month, or null if the budget is not active in it.</summary>
-    public Money? AmountIn(YearMonth month)
-    {
-        if (!IsActiveIn(month))
-        {
-            return null;
-        }
-
-        AmountChange? latest = null;
-        foreach (var change in _amountHistory)
-        {
-            if (change.EffectiveFrom <= month
-                && (latest is null || change.EffectiveFrom > latest.EffectiveFrom))
-            {
-                latest = change;
-            }
-        }
-
-        return latest is not null
-            ? latest.Amount
-            : throw new InvalidOperationException("The amount history does not cover the start month.");
-    }
+    public Money? AmountIn(YearMonth month) =>
+        MonthlyAmountSchedule.AmountIn(StartMonth, EndMonth, _amountHistory, month);
 
     /// <summary>
     /// Changes the monthly limit from the current calendar month (or <see cref="StartMonth"/> if
@@ -146,18 +110,13 @@ public sealed class CategoryBudget
     {
         DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "budget amount");
 
-        var firstOpen = FirstOpenMonth(today);
-        var effectiveFrom = firstOpen > StartMonth ? firstOpen : StartMonth;
+        var effectiveFrom = MonthlyAmountSchedule.ResolveEffectiveChangeMonth(
+            StartMonth,
+            EndMonth,
+            today,
+            "The budget has already ended for every month that can still be changed.");
 
-        if (EndMonth is not null && effectiveFrom > EndMonth)
-        {
-            throw new DomainException(
-                "The budget has already ended for every month that can still be changed.");
-        }
-
-        _amountHistory.RemoveAll(change => change.EffectiveFrom >= effectiveFrom);
-        _amountHistory.Add(new AmountChange(effectiveFrom, newAmount));
-
+        MonthlyAmountSchedule.ApplyAmountChange(_amountHistory, effectiveFrom, newAmount);
         return effectiveFrom;
     }
 
@@ -168,30 +127,16 @@ public sealed class CategoryBudget
     /// <exception cref="DomainException">The change would affect a month already in the past.</exception>
     public void End(YearMonth lastMonth, DateOnly today)
     {
-        ArgumentNullException.ThrowIfNull(lastMonth);
+        var hasChange = MonthlyAmountSchedule.ValidateEndChange(
+            StartMonth,
+            EndMonth,
+            lastMonth,
+            today,
+            "Months that are already in the past cannot be changed.");
 
-        if (lastMonth < StartMonth)
-        {
-            throw new ArgumentOutOfRangeException(
-                nameof(lastMonth), lastMonth, "The last month cannot be before the start month.");
-        }
-
-        if (EndMonth == lastMonth)
+        if (!hasChange)
         {
             return;
-        }
-
-        var lastUnchangedMonth =
-            EndMonth is { } currentEnd && currentEnd < lastMonth ? currentEnd : lastMonth;
-
-        if (lastUnchangedMonth < YearMonth.Of(YearMonth.MaxYear, 12))
-        {
-            var firstChangedMonth = lastUnchangedMonth.AddMonths(1);
-
-            if (firstChangedMonth < FirstOpenMonth(today))
-            {
-                throw new DomainException("Months that are already in the past cannot be changed.");
-            }
         }
 
         EndMonth = lastMonth;

@@ -70,7 +70,7 @@ public class ChangeFixedExpenseAmountHandlerTests
     {
         _clock.Today = new DateOnly(2026, 10, 2);
         var expense = await SeedAsync();
-        expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 1));
+        expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 1), _clock.Today);
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new ChangeFixedExpenseAmountCommand(expense.Id, 1250.00m)));

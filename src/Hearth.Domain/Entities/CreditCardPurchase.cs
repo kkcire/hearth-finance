@@ -124,14 +124,14 @@ public sealed class CreditCardPurchase
             amount,
             installmentCount,
             initialInstallment,
-            rule,
-            condition,
+            CardBillingRule.Of(rule.ClosingDay, rule.DueDay),
+            condition with { },
             validDescription,
             categoryId);
     }
 
     /// <summary>
-    /// Calculates the installments. The amount is split with the remaining cents on the last
+    /// Calculates the installments. The amount is split with the remaining cents on the first
     /// installment, and installment k belongs to the first cycle plus k - 1 cycles.
     /// </summary>
     public IReadOnlyList<Installment> GetInstallments()
@@ -154,11 +154,52 @@ public sealed class CreditCardPurchase
     }
 
     /// <summary>
+    /// Returns only the installments that still count (from <see cref="InitialInstallment"/> onward),
+    /// excluding installments marked as previously paid.
+    /// </summary>
+    public IEnumerable<Installment> GetActiveInstallments() =>
+        GetInstallments().Where(installment => !installment.IsPreviouslyPaid);
+
+    /// <summary>
     /// True once the invoice of the first installment that still counts has closed.
     /// From then on the amount and the date can no longer be changed.
     /// </summary>
     public bool IsLockedAt(DateOnly today) =>
-        today >= FirstCycle.AddCycles(InitialInstallment - 1).ClosingDate;
+        today >= FirstActiveCycle.ClosingDate;
+
+    /// <summary>
+    /// Ensures the first active installment's due date is on or after both the account's
+    /// initial balance date and <paramref name="today"/>. Purchase dates before the initial
+    /// balance date are allowed as long as the first active due date is still open.
+    /// </summary>
+    /// <exception cref="DomainException">
+    /// The first active installment's due date is before the account's initial balance date or before <paramref name="today"/>.
+    /// </exception>
+    public void EnsureFirstActiveDueDateIsOpen(Account account, DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        EnsureDueDateIsOpen(FirstActiveCycle.DueDate, account, today);
+    }
+
+    /// <summary>
+    /// Validates that moving this purchase to <paramref name="purchaseDate"/> keeps the first
+    /// active installment's due date on or after both the account's initial balance date and <paramref name="today"/>.
+    /// </summary>
+    /// <exception cref="DomainException">
+    /// The resulting first active installment's due date is before the account's initial balance date or before <paramref name="today"/>.
+    /// </exception>
+    public void EnsureFirstActiveDueDateIsOpen(DateOnly purchaseDate, Account account, DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        EnsureConsistent(purchaseDate, Amount, InstallmentCount, Rule);
+
+        var dueDate = BillingCycle.ForPurchase(purchaseDate, Rule)
+            .AddCycles(InitialInstallment - 1)
+            .DueDate;
+
+        EnsureDueDateIsOpen(dueDate, account, today);
+    }
 
     /// <exception cref="DomainException">The invoice has already closed or the amount cannot be split.</exception>
     public void UpdateAmount(Money newAmount, DateOnly today)
@@ -216,6 +257,21 @@ public sealed class CreditCardPurchase
         {
             throw new DomainException(
                 "The amount and the date cannot be changed after the invoice has closed.");
+        }
+    }
+
+    private void EnsureDueDateIsOpen(DateOnly dueDate, Account account, DateOnly today)
+    {
+        if (!account.CanRegisterOn(dueDate))
+        {
+            throw new DomainException(
+                $"Installment {InitialInstallment}/{InstallmentCount} due date ({dueDate:yyyy-MM-dd}) cannot be before the initial balance date ({account.InitialBalanceDate:yyyy-MM-dd}).");
+        }
+
+        if (dueDate < today)
+        {
+            throw new DomainException(
+                $"Installment {InitialInstallment}/{InstallmentCount} due date ({dueDate:yyyy-MM-dd}) has already passed. Advance the initial installment to skip already-paid cycles.");
         }
     }
 

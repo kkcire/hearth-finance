@@ -99,7 +99,8 @@ public class ListCreditCardPurchasesHandlerTests
         Assert.Equal(11, result[0].FirstActiveClosingMonth);
         Assert.False(result[0].IsLocked);
         Assert.Equal(3, result[0].Installments.Count);
-        Assert.Equal(33.34m, result[0].Installments[2].Amount);
+        Assert.Equal(33.34m, result[0].Installments[0].Amount);
+        Assert.Equal(33.33m, result[0].Installments[2].Amount);
 
         Assert.Equal(locked.Id, result[1].Id);
         Assert.True(result[1].IsLocked);

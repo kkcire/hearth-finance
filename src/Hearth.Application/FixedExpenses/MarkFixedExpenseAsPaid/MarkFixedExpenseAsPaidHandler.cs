@@ -10,19 +10,23 @@ public sealed class MarkFixedExpenseAsPaidHandler
 {
     private readonly AccountAccessGuard _accountAccess;
     private readonly IFixedExpenseRepository _fixedExpenses;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public MarkFixedExpenseAsPaidHandler(
         AccountAccessGuard accountAccess,
         IFixedExpenseRepository fixedExpenses,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _fixedExpenses = fixedExpenses;
+        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -43,7 +47,7 @@ public sealed class MarkFixedExpenseAsPaidHandler
 
         account.EnsureCanRegisterOn(command.PaidOn);
 
-        var changed = expense.MarkAsPaid(month, command.PaidOn);
+        var changed = expense.MarkAsPaid(month, command.PaidOn, _clock.Today);
 
         if (changed)
         {

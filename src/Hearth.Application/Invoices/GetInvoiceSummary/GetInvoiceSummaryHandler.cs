@@ -80,7 +80,7 @@ public sealed class GetInvoiceSummaryHandler
             : matchingInstallments.FirstOrDefault().Installment?.Cycle;
 
         InvoiceStatus? status = cycle is not null
-            ? CreditCardLimitCalculator.GetInvoiceStatus(cycle, today)
+            ? cycle.GetStatus(today)
             : null;
 
         return new InvoiceSummaryDto(

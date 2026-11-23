@@ -17,13 +17,14 @@ public class MarkFixedExpenseAsPaidHandlerTests
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
+    private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly MarkFixedExpenseAsPaidHandler _handler;
 
     public MarkFixedExpenseAsPaidHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, _unitOfWork);
+        _handler = new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, _clock, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync()
@@ -65,10 +66,28 @@ public class MarkFixedExpenseAsPaidHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_FutureCompetenceMonthPaidToday_Succeeds_AndFuturePaidDateThrows()
+    {
+        var expense = await SeedAsync();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new MarkFixedExpenseAsPaidCommand(expense.Id, 2026, 11, _clock.Today.AddDays(1))));
+        Assert.False(expense.IsPaid(YearMonth.Of(2026, 11)));
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+
+        var changed = await _handler.ExecuteAsync(
+            new MarkFixedExpenseAsPaidCommand(expense.Id, 2026, 12, _clock.Today));
+
+        Assert.True(changed);
+        Assert.Equal(_clock.Today, expense.PaidOn(YearMonth.Of(2026, 12)));
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_AlreadyPaid_IsIdempotentAndDoesNotSaveAgain()
     {
         var expense = await SeedAsync();
-        expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5));
+        expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5), _clock.Today);
 
         var changed = await _handler.ExecuteAsync(
             new MarkFixedExpenseAsPaidCommand(expense.Id, 2026, 10, new DateOnly(2026, 10, 20)));
@@ -98,7 +117,7 @@ public class MarkFixedExpenseAsPaidHandlerTests
         var expense = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new MarkFixedExpenseAsPaidCommand(expense.Id, 2027, 1, new DateOnly(2027, 1, 5))));
+            new MarkFixedExpenseAsPaidCommand(expense.Id, 2027, 1, _clock.Today)));
 
         Assert.Equal(0, _fixedExpenses.UpdateCount);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
@@ -127,10 +146,12 @@ public class MarkFixedExpenseAsPaidHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new MarkFixedExpenseAsPaidHandler(null!, _fixedExpenses, _unitOfWork));
+            () => new MarkFixedExpenseAsPaidHandler(null!, _fixedExpenses, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, null!, _unitOfWork));
+            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, null!, _clock, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, null!));
+            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(
+            () => new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, _clock, null!));
     }
 }

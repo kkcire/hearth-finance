@@ -43,7 +43,7 @@ public class RevertFixedExpensePaymentHandlerTests
 
         if (paid)
         {
-            expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5));
+            expense.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5), new DateOnly(2026, 12, 31));
         }
 
         await _fixedExpenses.AddAsync(expense);

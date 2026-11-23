@@ -153,8 +153,12 @@ public class MoneyTests
         Assert.True(large >= small);
         Assert.True(small <= M(1.00m));
         Assert.True(small >= M(1.00m));
+        Assert.False(small < M(1.00m));
+        Assert.False(small > M(1.00m));
         Assert.False(small > large);
         Assert.False(large < small);
+        Assert.False(large <= small);
+        Assert.False(small >= large);
     }
 
     [Fact]
@@ -175,14 +179,14 @@ public class MoneyTests
     // ---------- Split ----------
 
     [Fact]
-    public void Split_PutsRemainingCentsOnTheLastPart()
+    public void Split_PutsRemainingCentsOnTheFirstPart()
     {
         var parts = M(100.00m).Split(3);
 
         Assert.Equal(3, parts.Count);
-        Assert.Equal(M(33.33m), parts[0]);
+        Assert.Equal(M(33.34m), parts[0]);
         Assert.Equal(M(33.33m), parts[1]);
-        Assert.Equal(M(33.34m), parts[2]);
+        Assert.Equal(M(33.33m), parts[2]);
     }
 
     [Fact]
@@ -212,14 +216,14 @@ public class MoneyTests
     }
 
     [Fact]
-    public void Split_RemainderLargerThanOneCent_GoesToTheLastPart()
+    public void Split_RemainderLargerThanOneCent_GoesToTheFirstPart()
     {
-        // 5 cents in 3 parts: base 1 cent, remainder 2 cents.
+        // 5 cents in 3 parts: base 1 cent, remainder 2 cents on the first part.
         var parts = M(0.05m).Split(3);
 
-        Assert.Equal(M(0.01m), parts[0]);
+        Assert.Equal(M(0.03m), parts[0]);
         Assert.Equal(M(0.01m), parts[1]);
-        Assert.Equal(M(0.03m), parts[2]);
+        Assert.Equal(M(0.01m), parts[2]);
     }
 
     [Theory]
@@ -308,12 +312,12 @@ public class MoneyTests
         Assert.True(Money.Sum(parts) == original, $"Sum differs from original: {context}");
         Assert.True(parts.All(p => p > Money.Zero), $"Part is not positive: {context}");
 
-        var baseValue = parts[0];
-        for (var i = 0; i < partsCount - 1; i++)
+        var baseValue = parts[^1];
+        for (var i = 1; i < partsCount; i++)
         {
-            Assert.True(parts[i] == baseValue, $"Parts before the last must be equal: {context}");
+            Assert.True(parts[i] == baseValue, $"Parts after the first must be equal: {context}");
         }
 
-        Assert.True(parts[^1] >= baseValue, $"Last part must not be smaller: {context}");
+        Assert.True(parts[0] >= baseValue, $"First part must not be smaller: {context}");
     }
 }

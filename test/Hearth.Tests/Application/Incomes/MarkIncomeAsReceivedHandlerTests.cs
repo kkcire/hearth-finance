@@ -17,13 +17,14 @@ public class MarkIncomeAsReceivedHandlerTests
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
+    private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly MarkIncomeAsReceivedHandler _handler;
 
     public MarkIncomeAsReceivedHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, _unitOfWork);
+        _handler = new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, _clock, _unitOfWork);
     }
 
     private async Task<Income> SeedIncomeAsync()
@@ -66,13 +67,26 @@ public class MarkIncomeAsReceivedHandlerTests
     public async Task ExecuteAsync_AlreadyReceived_IsIdempotentAndDoesNotSaveAgain()
     {
         var income = await SeedIncomeAsync();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28));
+        income.MarkAsReceived(new DateOnly(2026, 10, 28), _clock.Today);
 
         var changed = await _handler.ExecuteAsync(
             new MarkIncomeAsReceivedCommand(income.Id, new DateOnly(2026, 11, 2)));
 
         Assert.False(changed);
         Assert.Equal(new DateOnly(2026, 10, 28), income.ReceivedOn);
+        Assert.Equal(0, _incomes.UpdateCount);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReceivedOnInFuture_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        var income = await SeedIncomeAsync();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new MarkIncomeAsReceivedCommand(income.Id, _clock.Today.AddDays(1))));
+
+        Assert.False(income.IsReceived);
         Assert.Equal(0, _incomes.UpdateCount);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
@@ -112,8 +126,9 @@ public class MarkIncomeAsReceivedHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(null!, _incomes, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(null!, _incomes, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new MarkIncomeAsReceivedHandler(_accountAccess, _incomes, _clock, null!));
     }
 }

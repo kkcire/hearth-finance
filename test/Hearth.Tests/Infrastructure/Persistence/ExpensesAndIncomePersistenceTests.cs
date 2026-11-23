@@ -60,7 +60,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
             var expense = FixedExpense.Create(
                 expenseId, accountId, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", categoryId);
-            expense.MarkAsPaid(YearMonth.Of(2026, 1), new DateOnly(2026, 1, 5));
+            expense.MarkAsPaid(YearMonth.Of(2026, 1), new DateOnly(2026, 1, 5), new DateOnly(2026, 12, 31));
 
             await repo.AddAsync(expense);
             await uow.SaveChangesAsync();
@@ -77,7 +77,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             Assert.True(loaded.IsPaid(YearMonth.Of(2026, 1)));
 
             loaded.ChangeAmount(Money.FromDecimal(1250.00m), new DateOnly(2026, 7, 10)); // effective 2026-07
-            loaded.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 4));
+            loaded.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 4), new DateOnly(2026, 12, 31));
             loaded.RevertPayment(YearMonth.Of(2026, 1));
             loaded.End(YearMonth.Of(2026, 12), new DateOnly(2026, 7, 10));
 
@@ -133,7 +133,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
             var income = Income.Create(
                 incomeId, accountId, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário");
-            income.MarkAsReceived(new DateOnly(2026, 11, 2));
+            income.MarkAsReceived(new DateOnly(2026, 11, 2), new DateOnly(2026, 12, 31));
             await incomes.AddAsync(income);
 
             await purchases.AddAsync(CreditCardPurchase.Create(

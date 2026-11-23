@@ -13,6 +13,7 @@ public sealed class RegisterCreditCardPurchaseHandler
     private readonly ICreditCardRepository _creditCards;
     private readonly ICategoryRepository _categories;
     private readonly ICreditCardPurchaseRepository _purchases;
+    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterCreditCardPurchaseHandler(
@@ -20,18 +21,21 @@ public sealed class RegisterCreditCardPurchaseHandler
         ICreditCardRepository creditCards,
         ICategoryRepository categories,
         ICreditCardPurchaseRepository purchases,
+        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(creditCards);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(purchases);
+        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _creditCards = creditCards;
         _categories = categories;
         _purchases = purchases;
+        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -70,11 +74,7 @@ public sealed class RegisterCreditCardPurchaseHandler
             command.Description,
             command.CategoryId);
 
-        var dateToValidate = purchase.InitialInstallment == 1
-            ? purchase.Date
-            : purchase.FirstActiveCycle.ClosingDate;
-
-        account.EnsureCanRegisterOn(dateToValidate);
+        purchase.EnsureFirstActiveDueDateIsOpen(account, _clock.Today);
 
         await _purchases.AddAsync(purchase, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

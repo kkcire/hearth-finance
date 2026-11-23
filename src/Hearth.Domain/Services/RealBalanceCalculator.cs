@@ -51,9 +51,9 @@ public static class RealBalanceCalculator
         var paidFixedExpenses = Money.Sum(
             fixedExpenses
                 .Where(expense => expense.AccountId == account.Id)
-                .SelectMany(expense => expense.Payments.Select(payment => (Expense: expense, payment)))
-                .Where(item => CountsIn(account, item.payment.Value, until))
-                .Select(item => item.Expense.AmountIn(item.payment.Key)
+                .SelectMany(expense => expense.GetPaymentEntries().Select(payment => (Expense: expense, Payment: payment)))
+                .Where(item => CountsIn(account, item.Payment.PaidOn, until))
+                .Select(item => item.Expense.AmountIn(item.Payment.Month)
                                 ?? throw new InvalidOperationException(
                                     "A paid fixed expense has no amount in the month it was paid.")));
 
@@ -62,9 +62,8 @@ public static class RealBalanceCalculator
         var paidInvoices = Money.Sum(
             purchases
                 .Where(purchase => purchase.AccountId == account.Id)
-                .SelectMany(purchase => purchase.GetInstallments())
-                .Where(installment => !installment.IsPreviouslyPaid
-                                      && CountsIn(account, installment.Cycle.DueDate, until))
+                .SelectMany(purchase => purchase.GetActiveInstallments())
+                .Where(installment => CountsIn(account, installment.Cycle.DueDate, until))
                 .Select(installment => installment.Amount));
 
         return new RealBalance(

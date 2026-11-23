@@ -25,7 +25,7 @@ public sealed record ProjectedResult
     /// <summary>Every income expected in the month (salary included), received or not.</summary>
     public Money Incomes { get; }
 
-    /// <summary>The calculated invoice of the cycle closing in the month, never the charged amount.</summary>
+    /// <summary>The derived invoice of the cycle closing in the month.</summary>
     public Money CardInvoice { get; }
 
     /// <summary>The direct expenses dated in the month.</summary>

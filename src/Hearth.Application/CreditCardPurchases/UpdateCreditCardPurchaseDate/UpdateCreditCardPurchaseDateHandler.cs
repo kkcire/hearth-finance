@@ -2,7 +2,6 @@ using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
-using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 
@@ -46,13 +45,7 @@ public sealed class UpdateCreditCardPurchaseDateHandler
 
         if (!purchase.IsLockedAt(_clock.Today))
         {
-            var dateToValidate = purchase.InitialInstallment == 1
-                ? command.NewDate
-                : BillingCycle.ForPurchase(command.NewDate, purchase.Rule)
-                    .AddCycles(purchase.InitialInstallment - 1)
-                    .ClosingDate;
-
-            account.EnsureCanRegisterOn(dateToValidate);
+            purchase.EnsureFirstActiveDueDateIsOpen(command.NewDate, account, _clock.Today);
         }
 
         purchase.UpdateDate(command.NewDate, _clock.Today);

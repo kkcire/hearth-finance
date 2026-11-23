@@ -53,19 +53,34 @@ public sealed class CreditCardTests
     }
 
     [Fact]
-    public void UpdateDetails_UpdatesRuleNameAndLimit()
+    public void Create_InvalidIdentifiersOrNullRule_Throw()
     {
-        var card = CreditCard.Create(Guid.NewGuid(), DefaultAccountId, Rule3_12, "Nubank", Money.FromDecimal(3000m));
-
-        card.UpdateDetails(CardBillingRule.Of(10, 20), "  Inter  ", null);
-
-        Assert.Equal(CardBillingRule.Of(10, 20), card.BillingRule);
-        Assert.Equal("Inter", card.Name);
-        Assert.Null(card.Limit);
+        Assert.Throws<ArgumentException>(() => CreditCard.Create(Guid.Empty, DefaultAccountId, Rule3_12));
+        Assert.Throws<ArgumentException>(() => CreditCard.Create(Guid.NewGuid(), Guid.Empty, Rule3_12));
+        Assert.Throws<ArgumentNullException>(() => CreditCard.Create(Guid.NewGuid(), DefaultAccountId, null!));
     }
 
     [Fact]
-    public void Archive_IsIdempotent_AndBlocksFutureUpdatesOrEnsureActive()
+    public void UpdateDetails_UpdatesRuleNameAndBothNullAndNonNullLimit()
+    {
+        var card = CreditCard.Create(Guid.NewGuid(), DefaultAccountId, Rule3_12, "Nubank", Money.FromDecimal(3000m));
+
+        card.UpdateDetails(CardBillingRule.Of(10, 20), "  Inter  ", Money.FromDecimal(4500m));
+        Assert.Equal(CardBillingRule.Of(10, 20), card.BillingRule);
+        Assert.Equal("Inter", card.Name);
+        Assert.Equal(Money.FromDecimal(4500m), card.Limit);
+        Assert.Null(Record.Exception(card.EnsureActive));
+
+        card.UpdateDetails(CardBillingRule.Of(10, 20), "   ", null);
+        Assert.Null(card.Name);
+        Assert.Null(card.Limit);
+
+        Assert.Throws<ArgumentNullException>(() => card.UpdateDetails(null!, "Inter", null));
+        Assert.Throws<ArgumentOutOfRangeException>(() => card.UpdateDetails(Rule3_12, "Inter", Money.Zero));
+    }
+
+    [Fact]
+    public void Archive_IsIdempotent_AndBlocksFutureUpdatesOrEnsureActiveWithoutMutatingState()
     {
         var card = CreditCard.Create(Guid.NewGuid(), DefaultAccountId, Rule3_12, "Nubank", Money.FromDecimal(3000m));
 
@@ -75,5 +90,8 @@ public sealed class CreditCardTests
 
         Assert.Throws<DomainException>(card.EnsureActive);
         Assert.Throws<DomainException>(() => card.UpdateDetails(CardBillingRule.Of(5, 15), "Novo", null));
+        Assert.Equal(Rule3_12, card.BillingRule);
+        Assert.Equal("Nubank", card.Name);
+        Assert.Equal(Money.FromDecimal(3000m), card.Limit);
     }
 }

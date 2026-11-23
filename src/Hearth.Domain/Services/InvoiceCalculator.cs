@@ -30,9 +30,8 @@ public static class InvoiceCalculator
         return Money.Sum(
             purchases
                 .Where(purchase => purchase.AccountId == accountId)
-                .SelectMany(purchase => purchase.GetInstallments())
-                .Where(installment => !installment.IsPreviouslyPaid
-                                      && installment.Cycle.ClosingMonth == closingMonth)
+                .SelectMany(purchase => purchase.GetActiveInstallments())
+                .Where(installment => installment.Cycle.ClosingMonth == closingMonth)
                 .Select(installment => installment.Amount));
     }
 }

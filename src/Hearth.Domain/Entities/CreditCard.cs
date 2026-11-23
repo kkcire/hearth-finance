@@ -52,7 +52,7 @@ public sealed class CreditCard
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(billingRule);
 
-        var normalizedName = ValidateOptionalName(name);
+        var normalizedName = DomainValidation.ValidateOptionalText(name, nameof(name), DomainValidation.MaxNameLength);
         ValidateOptionalLimit(limit);
 
         return new CreditCard(id, accountId, billingRule, normalizedName, limit);
@@ -67,7 +67,7 @@ public sealed class CreditCard
         EnsureActive();
         ArgumentNullException.ThrowIfNull(billingRule);
 
-        var normalizedName = ValidateOptionalName(name);
+        var normalizedName = DomainValidation.ValidateOptionalText(name, nameof(name), DomainValidation.MaxNameLength);
         ValidateOptionalLimit(limit);
 
         BillingRule = billingRule;
@@ -96,23 +96,6 @@ public sealed class CreditCard
         {
             throw new DomainException("An archived credit card cannot be used or modified.");
         }
-    }
-
-    private static string? ValidateOptionalName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            return null;
-        }
-
-        var trimmed = name.Trim();
-        if (trimmed.Length > DomainValidation.MaxNameLength)
-        {
-            throw new ArgumentException(
-                $"The text must not exceed {DomainValidation.MaxNameLength} characters.", nameof(name));
-        }
-
-        return trimmed;
     }
 
     private static void ValidateOptionalLimit(Money? limit)

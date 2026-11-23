@@ -27,14 +27,18 @@ public class UpdateCreditCardPurchaseDateHandlerTests
         _handler = new UpdateCreditCardPurchaseDateHandler(_accountAccess, _purchases, _clock, _unitOfWork);
     }
 
-    private async Task<CreditCardPurchase> SeedAsync(DateOnly? purchaseDate = null, int initialInstallment = 1)
+    private async Task<CreditCardPurchase> SeedAsync(
+        DateOnly? purchaseDate = null,
+        int initialInstallment = 1,
+        DateOnly? initialDate = null,
+        CardBillingRule? rule = null)
     {
         var account = Account.Create(
             Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate);
+            initialDate ?? InitialDate);
         await _accounts.AddAsync(account);
 
         var purchase = CreditCardPurchase.Create(
@@ -45,7 +49,7 @@ public class UpdateCreditCardPurchaseDateHandlerTests
             Money.FromDecimal(600.00m),
             6,
             initialInstallment,
-            CardBillingRule.Of(3, 12),
+            rule ?? CardBillingRule.Of(3, 12),
             PurchaseCondition.Own,
             "Compra",
             Guid.NewGuid());
@@ -68,20 +72,47 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NewDateBeforeInitialBalanceDate_ForNewPurchase_ThrowsDomainException()
+    public async Task ExecuteAsync_NewDateBeforeInitialBalanceDate_WithOpenDueDateAndOpenCycle_IsAccepted()
     {
-        var purchase = await SeedAsync();
+        // Account created 23/11, today 23/11, card (25, 5): moving purchase from 23/11 to 08/11 keeps closing 25/11 and due 05/12.
+        _clock.Today = new DateOnly(2026, 11, 23);
+        var purchase = await SeedAsync(
+            purchaseDate: new DateOnly(2026, 11, 23),
+            initialInstallment: 1,
+            initialDate: new DateOnly(2026, 11, 23),
+            rule: CardBillingRule.Of(25, 5));
+
+        await _handler.ExecuteAsync(
+            new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 11, 8)));
+
+        Assert.Equal(new DateOnly(2026, 11, 8), purchase.Date);
+        Assert.Equal(new DateOnly(2026, 12, 5), purchase.FirstActiveCycle.DueDate);
+        Assert.Equal(1, _purchases.UpdateCount);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NewDateMovesFirstActiveDueDateBeforeInitialBalanceDate_ThrowsAndPreservesDate()
+    {
+        // Account initialDate = 2026-11-23, today = 2026-10-10, card (25, 5):
+        // purchase on 2026-11-08 (closes 25/11, due 05/12) moved to 2026-10-15 (closes 25/10 > today, due 05/11 < InitialBalanceDate 23/11).
+        _clock.Today = new DateOnly(2026, 10, 10);
+        var purchase = await SeedAsync(
+            purchaseDate: new DateOnly(2026, 11, 8),
+            initialInstallment: 1,
+            initialDate: new DateOnly(2026, 11, 23),
+            rule: CardBillingRule.Of(25, 5));
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new UpdateCreditCardPurchaseDateCommand(purchase.Id, InitialDate.AddDays(-1))));
+            new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 10, 15))));
 
-        Assert.Equal(new DateOnly(2026, 10, 10), purchase.Date);
+        Assert.Equal(new DateOnly(2026, 11, 8), purchase.Date);
         Assert.Equal(0, _purchases.UpdateCount);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_PurchaseInProgress_NewDateMovesFirstCountingClosingBeforeInitialDate_Throws()
+    public async Task ExecuteAsync_PurchaseInProgress_NewDateMovesFirstActiveDueDateBeforeInitialDateOrToday_Throws()
     {
         var purchase = await SeedAsync(purchaseDate: new DateOnly(2026, 7, 10), initialInstallment: 4);
 

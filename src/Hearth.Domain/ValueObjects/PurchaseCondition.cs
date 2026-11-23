@@ -24,10 +24,10 @@ public sealed record PurchaseCondition
     }
 
     /// <summary>The user's own purchase, with no additional condition.</summary>
-    public static PurchaseCondition Own { get; } = new(PurchaseConditionKind.Own, null);
+    public static PurchaseCondition Own => new(PurchaseConditionKind.Own, null);
 
     /// <summary>A purchase that belongs to someone else.</summary>
-    public static PurchaseCondition Others { get; } = new(PurchaseConditionKind.Others, null);
+    public static PurchaseCondition Others => new(PurchaseConditionKind.Others, null);
 
     public PurchaseConditionKind Kind { get; }
 

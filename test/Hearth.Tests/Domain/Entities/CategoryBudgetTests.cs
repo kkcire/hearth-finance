@@ -162,6 +162,8 @@ public class CategoryBudgetTests
         var start = YM(2026, 1);
         var budget = NewBudget(start: start, amount: 500.00m);
         var today = Day(2026, 1, 1);
+        var successfulAmountChanges = 0;
+        var successfulEndChanges = 0;
 
         for (var step = 0; step < 2000; step++)
         {
@@ -179,11 +181,17 @@ public class CategoryBudgetTests
             {
                 if (random.Next(2) == 0)
                 {
-                    budget.ChangeAmount(M(random.Next(1, 500000) / 100m), today);
+                    var nextAmount = M(random.Next(1, 500000) / 100m);
+                    var effective = budget.ChangeAmount(nextAmount, today);
+                    Assert.Equal(nextAmount, budget.AmountIn(effective));
+                    successfulAmountChanges++;
                 }
                 else
                 {
-                    budget.End(start.AddMonths(random.Next(0, 80)), today);
+                    var last = start.AddMonths(random.Next(0, 80));
+                    budget.End(last, today);
+                    Assert.Equal(last, budget.EndMonth);
+                    successfulEndChanges++;
                 }
             }
             catch (DomainException)
@@ -197,5 +205,38 @@ public class CategoryBudgetTests
                 Assert.True(budget.AmountIn(month) == amount, $"Past month amount changed: {context}");
             }
         }
+
+        Assert.True(successfulAmountChanges > 0, "Expected at least one ChangeAmount to succeed.");
+        Assert.True(successfulEndChanges > 0, "Expected at least one End to succeed.");
+    }
+
+    [Fact]
+    public void Boundaries_SingleMonthRange_IsActiveIn_OverlapsGuards_AndIdempotentEnd()
+    {
+        var single = NewBudget(start: YM(2026, 5), end: YM(2026, 5), amount: 250m);
+        Assert.True(single.IsActiveIn(YM(2026, 5)));
+        Assert.False(single.IsActiveIn(YM(2026, 4)));
+        Assert.False(single.IsActiveIn(YM(2026, 6)));
+        Assert.Null(single.AmountIn(YM(2026, 4)));
+        Assert.Null(single.AmountIn(YM(2026, 6)));
+
+        Assert.Throws<ArgumentNullException>(() => single.IsActiveIn(null!));
+        Assert.Throws<ArgumentNullException>(() => single.AmountIn(null!));
+        Assert.Throws<ArgumentNullException>(() => single.OverlapsWith(null!, null));
+        Assert.Throws<ArgumentNullException>(() => single.OverlapsWith((CategoryBudget)null!));
+        Assert.Throws<ArgumentOutOfRangeException>(() => single.OverlapsWith(YM(2026, 6), YM(2026, 5)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => single.ChangeAmount(Money.Zero, Day(2026, 5, 10)));
+        Assert.Throws<ArgumentNullException>(() => single.End(null!, Day(2026, 5, 10)));
+        Assert.Throws<ArgumentOutOfRangeException>(() => single.End(YM(2026, 4), Day(2026, 5, 10)));
+
+        // Change on exact EndMonth and overwrite on same open month
+        Assert.Equal(YM(2026, 5), single.ChangeAmount(M(300m), Day(2026, 5, 10)));
+        Assert.Equal(YM(2026, 5), single.ChangeAmount(M(350m), Day(2026, 5, 20)));
+        Assert.Single(single.AmountHistory);
+        Assert.Equal(M(350m), single.AmountIn(YM(2026, 5)));
+
+        // Idempotent End in past does not throw
+        single.End(YM(2026, 5), Day(2026, 10, 1));
+        Assert.Equal(YM(2026, 5), single.EndMonth);
     }
 }

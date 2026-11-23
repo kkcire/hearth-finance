@@ -53,18 +53,18 @@ public class GetRealBalanceHandlerTests
 
         var received = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salario");
-        received.MarkAsReceived(new DateOnly(2026, 11, 2));
+        received.MarkAsReceived(new DateOnly(2026, 11, 2), _clock.Today);
 
         var futureReceived = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 25), Money.FromDecimal(500.00m), "Bonus");
-        futureReceived.MarkAsReceived(new DateOnly(2026, 11, 25));
+        futureReceived.MarkAsReceived(new DateOnly(2026, 11, 25), new DateOnly(2026, 11, 30));
 
         var direct = DirectExpense.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200.00m), "Mercado", Guid.NewGuid());
 
         var rent = FixedExpense.Create(
             Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(1200.00m), "Aluguel", Guid.NewGuid());
-        rent.MarkAsPaid(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5));
+        rent.MarkAsPaid(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5), _clock.Today);
 
         // Purchase on 10/10 with closing 3, due 12 -> 1st installment closes 03/11, due 12/11 (<= 20/11).
         var purchase = CreditCardPurchase.Create(
@@ -105,7 +105,7 @@ public class GetRealBalanceHandlerTests
 
         var income = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(300.00m), "Pix");
-        income.MarkAsReceived(new DateOnly(2026, 11, 5));
+        income.MarkAsReceived(new DateOnly(2026, 11, 5), _clock.Today);
 
         var laterExpense = DirectExpense.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 15), Money.FromDecimal(100.00m), "Jantar", Guid.NewGuid());

@@ -43,8 +43,16 @@ public sealed class UpdateIncomeHandler
 
         account.EnsureCanRegisterOn(command.ExpectedDate);
 
-        income.UpdateExpectedDate(command.ExpectedDate);
-        income.UpdateAmount(amount);
+        if (command.ExpectedDate != income.ExpectedDate)
+        {
+            income.UpdateExpectedDate(command.ExpectedDate);
+        }
+
+        if (amount != income.Amount)
+        {
+            income.UpdateAmount(amount);
+        }
+
         income.UpdateDescription(command.Description);
 
         await _incomes.UpdateAsync(income, cancellationToken);

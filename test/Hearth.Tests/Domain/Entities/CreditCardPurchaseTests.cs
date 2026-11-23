@@ -168,6 +168,16 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
+    public void Create_DescriptionAtExactMaxLength_IsAccepted()
+    {
+        var exact = new string('a', Hearth.Domain.DomainValidation.MaxDescriptionLength);
+
+        var purchase = NewPurchase(description: $"  {exact}  ");
+
+        Assert.Equal(exact, purchase.Description);
+    }
+
+    [Fact]
     public void Create_EmptyCategoryId_Throws()
     {
         Assert.Throws<ArgumentException>(() => NewPurchase(categoryId: Guid.Empty));
@@ -182,8 +192,22 @@ public class CreditCardPurchaseTests
     [Fact]
     public void Create_InstallmentsThatReachBeyondTheSupportedYears_Throw()
     {
+        // With rule (3, 12), 9999-11-01 closes in 9999-11 (valid) and 2nd installment in 9999-12 (valid),
+        // while the 3rd installment overflows into year 10000.
+        var rule = CardBillingRule.Of(3, 12);
+
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => NewPurchase(date: new DateOnly(9999, 11, 10), count: 3));
+            () => NewPurchase(date: new DateOnly(9999, 11, 1), count: 3, rule: rule));
+    }
+
+    [Fact]
+    public void FirstActiveCycle_AdvancesByInitialInstallmentMinusOne()
+    {
+        // Purchase on 2026-10-10 with closing day 3 -> installment 1 closes 2026-11, installment 3 closes 2027-01.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10), count: 5, initial: 3, rule: CardBillingRule.Of(3, 12));
+
+        Assert.Equal(YearMonth.Of(2026, 11), purchase.FirstCycle.ClosingMonth);
+        Assert.Equal(YearMonth.Of(2027, 1), purchase.FirstActiveCycle.ClosingMonth);
     }
 
     [Fact]
@@ -217,7 +241,7 @@ public class CreditCardPurchaseTests
         Assert.Equal(3, installments.Count);
         Assert.Equal(new[] { 1, 2, 3 }, installments.Select(i => i.Number));
         Assert.Equal(
-            new[] { M(33.33m), M(33.33m), M(33.34m) },
+            new[] { M(33.34m), M(33.33m), M(33.33m) },
             installments.Select(i => i.Amount));
         Assert.Equal(
             new[] { YearMonth.Of(2026, 11), YearMonth.Of(2026, 12), YearMonth.Of(2027, 1) },
@@ -358,7 +382,7 @@ public class CreditCardPurchaseTests
 
         Assert.Equal(M(250.00m), purchase.Amount);
         Assert.Equal(
-            new[] { M(83.33m), M(83.33m), M(83.34m) },
+            new[] { M(83.34m), M(83.33m), M(83.33m) },
             purchase.GetInstallments().Select(i => i.Amount));
     }
 
@@ -460,14 +484,83 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
+    public void UpdateDate_MovingIntoCycleClosingExactlyOnToday_ThrowsAndKeepsTheDate()
+    {
+        // Today is 03/10/2026 (exact closing date of October cycle): moving to 02/10/2026 must fail.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+
+        Assert.Throws<DomainException>(
+            () => purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3)));
+
+        Assert.Equal(new DateOnly(2026, 10, 10), purchase.Date);
+    }
+
+    [Fact]
     public void UpdateDate_CycleOutsideTheSupportedYears_ThrowsAndKeepsTheDate()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12), count: 3);
 
+        // First installment valid (9999-11), third installment overflows year 9999.
         Assert.Throws<ArgumentOutOfRangeException>(
-            () => purchase.UpdateDate(new DateOnly(9999, 12, 31), new DateOnly(2026, 10, 20)));
+            () => purchase.UpdateDate(new DateOnly(9999, 11, 1), new DateOnly(2026, 10, 20)));
 
         Assert.Equal(DefaultDate, purchase.Date);
+    }
+
+    // ---------- EnsureFirstActiveDueDateIsOpen ----------
+
+    [Fact]
+    public void EnsureFirstActiveDueDateIsOpen_AllowsPurchaseBeforeInitialBalanceDateWhenDueDateIsOpen()
+    {
+        // Real-world scenario: account created on 23/11, purchase made on 08/11 on card (25, 5) -> due 05/12.
+        var initialDate = new DateOnly(2026, 11, 23);
+        var today = new DateOnly(2026, 11, 23);
+        var account = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(1000m), initialDate, isInitialBalanceConfirmed: true);
+
+        var purchase = NewPurchase(
+            date: new DateOnly(2026, 11, 8),
+            count: 1,
+            initial: 1,
+            rule: CardBillingRule.Of(25, 5),
+            accountId: account.Id);
+
+        Assert.Equal(new DateOnly(2026, 12, 5), purchase.FirstActiveCycle.DueDate);
+        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(account, today)));
+        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(new DateOnly(2026, 11, 1), account, today)));
+    }
+
+    [Fact]
+    public void EnsureFirstActiveDueDateIsOpen_RespectsExactLowerBoundsAndRejectsBeforeInitialDateOrBeforeToday()
+    {
+        // Card (25, 5): purchase 08/10 -> closes 25/10, due 05/11.
+        var rule = CardBillingRule.Of(25, 5);
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 8), count: 3, initial: 1, rule: rule);
+        Assert.Equal(new DateOnly(2026, 11, 5), purchase.FirstActiveCycle.DueDate);
+
+        // Exact boundary: DueDate == InitialBalanceDate == today -> allowed
+        var exactAccount = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 5), isInitialBalanceConfirmed: true);
+        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(exactAccount, new DateOnly(2026, 11, 5))));
+
+        // DueDate < InitialBalanceDate (even when DueDate >= today) -> rejected
+        var laterInitialAccount = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 6), isInitialBalanceConfirmed: true);
+        Assert.Throws<DomainException>(() => purchase.EnsureFirstActiveDueDateIsOpen(laterInitialAccount, new DateOnly(2026, 11, 1)));
+
+        // DueDate < today (even when DueDate >= InitialBalanceDate) -> rejected
+        Assert.Throws<DomainException>(() => purchase.EnsureFirstActiveDueDateIsOpen(exactAccount, new DateOnly(2026, 11, 6)));
+
+        // Advancing InitialInstallment to 2 moves FirstActiveCycle.DueDate to 05/12 -> allowed on 23/11!
+        var inProgress = NewPurchase(date: new DateOnly(2026, 10, 8), count: 3, initial: 2, rule: rule);
+        var nov23Account = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 23), isInitialBalanceConfirmed: true);
+        Assert.Equal(new DateOnly(2026, 12, 5), inProgress.FirstActiveCycle.DueDate);
+        Assert.Null(Record.Exception(() => inProgress.EnsureFirstActiveDueDateIsOpen(nov23Account, new DateOnly(2026, 11, 23))));
+
+        // Null account throws ArgumentNullException
+        Assert.Throws<ArgumentNullException>(() => purchase.EnsureFirstActiveDueDateIsOpen(null!, new DateOnly(2026, 11, 5)));
+        Assert.Throws<ArgumentNullException>(() => purchase.EnsureFirstActiveDueDateIsOpen(new DateOnly(2026, 10, 8), null!, new DateOnly(2026, 11, 5)));
     }
 
     // ---------- UpdateDescription and UpdateCategory ----------

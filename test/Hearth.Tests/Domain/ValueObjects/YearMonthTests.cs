@@ -176,6 +176,7 @@ public class YearMonthTests
     public void Comparison_Null_IsSmallerThanAnyValue()
     {
         YearMonth? none = null;
+        YearMonth? otherNone = null;
         var value = YearMonth.Of(2026, 10);
 
         Assert.True(value.CompareTo(null) > 0);
@@ -184,7 +185,13 @@ public class YearMonthTests
         Assert.True(value > none);
         Assert.True(value >= none);
         Assert.False(none > value);
+        Assert.False(none >= value);
         Assert.False(value < none);
+        Assert.False(value <= none);
+        Assert.False(none < otherNone);
+        Assert.True(none <= otherNone);
+        Assert.False(none > otherNone);
+        Assert.True(none >= otherNone);
     }
 
     // ---------- Main invariants ----------

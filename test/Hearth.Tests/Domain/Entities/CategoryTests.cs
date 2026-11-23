@@ -42,6 +42,11 @@ public class CategoryTests
         Assert.Throws<DomainException>(() => category.Restore());
         Assert.Throws<DomainException>(category.EnsureModifiable);
         Assert.Null(Record.Exception(category.EnsureUsable));
+        Assert.Equal("Transporte", category.Name);
+        Assert.False(category.IsArchived);
+
+        Assert.Throws<ArgumentException>(() => Category.CreateSystem(Guid.Empty, "Transporte"));
+        Assert.ThrowsAny<ArgumentException>(() => Category.CreateSystem(Guid.NewGuid(), "   "));
     }
 
     [Fact]

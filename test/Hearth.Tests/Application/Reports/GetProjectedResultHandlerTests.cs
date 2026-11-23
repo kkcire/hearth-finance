@@ -51,7 +51,7 @@ public class GetProjectedResultHandlerTests
         // Expected in November, received in December -> still counts in November.
         var salary = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 28), Money.FromDecimal(5000.00m), "Salario");
-        salary.MarkAsReceived(new DateOnly(2026, 12, 2));
+        salary.MarkAsReceived(new DateOnly(2026, 12, 2), new DateOnly(2026, 12, 31));
 
         var otherIncome = Income.Create(
             Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(9000.00m), "Outro");

@@ -10,54 +10,13 @@ public static class DomainValidation
     public const int MinPasswordLength = 8;
     public const int MaxPasswordLength = 128;
 
-    public static bool IsValidEmail(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return false;
-        }
+    private const int MaxEmailLocalLength = 64;
 
-        var trimmed = value.Trim();
-        if (trimmed.Length > MaxEmailLength)
-        {
-            return false;
-        }
+    public static bool IsValidEmail(string? value) =>
+        !string.IsNullOrWhiteSpace(value) && IsValidTrimmedEmail(value.Trim());
 
-        foreach (var c in trimmed)
-        {
-            if (char.IsWhiteSpace(c) || char.IsControl(c))
-            {
-                return false;
-            }
-        }
-
-        var atIndex = trimmed.IndexOf('@');
-        if (atIndex <= 0 || atIndex != trimmed.LastIndexOf('@'))
-        {
-            return false;
-        }
-
-        var local = trimmed[..atIndex];
-        var domain = trimmed[(atIndex + 1)..];
-
-        if (local.Length > 64 || domain.Length < 3)
-        {
-            return false;
-        }
-
-        var dotIndex = domain.IndexOf('.');
-        if (dotIndex <= 0 || domain.EndsWith('.') || domain.Contains("..", StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        return true;
-    }
-
-    public static string NormalizeEmail(string value)
-    {
-        return ValidateAndNormalizeEmail(value, nameof(value));
-    }
+    public static string NormalizeEmail(string value) =>
+        ValidateAndNormalizeEmail(value, nameof(value));
 
     internal static string ValidateAndNormalizeEmail(string value, string paramName)
     {
@@ -65,7 +24,7 @@ public static class DomainValidation
 
         var trimmed = value.Trim();
 
-        if (!IsValidEmail(trimmed))
+        if (!IsValidTrimmedEmail(trimmed))
         {
             throw new ArgumentException("The email address is not valid.", paramName);
         }
@@ -104,4 +63,47 @@ public static class DomainValidation
 
         return trimmed;
     }
+
+    internal static string? ValidateOptionalText(string? value, string paramName, int maxLength) =>
+        string.IsNullOrWhiteSpace(value)
+            ? null
+            : ValidateRequiredText(value, paramName, maxLength);
+
+    private static bool IsValidTrimmedEmail(string trimmed)
+    {
+        if (trimmed.Length > MaxEmailLength || ContainsForbiddenEmailChar(trimmed))
+        {
+            return false;
+        }
+
+        var atIndex = trimmed.IndexOf('@');
+        if (atIndex <= 0 || atIndex != trimmed.LastIndexOf('@'))
+        {
+            return false;
+        }
+
+        var local = trimmed[..atIndex];
+        var domain = trimmed[(atIndex + 1)..];
+
+        return local.Length <= MaxEmailLocalLength && IsValidEmailDomain(domain);
+    }
+
+    private static bool ContainsForbiddenEmailChar(string value)
+    {
+        foreach (var c in value)
+        {
+            if (char.IsWhiteSpace(c) || char.IsControl(c))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsValidEmailDomain(string domain) =>
+        domain.Length >= 3
+        && domain.IndexOf('.') > 0
+        && !domain.EndsWith('.')
+        && !domain.Contains("..", StringComparison.Ordinal);
 }

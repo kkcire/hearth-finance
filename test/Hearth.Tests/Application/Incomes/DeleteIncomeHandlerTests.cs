@@ -44,7 +44,7 @@ public class DeleteIncomeHandlerTests
 
         if (received)
         {
-            income.MarkAsReceived(new DateOnly(2026, 10, 28));
+            income.MarkAsReceived(new DateOnly(2026, 10, 28), new DateOnly(2026, 12, 31));
         }
 
         await _incomes.AddAsync(income);

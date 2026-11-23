@@ -4,7 +4,7 @@ using Hearth.Domain.ValueObjects;
 namespace Hearth.Domain.Services;
 
 /// <summary>
-/// Pure calculations for credit card limit consumption and derived invoice lifecycle status.
+/// Pure calculations for credit card limit consumption.
 /// Maintains exact symmetry with <see cref="RealBalanceCalculator"/>:
 /// installments with <c>DueDate &lt;= today</c> have settled in cash balance, while
 /// installments with <c>DueDate &gt; today</c> occupy credit card limit.
@@ -22,9 +22,8 @@ public static class CreditCardLimitCalculator
         return Money.Sum(
             purchases
                 .Where(purchase => purchase.CreditCardId == creditCardId)
-                .SelectMany(purchase => purchase.GetInstallments())
-                .Where(installment => !installment.IsPreviouslyPaid
-                                      && installment.Cycle.DueDate > today)
+                .SelectMany(purchase => purchase.GetActiveInstallments())
+                .Where(installment => installment.Cycle.DueDate > today)
                 .Select(installment => installment.Amount));
     }
 
@@ -43,22 +42,5 @@ public static class CreditCardLimitCalculator
 
         var used = CalculateUsedLimit(card.Id, today, purchases);
         return limit - used;
-    }
-
-    public static InvoiceStatus GetInvoiceStatus(BillingCycle cycle, DateOnly today)
-    {
-        ArgumentNullException.ThrowIfNull(cycle);
-
-        if (today >= cycle.DueDate)
-        {
-            return InvoiceStatus.Paid;
-        }
-
-        if (today >= cycle.ClosingDate)
-        {
-            return InvoiceStatus.Closed;
-        }
-
-        return InvoiceStatus.Open;
     }
 }

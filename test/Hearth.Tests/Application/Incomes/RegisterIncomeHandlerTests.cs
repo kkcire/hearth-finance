@@ -17,13 +17,14 @@ public class RegisterIncomeHandlerTests
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
+    private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RegisterIncomeHandler _handler;
 
     public RegisterIncomeHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new RegisterIncomeHandler(_accountAccess, _incomes, _unitOfWork);
+        _handler = new RegisterIncomeHandler(_accountAccess, _incomes, _clock, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync()
@@ -94,6 +95,19 @@ public class RegisterIncomeHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ReceivedOnInFuture_ThrowsDomainExceptionAndDoesNotSave()
+    {
+        var account = await SeedAccountAsync();
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new RegisterIncomeCommand(
+                account.Id, InitialDate, 100.00m, "Pix", ReceivedOn: _clock.Today.AddDays(1))));
+
+        Assert.Empty(_incomes.Incomes);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_ReceivedOnBeforeInitialBalanceDate_ThrowsDomainExceptionAndDoesNotSave()
     {
         var account = await SeedAccountAsync();
@@ -158,8 +172,9 @@ public class RegisterIncomeHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(null!, _incomes, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(null!, _incomes, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, _clock, null!));
     }
 }

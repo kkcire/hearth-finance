@@ -45,7 +45,7 @@ public class UpdateIncomeHandlerTests
 
         if (received)
         {
-            income.MarkAsReceived(new DateOnly(2026, 10, 30));
+            income.MarkAsReceived(new DateOnly(2026, 10, 30), new DateOnly(2026, 11, 20));
         }
 
         await _incomes.AddAsync(income);
@@ -54,9 +54,9 @@ public class UpdateIncomeHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ValidCommand_UpdatesFieldsKeepsReceivedStateAndSaves()
+    public async Task ExecuteAsync_ExpectedIncome_UpdatesAllFieldsAndSaves()
     {
-        var (_, income) = await SeedAsync(received: true);
+        var (_, income) = await SeedAsync(received: false);
 
         await _handler.ExecuteAsync(new UpdateIncomeCommand(
             income.Id,
@@ -69,8 +69,41 @@ public class UpdateIncomeHandlerTests
         Assert.Equal(new DateOnly(2026, 11, 5), saved.ExpectedDate);
         Assert.Equal(Money.FromDecimal(5500.25m), saved.Amount);
         Assert.Equal("Salário atualizado", saved.Description);
-        Assert.True(saved.IsReceived);
-        Assert.Equal(new DateOnly(2026, 10, 30), saved.ReceivedOn);
+        Assert.False(saved.IsReceived);
+        Assert.Equal(1, _incomes.UpdateCount);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReceivedIncome_AllowsDescriptionChangeOnly_AndBlocksAmountOrExpectedDateChanges()
+    {
+        var (_, income) = await SeedAsync(received: true);
+
+        await _handler.ExecuteAsync(new UpdateIncomeCommand(
+            income.Id,
+            income.ExpectedDate,
+            income.Amount.Amount,
+            "  Salário outubro  "));
+
+        Assert.Equal("Salário outubro", income.Description);
+        Assert.True(income.IsReceived);
+        Assert.Equal(1, _incomes.UpdateCount);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(new UpdateIncomeCommand(
+            income.Id,
+            income.ExpectedDate,
+            5500.25m,
+            "Salário outubro")));
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(new UpdateIncomeCommand(
+            income.Id,
+            new DateOnly(2026, 11, 5),
+            income.Amount.Amount,
+            "Salário outubro")));
+
+        Assert.Equal(Money.FromDecimal(5000.00m), income.Amount);
+        Assert.Equal(new DateOnly(2026, 10, 28), income.ExpectedDate);
         Assert.Equal(1, _incomes.UpdateCount);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }

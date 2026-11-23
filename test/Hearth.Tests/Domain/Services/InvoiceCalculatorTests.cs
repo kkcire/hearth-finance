@@ -81,14 +81,14 @@ public class InvoiceCalculatorTests
     // ---------- Installments ----------
 
     [Fact]
-    public void Calculate_Installments_FallOnConsecutiveInvoices_WithTheRemainderOnTheLast()
+    public void Calculate_Installments_FallOnConsecutiveInvoices_WithTheRemainderOnTheFirst()
     {
         var purchase = NewPurchase(Day(2026, 10, 10), amount: 100.00m, count: 3);
 
         Assert.Equal(Money.Zero, Calc(YM(2026, 10), purchase));
-        Assert.Equal(M(33.33m), Calc(YM(2026, 11), purchase));
+        Assert.Equal(M(33.34m), Calc(YM(2026, 11), purchase));
         Assert.Equal(M(33.33m), Calc(YM(2026, 12), purchase));
-        Assert.Equal(M(33.34m), Calc(YM(2027, 1), purchase));
+        Assert.Equal(M(33.33m), Calc(YM(2027, 1), purchase));
         Assert.Equal(Money.Zero, Calc(YM(2027, 2), purchase));
     }
 
@@ -108,13 +108,13 @@ public class InvoiceCalculatorTests
     }
 
     [Fact]
-    public void Calculate_RemainderLargerThanOneCent_GoesToTheLastInvoice()
+    public void Calculate_RemainderLargerThanOneCent_GoesToTheFirstInvoice()
     {
         var purchase = NewPurchase(Day(2026, 10, 10), amount: 0.05m, count: 3);
 
-        Assert.Equal(M(0.01m), Calc(YM(2026, 11), purchase));
+        Assert.Equal(M(0.03m), Calc(YM(2026, 11), purchase));
         Assert.Equal(M(0.01m), Calc(YM(2026, 12), purchase));
-        Assert.Equal(M(0.03m), Calc(YM(2027, 1), purchase));
+        Assert.Equal(M(0.01m), Calc(YM(2027, 1), purchase));
     }
 
     [Fact]
@@ -161,14 +161,14 @@ public class InvoiceCalculatorTests
     }
 
     [Fact]
-    public void Calculate_PurchaseInProgress_KeepsTheRemainderOnTheLastCountingInstallment()
+    public void Calculate_PurchaseInProgress_LeavesTheRemainderOnThePreviouslyPaidFirstInstallment()
     {
-        // 100.00 in 3 from installment 2: the installments are 33.33, 33.33 and 33.34.
+        // 100.00 in 3 from installment 2: the installments are 33.34 (paid), 33.33 and 33.33.
         var purchase = NewPurchase(Day(2026, 10, 10), amount: 100.00m, count: 3, initial: 2);
 
         Assert.Equal(Money.Zero, Calc(YM(2026, 11), purchase));
         Assert.Equal(M(33.33m), Calc(YM(2026, 12), purchase));
-        Assert.Equal(M(33.34m), Calc(YM(2027, 1), purchase));
+        Assert.Equal(M(33.33m), Calc(YM(2027, 1), purchase));
     }
 
     // ---------- Accounts ----------
@@ -222,12 +222,31 @@ public class InvoiceCalculatorTests
     }
 
     [Fact]
-    public void Calculate_DueDayDoesNotAffectWhichInvoiceAPurchaseBelongsTo()
+    public void Calculate_DueDayDoesNotAffectWhichInvoiceAPurchaseBelongsTo_EvenWhenDueFallsInNextMonth()
     {
+        // Rule (25, 5): purchase on Nov 10 closes Nov 25 (ClosingMonth = Nov), due Dec 5.
+        // InvoiceCalculator groups strictly by ClosingMonth (Nov), not DueMonth (Dec).
         var a = NewPurchase(Day(2026, 10, 10), amount: 100.00m, rule: CardBillingRule.Of(3, 12));
-        var b = NewPurchase(Day(2026, 10, 10), amount: 50.00m, rule: CardBillingRule.Of(3, 20));
+        var b = NewPurchase(Day(2026, 11, 10), amount: 50.00m, rule: CardBillingRule.Of(25, 5));
 
         Assert.Equal(M(150.00m), Calc(YM(2026, 11), a, b));
+        Assert.Equal(Money.Zero, Calc(YM(2026, 12), a, b));
+    }
+
+    [Fact]
+    public void Calculate_SumsInstallmentsAcrossMultipleCreditCardsInSameAccount()
+    {
+        var activeCardId = Guid.NewGuid();
+        var archivedCardId = Guid.NewGuid();
+
+        var fromActive = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, activeCardId, Day(2026, 10, 10), M(100m), 1, 1,
+            CardBillingRule.Of(3, 12), PurchaseCondition.Own, "Ativo", Guid.NewGuid());
+        var fromArchived = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, archivedCardId, Day(2026, 10, 12), M(75m), 1, 1,
+            CardBillingRule.Of(3, 12), PurchaseCondition.Own, "Arquivado", Guid.NewGuid());
+
+        Assert.Equal(M(175m), Calc(YM(2026, 11), fromActive, fromArchived));
     }
 
     // ---------- Arguments and stability ----------
