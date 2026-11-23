@@ -51,6 +51,7 @@ using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
+using Hearth.Application.Reports.GetMonthlySurplus;
 using Hearth.Application.Reports.GetProjectedResult;
 using Hearth.Application.Reports.GetRealBalance;
 using Microsoft.Extensions.DependencyInjection;
@@ -135,6 +136,7 @@ public static class DependencyInjection
         services.AddScoped<GetInvoiceSummaryHandler>();
 
         // Reports
+        services.AddScoped<GetMonthlySurplusHandler>();
         services.AddScoped<GetProjectedResultHandler>();
         services.AddScoped<GetRealBalanceHandler>();
         services.AddScoped<GetExpensesByCategoryHandler>();

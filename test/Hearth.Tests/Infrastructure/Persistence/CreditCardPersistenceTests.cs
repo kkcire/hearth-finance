@@ -1,9 +1,16 @@
 using Hearth.Application.Abstractions;
+using Hearth.Application.Authorization;
+using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
+using Hearth.Application.CreditCards.GetActiveCreditCard;
+using Hearth.Application.Invoices.GetInvoiceSummary;
+using Hearth.Application.Reports.GetMonthlySurplus;
+using Hearth.Application.Reports.GetRealBalance;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Infrastructure;
 using Hearth.Infrastructure.Persistence;
+using Hearth.Tests.Application.Fakes;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Migrations;
@@ -258,6 +265,107 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             await adminConn.OpenAsync();
             await using var dropCmd = new NpgsqlCommand($"DROP DATABASE IF EXISTS \"{upgradeDbName}\" WITH (FORCE);", adminConn);
             await dropCmd.ExecuteNonQueryAsync();
+        }
+    }
+
+    [Fact]
+    public async Task RegisterCreditCardPurchaseHandler_OldTenInstallmentPurchaseWithInitialInstallment9_PersistsAndIgnoresPreviouslyPaidInstallments()
+    {
+        var userId = Guid.CreateVersion7();
+        var accountId = Guid.CreateVersion7();
+        var cardId = Guid.CreateVersion7();
+        var initialBalanceDate = new DateOnly(2026, 11, 22);
+        var today = new DateOnly(2026, 11, 22);
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await users.AddAsync(User.Create(
+                userId, "Erick", "installment9@hearth.app", "hash", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
+            await accounts.AddAsync(Account.Create(
+                accountId, userId, "Conta principal", Money.FromDecimal(2000.00m), initialBalanceDate, isInitialBalanceConfirmed: true));
+            await cards.AddAsync(CreditCard.Create(
+                cardId, accountId, CardBillingRule.Of(2, 12), "Nubank", Money.FromDecimal(3000.00m)));
+            await uow.SaveChangesAsync();
+        }
+
+        // Register 10x purchase from 02/03/2026 starting at installment 9:
+        // Installment 1 due 2026-04-12 .. installment 8 due 2026-11-12 (< InitialBalanceDate, IsPreviouslyPaid == true)
+        // Installment 9 due 2026-12-12, installment 10 due 2027-01-12 (>= InitialBalanceDate, active)
+        Guid purchaseId;
+        await using (var scope = _fixture.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var guard = new AccountAccessGuard(accounts, new FakeCurrentUser(userId));
+            var handler = new RegisterCreditCardPurchaseHandler(
+                guard,
+                scope.ServiceProvider.GetRequiredService<ICreditCardRepository>(),
+                scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
+                scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>(),
+                new FakeClock(today),
+                scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
+
+            purchaseId = await handler.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
+                accountId,
+                cardId,
+                new DateOnly(2026, 3, 2),
+                1000.00m,
+                10,
+                9,
+                PurchaseConditionKind.Own,
+                null,
+                "Geladeira",
+                SystemCategories.ShoppingId));
+        }
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
+            var incomes = scope.ServiceProvider.GetRequiredService<IIncomeRepository>();
+            var directs = scope.ServiceProvider.GetRequiredService<IDirectExpenseRepository>();
+            var fixedExpenses = scope.ServiceProvider.GetRequiredService<IFixedExpenseRepository>();
+            var purchases = scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>();
+            var guard = new AccountAccessGuard(accounts, new FakeCurrentUser(userId));
+            var clock = new FakeClock(today);
+
+            var saved = await purchases.GetByIdAsync(purchaseId);
+            Assert.NotNull(saved);
+            Assert.Equal(9, saved.InitialInstallment);
+            Assert.Equal(new DateOnly(2026, 4, 12), saved.FirstCycle.DueDate);
+            Assert.Equal(new DateOnly(2026, 12, 12), saved.FirstActiveCycle.DueDate);
+
+            // Real balance on 2026-11-22 must NOT deduct installments 1..8
+            var realBalance = await new GetRealBalanceHandler(guard, incomes, directs, fixedExpenses, purchases, clock)
+                .ExecuteAsync(new GetRealBalanceQuery(accountId));
+            Assert.Equal(0.00m, realBalance.CardInvoices);
+            Assert.Equal(2000.00m, realBalance.Balance);
+
+            // Used credit card limit counts ONLY installments 9 and 10 (R$ 200.00), leaving R$ 2800.00 available
+            var activeCard = await new GetActiveCreditCardHandler(guard, cards, purchases, clock)
+                .ExecuteAsync(new GetActiveCreditCardQuery(accountId));
+            Assert.NotNull(activeCard);
+            Assert.Equal(200.00m, activeCard.UsedLimit);
+            Assert.Equal(2800.00m, activeCard.AvailableLimit);
+
+            // Invoices: Nov 2026 = 0 (installment 8 is previously paid), Dec 2026 = 100 (inst 9), Jan 2027 = 100 (inst 10)
+            var invoiceHandler = new GetInvoiceSummaryHandler(guard, cards, purchases, clock);
+            Assert.Equal(0.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 11))).CalculatedAmount);
+            Assert.Equal(100.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 12))).CalculatedAmount);
+            Assert.Equal(100.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2027, 1))).CalculatedAmount);
+
+            // Monthly surplus: Nov untouched (2000), Dec deducts inst 9 (1900), Jan deducts inst 10 (1800)
+            var surplus = await new GetMonthlySurplusHandler(guard, incomes, directs, fixedExpenses, purchases, clock)
+                .ExecuteAsync(new GetMonthlySurplusQuery(accountId, 2026, 12, PastMonths: 0, FutureMonths: 2));
+            Assert.Equal(2000.00m, surplus.Series[0].ProjectedSurplus);
+            Assert.Equal(100.00m, surplus.SelectedMonth.CardInvoiceDue);
+            Assert.Equal(1900.00m, surplus.SelectedMonth.ProjectedSurplus);
+            Assert.Equal(100.00m, surplus.Series[2].CardInvoiceDue);
+            Assert.Equal(1800.00m, surplus.Series[2].ProjectedSurplus);
         }
     }
 }
