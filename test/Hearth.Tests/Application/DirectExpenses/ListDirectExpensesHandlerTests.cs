@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,27 +10,26 @@ namespace Hearth.Tests.Application.DirectExpenses;
 
 public class ListDirectExpensesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly ListDirectExpensesHandler _handler;
 
     public ListDirectExpensesHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListDirectExpensesHandler(_accountAccess, _directExpenses);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 10, 1));
         await _accounts.AddAsync(account);
         return account;
     }

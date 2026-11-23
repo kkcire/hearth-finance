@@ -12,9 +12,7 @@ public sealed class AccountPageTests : WebTestBase
         await SeedAccountAsync(
             name: "Conta Pessoal",
             initialBalance: 850.25m,
-            initialBalanceDate: new DateOnly(2026, 2, 10),
-            closingDay: 3,
-            dueDay: 12);
+            initialBalanceDate: new DateOnly(2026, 2, 10));
 
         var cut = Render<AccountPage>();
 
@@ -27,14 +25,12 @@ public sealed class AccountPageTests : WebTestBase
     }
 
     [Fact]
-    public async Task UpdateActions_PersistRenameBalanceAndBillingRule()
+    public async Task UpdateActions_PersistRenameAndInitialBalance()
     {
         var accountId = await SeedAccountAsync(
             name: "Conta Antiga",
             initialBalance: 100m,
-            initialBalanceDate: new DateOnly(2026, 1, 1),
-            closingDay: 3,
-            dueDay: 12);
+            initialBalanceDate: new DateOnly(2026, 1, 1));
 
         var cut = Render<AccountPage>();
 
@@ -44,16 +40,10 @@ public sealed class AccountPageTests : WebTestBase
         cut.Find("input[data-testid='update-balance-input']").Change("2.500,75");
         await cut.Find("[data-testid='update-balance-submit']").ClickAsync();
 
-        cut.Find("input[data-testid='update-closing-day-input']").Change("8");
-        cut.Find("input[data-testid='update-due-day-input']").Change("18");
-        await cut.Find("[data-testid='update-billing-rule-submit']").ClickAsync();
-
         var persisted = await Accounts.GetByIdAsync(accountId);
         Assert.NotNull(persisted);
         Assert.Equal("Conta Nova", persisted.Name);
         Assert.Equal(Money.FromDecimal(2500.75m), persisted.InitialBalance);
-        Assert.Equal(8, persisted.BillingRule.ClosingDay);
-        Assert.Equal(18, persisted.BillingRule.DueDay);
         Assert.Equal("Conta Nova", AccountContext.Current?.Name);
     }
 }

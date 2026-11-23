@@ -1,13 +1,11 @@
-using Hearth.Application.Accounts.ChangeBillingRule;
+using Hearth.Application.Accounts.ConfirmInitialBalance;
 using Hearth.Application.Accounts.GetAccount;
 using Hearth.Application.Accounts.ListAccounts;
 using Hearth.Application.Accounts.RenameAccount;
 using Hearth.Application.Accounts.UpdateInitialBalance;
 using Hearth.Application.Authorization;
 using Hearth.Application.Categories.ArchiveCategory;
-using Hearth.Application.Categories.CreateCategory;
 using Hearth.Application.Categories.DeleteCategory;
-using Hearth.Application.Categories.ListCategories;
 using Hearth.Application.Categories.RenameCategory;
 using Hearth.Application.Categories.RestoreCategory;
 using Hearth.Application.CategoryBudgets.ChangeCategoryBudgetAmount;
@@ -21,6 +19,12 @@ using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseAmount;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
+using Hearth.Application.CreditCards.ArchiveCreditCard;
+using Hearth.Application.CreditCards.CreateCreditCard;
+using Hearth.Application.CreditCards.DeleteCreditCard;
+using Hearth.Application.CreditCards.GetActiveCreditCard;
+using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.UpdateCreditCard;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
@@ -41,10 +45,6 @@ using Hearth.Application.Incomes.RegisterIncome;
 using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
-using Hearth.Application.Invoices.InformInvoiceChargedAmount;
-using Hearth.Application.Invoices.ListInvoices;
-using Hearth.Application.Invoices.MarkInvoiceAsPaid;
-using Hearth.Application.Invoices.RevertInvoicePayment;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Application.Reports.GetProjectedResult;
@@ -70,45 +70,43 @@ public sealed class CrossUserIsolationTests
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
+    private readonly InMemoryCreditCardRepository _creditCards = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly InMemoryIncomeRepository _incomes = new();
-    private readonly InMemoryInvoiceRepository _invoices = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
 
-    private async Task<(Account Account, Category Category, CategoryBudget Budget, DirectExpense Direct, FixedExpense Fixed, CreditCardPurchase Purchase, Income Income, Invoice Invoice)>
+    private async Task<(Account Account, Category Category, CategoryBudget Budget, DirectExpense Direct, FixedExpense Fixed, CreditCard Card, CreditCardPurchase Purchase, Income Income)>
         SeedUserADataAsync()
     {
         var rule = CardBillingRule.Of(3, 12);
-        var account = Account.Create(Guid.NewGuid(), UserAId, "Conta User A", Money.FromDecimal(1000m), new DateOnly(2026, 1, 1), rule);
-        var category = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
+        var account = Account.Create(Guid.NewGuid(), UserAId, "Conta User A", Money.FromDecimal(1000m), new DateOnly(2026, 1, 1));
+        var category = Category.CreateForUser(Guid.NewGuid(), UserAId, "Faculdade");
         var budget = CategoryBudget.Create(Guid.NewGuid(), account.Id, category.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(500m));
         var direct = DirectExpense.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(80m), "Almoço", category.Id);
         var fixedExp = FixedExpense.Create(Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(100m), "Internet", category.Id);
         fixedExp.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5));
-        var purchase = CreditCardPurchase.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200m), 2, 1, rule, PurchaseCondition.Own, "Tênis", category.Id);
+        var card = CreditCard.Create(Guid.NewGuid(), account.Id, rule, "Nubank", Money.FromDecimal(3000m));
+        var purchase = CreditCardPurchase.Create(Guid.NewGuid(), account.Id, card.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200m), 2, 1, rule, PurchaseCondition.Own, "Tênis", category.Id);
         var income = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(3000m), "Salário");
         income.MarkAsReceived(new DateOnly(2026, 11, 5));
-        var invoice = Invoice.Create(Guid.NewGuid(), account.Id, BillingCycle.Closing(YearMonth.Of(2026, 11), rule));
-        invoice.InformChargedAmount(Money.FromDecimal(200m));
-        invoice.MarkAsPaid(new DateOnly(2026, 11, 12));
 
         await _accounts.AddAsync(account);
         await _categories.AddAsync(category);
         await _budgets.AddAsync(budget);
         await _directExpenses.AddAsync(direct);
         await _fixedExpenses.AddAsync(fixedExp);
+        await _creditCards.AddAsync(card);
         await _purchases.AddAsync(purchase);
         await _incomes.AddAsync(income);
-        await _invoices.AddAsync(invoice);
 
-        return (account, category, budget, direct, fixedExp, purchase, income, invoice);
+        return (account, category, budget, direct, fixedExp, card, purchase, income);
     }
 
     [Fact]
     public async Task UserB_CannotReadOrMutateAnyResourceOwnedByUserA()
     {
-        var (account, category, budget, direct, fixedExp, purchase, income, invoice) = await SeedUserADataAsync();
+        var (account, category, budget, direct, fixedExp, card, purchase, income) = await SeedUserADataAsync();
         var userBGuard = new AccountAccessGuard(_accounts, new FakeCurrentUser(UserBId, "User B", "b@hearth.app"));
 
         // Accounts
@@ -116,11 +114,9 @@ public sealed class CrossUserIsolationTests
         await Assert.ThrowsAsync<NotFoundException>(() => new GetAccountHandler(userBGuard).ExecuteAsync(new GetAccountQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new RenameAccountHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new RenameAccountCommand(account.Id, "Hack")));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateInitialBalanceHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new UpdateInitialBalanceCommand(account.Id, 0m)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new ChangeBillingRuleHandler(userBGuard, _accounts, _unitOfWork).ExecuteAsync(new ChangeBillingRuleCommand(account.Id, 10, 20)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new ConfirmInitialBalanceHandler(userBGuard, _accounts, _clock, _unitOfWork).ExecuteAsync(new ConfirmInitialBalanceCommand(account.Id, 0m, new DateOnly(2026, 11, 20))));
 
-        // Categories
-        await Assert.ThrowsAsync<NotFoundException>(() => new CreateCategoryHandler(userBGuard, _categories, _unitOfWork).ExecuteAsync(new CreateCategoryCommand(account.Id, "Nova")));
-        await Assert.ThrowsAsync<NotFoundException>(() => new ListCategoriesHandler(userBGuard, _categories).ExecuteAsync(new ListCategoriesQuery(account.Id)));
+        // Categories (custom category owned by User A)
         await Assert.ThrowsAsync<NotFoundException>(() => new RenameCategoryHandler(userBGuard, _categories, _unitOfWork).ExecuteAsync(new RenameCategoryCommand(category.Id, "Hack")));
         await Assert.ThrowsAsync<NotFoundException>(() => new ArchiveCategoryHandler(userBGuard, _categories, _unitOfWork).ExecuteAsync(new ArchiveCategoryCommand(category.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new RestoreCategoryHandler(userBGuard, _categories, _unitOfWork).ExecuteAsync(new RestoreCategoryCommand(category.Id)));
@@ -149,8 +145,16 @@ public sealed class CrossUserIsolationTests
         await Assert.ThrowsAsync<NotFoundException>(() => new RevertFixedExpensePaymentHandler(userBGuard, _fixedExpenses, _unitOfWork).ExecuteAsync(new RevertFixedExpensePaymentCommand(fixedExp.Id, 2026, 10)));
         await Assert.ThrowsAsync<NotFoundException>(() => new DeleteFixedExpenseHandler(userBGuard, _fixedExpenses, _unitOfWork).ExecuteAsync(new DeleteFixedExpenseCommand(fixedExp.Id)));
 
+        // Credit cards
+        await Assert.ThrowsAsync<NotFoundException>(() => new CreateCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new CreateCreditCardCommand(account.Id, 5, 12, "Hack", 1000m)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new GetActiveCreditCardHandler(userBGuard, _creditCards, _purchases, _clock).ExecuteAsync(new GetActiveCreditCardQuery(account.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new ListCreditCardsHandler(userBGuard, _creditCards, _purchases, _clock).ExecuteAsync(new ListCreditCardsQuery(account.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new UpdateCreditCardCommand(card.Id, 5, 12, "Hack", 1000m)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new ArchiveCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new ArchiveCreditCardCommand(card.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new DeleteCreditCardHandler(userBGuard, _creditCards, _purchases, _unitOfWork).ExecuteAsync(new DeleteCreditCardCommand(card.Id)));
+
         // Credit card purchases
-        await Assert.ThrowsAsync<NotFoundException>(() => new RegisterCreditCardPurchaseHandler(userBGuard, _categories, _purchases, _unitOfWork).ExecuteAsync(new RegisterCreditCardPurchaseCommand(account.Id, new DateOnly(2026, 11, 10), 50m, 1, 1, PurchaseConditionKind.Own, null, "Hack", category.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new RegisterCreditCardPurchaseHandler(userBGuard, _creditCards, _categories, _purchases, _unitOfWork).ExecuteAsync(new RegisterCreditCardPurchaseCommand(account.Id, card.Id, new DateOnly(2026, 11, 10), 50m, 1, 1, PurchaseConditionKind.Own, null, "Hack", category.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new ListCreditCardPurchasesHandler(userBGuard, _purchases, _clock).ExecuteAsync(new ListCreditCardPurchasesQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseAmountHandler(userBGuard, _purchases, _clock, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseAmountCommand(purchase.Id, 999m)));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseDateHandler(userBGuard, _purchases, _clock, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 11, 15))));
@@ -165,16 +169,12 @@ public sealed class CrossUserIsolationTests
         await Assert.ThrowsAsync<NotFoundException>(() => new RevertIncomeToExpectedHandler(userBGuard, _incomes, _unitOfWork).ExecuteAsync(new RevertIncomeToExpectedCommand(income.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new DeleteIncomeHandler(userBGuard, _incomes, _unitOfWork).ExecuteAsync(new DeleteIncomeCommand(income.Id)));
 
-        // Invoices
-        await Assert.ThrowsAsync<NotFoundException>(() => new InformInvoiceChargedAmountHandler(userBGuard, _invoices, _unitOfWork).ExecuteAsync(new InformInvoiceChargedAmountCommand(account.Id, 2026, 12, 100m)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new ListInvoicesHandler(userBGuard, _invoices).ExecuteAsync(new ListInvoicesQuery(account.Id)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new GetInvoiceSummaryHandler(userBGuard, _invoices, _purchases).ExecuteAsync(new GetInvoiceSummaryQuery(account.Id, 2026, 11)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new MarkInvoiceAsPaidHandler(userBGuard, _invoices, _unitOfWork).ExecuteAsync(new MarkInvoiceAsPaidCommand(invoice.Id, new DateOnly(2026, 11, 12))));
-        await Assert.ThrowsAsync<NotFoundException>(() => new RevertInvoicePaymentHandler(userBGuard, _invoices, _unitOfWork).ExecuteAsync(new RevertInvoicePaymentCommand(invoice.Id)));
+        // Invoices (derived summary)
+        await Assert.ThrowsAsync<NotFoundException>(() => new GetInvoiceSummaryHandler(userBGuard, _creditCards, _purchases, _clock).ExecuteAsync(new GetInvoiceSummaryQuery(account.Id, 2026, 11)));
 
         // Reports
         await Assert.ThrowsAsync<NotFoundException>(() => new GetProjectedResultHandler(userBGuard, _incomes, _directExpenses, _fixedExpenses, _purchases).ExecuteAsync(new GetProjectedResultQuery(account.Id, 2026, 11)));
-        await Assert.ThrowsAsync<NotFoundException>(() => new GetRealBalanceHandler(userBGuard, _incomes, _directExpenses, _fixedExpenses, _invoices, _clock).ExecuteAsync(new GetRealBalanceQuery(account.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new GetRealBalanceHandler(userBGuard, _incomes, _directExpenses, _fixedExpenses, _purchases, _clock).ExecuteAsync(new GetRealBalanceQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new GetExpensesByCategoryHandler(userBGuard, _categories, _directExpenses, _fixedExpenses, _purchases).ExecuteAsync(new GetExpensesByCategoryQuery(account.Id, 2026, 11)));
         await Assert.ThrowsAsync<NotFoundException>(() => new GetBudgetStatusHandler(userBGuard, _categories, _budgets, _directExpenses, _fixedExpenses, _purchases).ExecuteAsync(new GetBudgetStatusQuery(account.Id, 2026, 11)));
 

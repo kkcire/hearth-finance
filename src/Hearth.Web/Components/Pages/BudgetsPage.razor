@@ -358,7 +358,7 @@ else
             cancellationToken: cancellationToken);
 
         var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
-            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, IncludeArchived: false), ct),
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(IncludeArchived: false), ct),
             cancellationToken: cancellationToken);
 
         if (budgetsResult.IsSuccess && budgetsResult.Value is not null)

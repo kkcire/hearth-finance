@@ -1,5 +1,6 @@
 using Bunit;
 using Hearth.Application.Categories.ArchiveCategory;
+using Hearth.Application.Categories.CreateCategory;
 using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 using MudBlazor;
@@ -12,9 +13,13 @@ public sealed class EntriesPagesTests : WebTestBase
     public async Task DirectExpensesPage_CreateEditDeleteAndHideArchivedCategory()
     {
         var accountId = await SeedAccountAsync();
-        var archived = (await Categories.GetByAccountAsync(accountId)).OrderBy(c => c.Name).First();
+        var customResult = await Executor.ExecuteAsync<CreateCategoryHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(new CreateCategoryCommand("Temporária"), ct),
+            showErrorSnackbar: false);
+        var archivedId = customResult.Value;
+
         await Executor.ExecuteAsync<ArchiveCategoryHandler, bool>(
-            (handler, ct) => handler.ExecuteAsync(new ArchiveCategoryCommand(archived.Id), ct),
+            (handler, ct) => handler.ExecuteAsync(new ArchiveCategoryCommand(archivedId), ct),
             showErrorSnackbar: false);
 
         Render<MudPopoverProvider>();
@@ -26,7 +31,7 @@ public sealed class EntriesPagesTests : WebTestBase
             .FindComponents<MudSelectItem<Guid?>>()
             .Select(item => item.Instance.Value)
             .ToList();
-        Assert.DoesNotContain(archived.Id, offeredCategoryIds);
+        Assert.DoesNotContain(archivedId, offeredCategoryIds);
 
         cut.Find("input[data-testid='direct-description-input']").Input("Padaria");
         cut.Find("input[data-testid='direct-amount-input']").Change("45,90");

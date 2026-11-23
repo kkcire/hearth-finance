@@ -3,9 +3,9 @@ using Hearth.Domain.Exceptions;
 namespace Hearth.Domain.Entities;
 
 /// <summary>
-/// A user-defined expense category belonging to an account. Categories can be renamed,
-/// archived (hiding them from new entries while keeping historical reports intact),
-/// and restored.
+/// An expense category. Global system categories (<see cref="OwnerUserId"/> is null) are
+/// read-only and shared across all users; custom categories belong to a user and can be
+/// renamed, archived, restored, or deleted when unused.
 /// </summary>
 public sealed class Category
 {
@@ -14,16 +14,19 @@ public sealed class Category
         Name = null!;
     }
 
-    private Category(Guid id, Guid accountId, string name)
+    private Category(Guid id, Guid? ownerUserId, string name)
     {
         Id = id;
-        AccountId = accountId;
+        OwnerUserId = ownerUserId;
         Name = name;
     }
 
     public Guid Id { get; }
 
-    public Guid AccountId { get; }
+    /// <summary>Null for global read-only system categories; set for user-owned custom categories.</summary>
+    public Guid? OwnerUserId { get; }
+
+    public bool IsSystem => OwnerUserId is null;
 
     public string Name { get; private set; }
 
@@ -33,26 +36,37 @@ public sealed class Category
     /// </summary>
     public bool IsArchived { get; private set; }
 
-    public static Category Create(Guid id, Guid accountId, string name)
+    public static Category CreateSystem(Guid id, string name)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
-        DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
 
-        return new Category(id, accountId, validName);
+        return new Category(id, ownerUserId: null, validName);
+    }
+
+    public static Category CreateForUser(Guid id, Guid ownerUserId, string name)
+    {
+        DomainValidation.EnsureNotEmpty(id, nameof(id));
+        DomainValidation.EnsureNotEmpty(ownerUserId, nameof(ownerUserId), "owner user id");
+        var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
+
+        return new Category(id, ownerUserId, validName);
     }
 
     public void Rename(string name)
     {
+        EnsureModifiable();
         Name = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
     }
 
     /// <summary>
-    /// Marks the category as archived. Idempotent.
+    /// Marks a user category as archived. Idempotent.
     /// </summary>
     /// <returns>True if the state changed; false if it was already archived.</returns>
     public bool Archive()
     {
+        EnsureModifiable();
+
         if (IsArchived)
         {
             return false;
@@ -63,11 +77,13 @@ public sealed class Category
     }
 
     /// <summary>
-    /// Makes an archived category active again. Idempotent.
+    /// Makes an archived user category active again. Idempotent.
     /// </summary>
     /// <returns>True if the state changed; false if it was already active.</returns>
     public bool Restore()
     {
+        EnsureModifiable();
+
         if (!IsArchived)
         {
             return false;
@@ -75,6 +91,15 @@ public sealed class Category
 
         IsArchived = false;
         return true;
+    }
+
+    /// <exception cref="DomainException">The category is a read-only system category.</exception>
+    public void EnsureModifiable()
+    {
+        if (IsSystem)
+        {
+            throw new DomainException("System categories are read-only and cannot be modified or deleted.");
+        }
     }
 
     /// <exception cref="DomainException">The category is archived.</exception>

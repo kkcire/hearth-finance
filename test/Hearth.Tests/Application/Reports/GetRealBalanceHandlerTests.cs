@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetRealBalance;
 using Hearth.Domain.Entities;
@@ -10,25 +10,25 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetRealBalanceHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
-    private readonly InMemoryInvoiceRepository _invoices = new();
+    private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly GetRealBalanceHandler _handler;
 
     public GetRealBalanceHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetRealBalanceHandler(
             _accountAccess,
             _incomes,
             _directExpenses,
             _fixedExpenses,
-            _invoices,
+            _purchases,
             _clock);
     }
 
@@ -37,18 +37,17 @@ public class GetRealBalanceHandlerTests
         DateOnly? initialDate = null)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.FromDecimal(initialBalance),
-            initialDate ?? new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            initialDate ?? new DateOnly(2026, 10, 1));
         await _accounts.AddAsync(account);
         return account;
     }
 
     [Fact]
-    public async Task ExecuteAsync_WithNullUntil_UsesClockToday()
+    public async Task ExecuteAsync_WithNullUntil_UsesClockToday_AndAutoSettlesDueInstallments()
     {
         var account = await SeedAccountAsync(initialBalance: 1000.00m);
 
@@ -67,16 +66,25 @@ public class GetRealBalanceHandlerTests
             Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(1200.00m), "Aluguel", Guid.NewGuid());
         rent.MarkAsPaid(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5));
 
-        var invoice = Invoice.Create(
-            Guid.NewGuid(), account.Id, BillingCycle.Closing(YearMonth.Of(2026, 11), account.BillingRule));
-        invoice.InformChargedAmount(Money.FromDecimal(450.50m));
-        invoice.MarkAsPaid(new DateOnly(2026, 11, 12));
+        // Purchase on 10/10 with closing 3, due 12 -> 1st installment closes 03/11, due 12/11 (<= 20/11).
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(),
+            account.Id,
+            Guid.NewGuid(),
+            new DateOnly(2026, 10, 10),
+            Money.FromDecimal(450.50m),
+            1,
+            1,
+            CardBillingRule.Of(3, 12),
+            PurchaseCondition.Own,
+            "Compra",
+            Guid.NewGuid());
 
         await _incomes.AddAsync(received);
         await _incomes.AddAsync(futureReceived);
         await _directExpenses.AddAsync(direct);
         await _fixedExpenses.AddAsync(rent);
-        await _invoices.AddAsync(invoice);
+        await _purchases.AddAsync(purchase);
 
         var dto = await _handler.ExecuteAsync(new GetRealBalanceQuery(account.Id));
 
@@ -155,16 +163,16 @@ public class GetRealBalanceHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(() =>
-            new GetRealBalanceHandler(null!, _incomes, _directExpenses, _fixedExpenses, _invoices, _clock));
+            new GetRealBalanceHandler(null!, _incomes, _directExpenses, _fixedExpenses, _purchases, _clock));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetRealBalanceHandler(_accountAccess, null!, _directExpenses, _fixedExpenses, _invoices, _clock));
+            new GetRealBalanceHandler(_accountAccess, null!, _directExpenses, _fixedExpenses, _purchases, _clock));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetRealBalanceHandler(_accountAccess, _incomes, null!, _fixedExpenses, _invoices, _clock));
+            new GetRealBalanceHandler(_accountAccess, _incomes, null!, _fixedExpenses, _purchases, _clock));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetRealBalanceHandler(_accountAccess, _incomes, _directExpenses, null!, _invoices, _clock));
+            new GetRealBalanceHandler(_accountAccess, _incomes, _directExpenses, null!, _purchases, _clock));
         Assert.Throws<ArgumentNullException>(() =>
             new GetRealBalanceHandler(_accountAccess, _incomes, _directExpenses, _fixedExpenses, null!, _clock));
         Assert.Throws<ArgumentNullException>(() =>
-            new GetRealBalanceHandler(_accountAccess, _incomes, _directExpenses, _fixedExpenses, _invoices, null!));
+            new GetRealBalanceHandler(_accountAccess, _incomes, _directExpenses, _fixedExpenses, _purchases, null!));
     }
 }

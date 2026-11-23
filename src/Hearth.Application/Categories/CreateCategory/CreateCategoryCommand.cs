@@ -1,3 +1,3 @@
 namespace Hearth.Application.Categories.CreateCategory;
 
-public sealed record CreateCategoryCommand(Guid AccountId, string Name);
+public sealed record CreateCategoryCommand(string Name);

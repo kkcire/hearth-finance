@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.UpdateFixedExpenseDetails;
 using Hearth.Domain.Entities;
@@ -11,10 +11,10 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class UpdateFixedExpenseDetailsHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -22,29 +22,27 @@ public class UpdateFixedExpenseDetailsHandlerTests
 
     public UpdateFixedExpenseDetailsHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new UpdateFixedExpenseDetailsHandler(_accountAccess, _categories, _fixedExpenses, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingExpense_UpdatesDescriptionAndCategoryAndSaves()
     {
-        var accountId = _accountId;
-        var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
-        var education = Category.Create(Guid.NewGuid(), accountId, "Educação");
+        var services = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Assinaturas");
+        var education = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");
         await _categories.AddAsync(services);
         await _categories.AddAsync(education);
 
         var expense = FixedExpense.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
             YearMonth.Of(2026, 1),
             null,
             Money.FromDecimal(1000.00m),
@@ -64,14 +62,13 @@ public class UpdateFixedExpenseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_KeepingArchivedCategory_AllowsUpdatingDescription()
     {
-        var accountId = _accountId;
-        var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
+        var services = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Assinaturas");
         services.Archive();
         await _categories.AddAsync(services);
 
         var expense = FixedExpense.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
             YearMonth.Of(2026, 1),
             null,
             Money.FromDecimal(1000.00m),
@@ -89,16 +86,15 @@ public class UpdateFixedExpenseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_ReassigningToArchivedCategory_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var services = Category.Create(Guid.NewGuid(), accountId, "Serviços");
-        var archived = Category.Create(Guid.NewGuid(), accountId, "Antiga");
+        var services = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Assinaturas");
+        var archived = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Antiga");
         archived.Archive();
         await _categories.AddAsync(services);
         await _categories.AddAsync(archived);
 
         var expense = FixedExpense.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
             YearMonth.Of(2026, 1),
             null,
             Money.FromDecimal(1000.00m),

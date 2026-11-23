@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -11,10 +11,11 @@ namespace Hearth.Tests.Application.CreditCardPurchases;
 
 public class UpdateCreditCardPurchaseDetailsHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly Guid _cardId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -22,29 +23,28 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
 
     public UpdateCreditCardPurchaseDetailsHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _purchases, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ExistingPurchase_UpdatesDescriptionCategoryAndConditionAndSaves()
     {
-        var accountId = _accountId;
-        var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
-        var personal = Category.Create(Guid.NewGuid(), accountId, "Pessoal");
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
+        var personal = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Presentes");
         await _categories.AddAsync(shopping);
         await _categories.AddAsync(personal);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
+            _cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             3,
@@ -72,14 +72,14 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_KeepingArchivedCategory_AllowsUpdatingDescriptionAndCondition()
     {
-        var accountId = _accountId;
-        var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
         shopping.Archive();
         await _categories.AddAsync(shopping);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
+            _cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             3,
@@ -101,16 +101,16 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     [Fact]
     public async Task ExecuteAsync_ReassigningToArchivedCategory_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var shopping = Category.Create(Guid.NewGuid(), accountId, "Compras");
-        var archived = Category.Create(Guid.NewGuid(), accountId, "Antiga");
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
+        var archived = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Antiga");
         archived.Archive();
         await _categories.AddAsync(shopping);
         await _categories.AddAsync(archived);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
+            _cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             3,

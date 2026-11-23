@@ -10,7 +10,7 @@ public sealed class GetRealBalanceHandler
     private readonly IIncomeRepository _incomes;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IFixedExpenseRepository _fixedExpenses;
-    private readonly IInvoiceRepository _invoices;
+    private readonly ICreditCardPurchaseRepository _purchases;
     private readonly IClock _clock;
 
     public GetRealBalanceHandler(
@@ -18,21 +18,21 @@ public sealed class GetRealBalanceHandler
         IIncomeRepository incomes,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
-        IInvoiceRepository invoices,
+        ICreditCardPurchaseRepository purchases,
         IClock clock)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(incomes);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
-        ArgumentNullException.ThrowIfNull(invoices);
+        ArgumentNullException.ThrowIfNull(purchases);
         ArgumentNullException.ThrowIfNull(clock);
 
         _accountAccess = accountAccess;
         _incomes = incomes;
         _directExpenses = directExpenses;
         _fixedExpenses = fixedExpenses;
-        _invoices = invoices;
+        _purchases = purchases;
         _clock = clock;
     }
 
@@ -49,7 +49,7 @@ public sealed class GetRealBalanceHandler
         var incomes = await _incomes.GetByAccountAsync(account.Id, cancellationToken);
         var directExpenses = await _directExpenses.GetByAccountAsync(account.Id, cancellationToken);
         var fixedExpenses = await _fixedExpenses.GetByAccountAsync(account.Id, cancellationToken);
-        var invoices = await _invoices.GetByAccountAsync(account.Id, cancellationToken);
+        var purchases = await _purchases.GetByAccountAsync(account.Id, cancellationToken);
 
         var balance = RealBalanceCalculator.Calculate(
             account,
@@ -57,7 +57,7 @@ public sealed class GetRealBalanceHandler
             incomes,
             directExpenses,
             fixedExpenses,
-            invoices);
+            purchases);
 
         return RealBalanceDto.FromDomain(account.Id, balance);
     }

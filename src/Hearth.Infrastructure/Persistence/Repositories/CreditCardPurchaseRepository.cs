@@ -30,8 +30,18 @@ internal sealed class CreditCardPurchaseRepository : ICreditCardPurchaseReposito
             .Where(purchase => purchase.AccountId == accountId)
             .ToListAsync(cancellationToken);
 
+    public async Task<IReadOnlyList<CreditCardPurchase>> GetByCreditCardAsync(
+        Guid creditCardId,
+        CancellationToken cancellationToken = default) =>
+        await _context.CreditCardPurchases
+            .Where(purchase => purchase.CreditCardId == creditCardId)
+            .ToListAsync(cancellationToken);
+
     public Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default) =>
         _context.CreditCardPurchases.AnyAsync(purchase => purchase.CategoryId == categoryId, cancellationToken);
+
+    public Task<bool> AnyByCreditCardAsync(Guid creditCardId, CancellationToken cancellationToken = default) =>
+        _context.CreditCardPurchases.AnyAsync(purchase => purchase.CreditCardId == creditCardId, cancellationToken);
 
     public Task UpdateAsync(CreditCardPurchase purchase, CancellationToken cancellationToken = default)
     {

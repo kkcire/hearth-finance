@@ -48,8 +48,8 @@ public sealed class UpdateDirectExpenseHandler
 
         if (command.CategoryId != expense.CategoryId)
         {
-            await CategoryValidation.EnsureUsableForAccountAsync(
-                _categories, account.Id, command.CategoryId, cancellationToken);
+            await CategoryValidation.EnsureUsableForUserAsync(
+                _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
         }
 
         account.EnsureCanRegisterOn(command.Date);

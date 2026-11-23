@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -13,8 +13,8 @@ public class UpdateCreditCardPurchaseDateHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
@@ -23,29 +23,29 @@ public class UpdateCreditCardPurchaseDateHandlerTests
 
     public UpdateCreditCardPurchaseDateHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new UpdateCreditCardPurchaseDateHandler(_accountAccess, _purchases, _clock, _unitOfWork);
     }
 
     private async Task<CreditCardPurchase> SeedAsync(DateOnly? purchaseDate = null, int initialInstallment = 1)
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate,
-            CardBillingRule.Of(3, 12));
+            InitialDate);
         await _accounts.AddAsync(account);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            Guid.NewGuid(),
             purchaseDate ?? new DateOnly(2026, 10, 10),
             Money.FromDecimal(600.00m),
             6,
             initialInstallment,
-            account.BillingRule,
+            CardBillingRule.Of(3, 12),
             PurchaseCondition.Own,
             "Compra",
             Guid.NewGuid());
@@ -83,8 +83,6 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     [Fact]
     public async Task ExecuteAsync_PurchaseInProgress_NewDateMovesFirstCountingClosingBeforeInitialDate_Throws()
     {
-        // Bought 10/07/2026, initial 4 -> installment 4 closes on 03/11/2026.
-        // Moving to 01/06/2026 makes installment 4 close on 03/09/2026 < 01/10/2026.
         var purchase = await SeedAsync(purchaseDate: new DateOnly(2026, 7, 10), initialInstallment: 4);
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
@@ -111,7 +109,6 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     [Fact]
     public async Task ExecuteAsync_NewDateMovesIntoClosedCycle_ThrowsDomainExceptionAndDoesNotSave()
     {
-        // Today is 20/10/2026, closing day 3 -> 02/10/2026 belongs to Oct cycle which closed on 03/10/2026.
         var purchase = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(

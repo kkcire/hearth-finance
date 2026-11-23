@@ -24,11 +24,11 @@ public sealed class HearthDbContext : DbContext
 
     public DbSet<FixedExpense> FixedExpenses => Set<FixedExpense>();
 
+    public DbSet<CreditCard> CreditCards => Set<CreditCard>();
+
     public DbSet<CreditCardPurchase> CreditCardPurchases => Set<CreditCardPurchase>();
 
     public DbSet<Income> Incomes => Set<Income>();
-
-    public DbSet<Invoice> Invoices => Set<Invoice>();
 
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {

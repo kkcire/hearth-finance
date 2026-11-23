@@ -10,6 +10,7 @@ public class CreditCardPurchaseTests
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 3);
     private static readonly DateOnly DefaultDate = new(2026, 10, 10);
 
+    private static readonly Guid DefaultCardId = Guid.NewGuid();
     private static readonly Guid DefaultCategoryId = Guid.NewGuid();
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
@@ -23,10 +24,12 @@ public class CreditCardPurchaseTests
     PurchaseCondition? condition = null,
     string description = "Notebook",
     Guid? categoryId = null,
-    Guid? accountId = null) =>
+    Guid? accountId = null,
+    Guid? creditCardId = null) =>
     CreditCardPurchase.Create(
         Guid.NewGuid(),
         accountId ?? Guid.NewGuid(),
+        creditCardId ?? DefaultCardId,
         date ?? DefaultDate,
         M(amount),
         count,
@@ -43,11 +46,13 @@ public class CreditCardPurchaseTests
     {
         var id = Guid.NewGuid();
         var accountId = Guid.NewGuid();
+        var cardId = Guid.NewGuid();
         var categoryId = Guid.NewGuid();
 
         var purchase = CreditCardPurchase.Create(
             id,
             accountId,
+            cardId,
             DefaultDate,
             M(250.00m),
             5,
@@ -59,6 +64,7 @@ public class CreditCardPurchaseTests
 
         Assert.Equal(id, purchase.Id);
         Assert.Equal(accountId, purchase.AccountId);
+        Assert.Equal(cardId, purchase.CreditCardId);
         Assert.Equal(DefaultDate, purchase.Date);
         Assert.Equal(M(250.00m), purchase.Amount);
         Assert.Equal(5, purchase.InstallmentCount);
@@ -73,7 +79,15 @@ public class CreditCardPurchaseTests
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
-            Guid.Empty, Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
+            Guid.Empty, Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, Rule3,
+            PurchaseCondition.Own, "x", DefaultCategoryId));
+    }
+
+    [Fact]
+    public void Create_EmptyCreditCardId_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
+            Guid.NewGuid(), Guid.NewGuid(), Guid.Empty, DefaultDate, M(100m), 3, 1, Rule3,
             PurchaseCondition.Own, "x", DefaultCategoryId));
     }
 
@@ -81,7 +95,7 @@ public class CreditCardPurchaseTests
     public void Create_NullRule_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
-            Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, null!,
+            Guid.NewGuid(), Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, null!,
             PurchaseCondition.Own, "x", DefaultCategoryId));
     }
 
@@ -89,7 +103,7 @@ public class CreditCardPurchaseTests
     public void Create_NullCondition_Throws()
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
-            Guid.NewGuid(), Guid.NewGuid(), DefaultDate, M(100m), 3, 1, Rule3,
+            Guid.NewGuid(), Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, Rule3,
             null!, "x", DefaultCategoryId));
     }
 

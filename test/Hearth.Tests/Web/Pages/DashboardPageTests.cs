@@ -4,6 +4,7 @@ using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
 using Hearth.Application.FixedExpenses.RegisterFixedExpense;
 using Hearth.Application.Incomes.RegisterIncome;
+using Hearth.Domain;
 using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 
@@ -14,10 +15,7 @@ public sealed class DashboardPageTests : WebTestBase
     [Fact]
     public async Task Dashboard_DisplaysRealBalanceAndProjectedResultSeparatelyAndNavigatesMonths()
     {
-        var accountId = await SeedAccountAsync(initialBalance: 1000m, closingDay: 3, dueDay: 12);
-        var categories = (await Categories.GetByAccountAsync(accountId)).OrderBy(c => c.Name).ToList();
-        var food = categories.Single(c => c.Name == "Alimentação");
-        var transport = categories.Single(c => c.Name == "Transporte");
+        var accountId = await SeedAccountAsync(initialBalance: 1000m);
 
         // Expected income (received = 500, expected only = 200) in Nov 2026
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
@@ -29,15 +27,15 @@ public sealed class DashboardPageTests : WebTestBase
 
         // Direct expense in Nov 2026 (300)
         await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterDirectExpenseCommand(accountId, new DateOnly(2026, 11, 10), 300m, "Mercado", food.Id), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterDirectExpenseCommand(accountId, new DateOnly(2026, 11, 10), 300m, "Mercado", SystemCategories.FoodId), ct),
             showErrorSnackbar: false);
 
         // Budgets: Food = 200 (exceeded by 300), Transport = 150 (zero spent, must still appear)
         await Executor.ExecuteAsync<CreateCategoryBudgetHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new CreateCategoryBudgetCommand(accountId, food.Id, 2026, 11, null, null, 200m), ct),
+            (h, ct) => h.ExecuteAsync(new CreateCategoryBudgetCommand(accountId, SystemCategories.FoodId, 2026, 11, null, null, 200m), ct),
             showErrorSnackbar: false);
         await Executor.ExecuteAsync<CreateCategoryBudgetHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new CreateCategoryBudgetCommand(accountId, transport.Id, 2026, 11, null, null, 150m), ct),
+            (h, ct) => h.ExecuteAsync(new CreateCategoryBudgetCommand(accountId, SystemCategories.TransportId, 2026, 11, null, null, 150m), ct),
             showErrorSnackbar: false);
 
         var cut = Render<DashboardPage>();
@@ -62,8 +60,9 @@ public sealed class DashboardPageTests : WebTestBase
     [Fact]
     public async Task Dashboard_OriginTogglesAndDynamicCustomConditionFilterSpending()
     {
-        var accountId = await SeedAccountAsync(closingDay: 3, dueDay: 12);
-        var categoryId = (await Categories.GetByAccountAsync(accountId)).First().Id;
+        var accountId = await SeedAccountAsync();
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12);
+        var categoryId = SystemCategories.ShoppingId;
 
         await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
             (h, ct) => h.ExecuteAsync(new RegisterDirectExpenseCommand(accountId, new DateOnly(2026, 11, 10), 100m, "Direto", categoryId), ct),
@@ -76,7 +75,7 @@ public sealed class DashboardPageTests : WebTestBase
         // Card purchase on Oct 20 -> cycle Nov 2026 (closing Nov 3)
         await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
             (h, ct) => h.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
-                accountId, new DateOnly(2026, 10, 20), 400m, 1, 1,
+                accountId, cardId, new DateOnly(2026, 10, 20), 400m, 1, 1,
                 PurchaseConditionKind.Custom, "Mãe", "Presente", categoryId), ct),
             showErrorSnackbar: false);
 

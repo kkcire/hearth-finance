@@ -1,8 +1,9 @@
-using Hearth.Domain.ValueObjects;
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.RestoreCategory;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Tests.Application.Fakes;
 using Xunit;
 
@@ -10,31 +11,23 @@ namespace Hearth.Tests.Application.Categories;
 
 public class RestoreCategoryHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RestoreCategoryHandler _handler;
 
     public RestoreCategoryHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new RestoreCategoryHandler(_accountAccess, _categories, _unitOfWork);
     }
 
     [Fact]
     public async Task ExecuteAsync_ArchivedCategory_RestoresAndSaves()
     {
-        var category = Category.Create(Guid.NewGuid(), _accountId, "Faculdade");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");
         category.Archive();
         await _categories.AddAsync(category);
 
@@ -49,13 +42,22 @@ public class RestoreCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_AlreadyActive_IsIdempotentAndDoesNotSave()
     {
-        var category = Category.Create(Guid.NewGuid(), _accountId, "Faculdade");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");
         await _categories.AddAsync(category);
 
         var changed = await _handler.ExecuteAsync(new RestoreCategoryCommand(category.Id));
 
         Assert.False(changed);
         Assert.Equal(0, _categories.UpdateCount);
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_SystemCategory_ThrowsDomainException()
+    {
+        await Assert.ThrowsAsync<DomainException>(() =>
+            _handler.ExecuteAsync(new RestoreCategoryCommand(SystemCategories.HealthId)));
+
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 

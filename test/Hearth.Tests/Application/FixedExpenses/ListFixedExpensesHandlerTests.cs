@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.ListFixedExpenses;
 using Hearth.Domain.Entities;
@@ -10,27 +10,26 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class ListFixedExpensesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly ListFixedExpensesHandler _handler;
 
     public ListFixedExpensesHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListFixedExpensesHandler(_accountAccess, _fixedExpenses);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
         return account;
     }
@@ -43,7 +42,7 @@ public class ListFixedExpensesHandlerTests
 
         var rent = FixedExpense.Create(
             Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", Guid.NewGuid());
-        rent.ChangeAmount(Money.FromDecimal(1200.00m), new DateOnly(2026, 6, 10), CardBillingRule.Of(3, 12));
+        rent.ChangeAmount(Money.FromDecimal(1200.00m), new DateOnly(2026, 7, 10));
         rent.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 5));
         rent.MarkAsPaid(YearMonth.Of(2026, 6), new DateOnly(2026, 6, 5));
 

@@ -1,8 +1,7 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.ListCategories;
-using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
-using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
 using Xunit;
 
@@ -10,61 +9,42 @@ namespace Hearth.Tests.Application.Categories;
 
 public class ListCategoriesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly ListCategoriesHandler _handler;
 
     public ListCategoriesHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListCategoriesHandler(_accountAccess, _categories);
     }
 
     [Fact]
-    public async Task ExecuteAsync_ExcludesArchivedByDefault_AndIncludesWhenRequested()
+    public async Task ExecuteAsync_ReturnsSystemAndOwnCategories_ExcludesOtherUsersAndArchivedByDefault()
     {
-        var account = Account.Create(
-            Guid.NewGuid(),
-            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
-        var otherAccount = Account.Create(
-            Guid.NewGuid(),
-            FakeCurrentUser.DefaultUserId, "Outra", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
-        await _accounts.AddAsync(account);
-        await _accounts.AddAsync(otherAccount);
-
-        var food = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
-        var transport = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
-        var college = Category.Create(Guid.NewGuid(), account.Id, "Faculdade");
+        var otherUserId = Guid.NewGuid();
+        var pets = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Pets");
+        var college = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");
         college.Archive();
-        var other = Category.Create(Guid.NewGuid(), otherAccount.Id, "Outra");
+        var otherUserCategory = Category.CreateForUser(Guid.NewGuid(), otherUserId, "Outro Usuário");
 
-        await _categories.AddAsync(transport);
-        await _categories.AddAsync(food);
+        await _categories.AddAsync(pets);
         await _categories.AddAsync(college);
-        await _categories.AddAsync(other);
+        await _categories.AddAsync(otherUserCategory);
 
-        var activeOnly = await _handler.ExecuteAsync(new ListCategoriesQuery(account.Id));
-        Assert.Equal(2, activeOnly.Count);
-        Assert.Equal("Alimentação", activeOnly[0].Name);
-        Assert.Equal("Transporte", activeOnly[1].Name);
+        var activeOnly = await _handler.ExecuteAsync(new ListCategoriesQuery());
+        Assert.Equal(SystemCategories.Definitions.Count + 1, activeOnly.Count);
+        Assert.Contains(activeOnly, c => c.Id == SystemCategories.TransportId && c.IsSystem);
+        Assert.Contains(activeOnly, c => c.Id == pets.Id && !c.IsSystem);
+        Assert.DoesNotContain(activeOnly, c => c.Id == college.Id);
+        Assert.DoesNotContain(activeOnly, c => c.Id == otherUserCategory.Id);
 
-        var all = await _handler.ExecuteAsync(new ListCategoriesQuery(account.Id, IncludeArchived: true));
-        Assert.Equal(3, all.Count);
-        Assert.Contains(all, c => c.Id == college.Id && c.IsArchived);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_UnknownAccount_ThrowsNotFound()
-    {
-        var unknownId = Guid.NewGuid();
-
-        var exception = await Assert.ThrowsAsync<NotFoundException>(() =>
-            _handler.ExecuteAsync(new ListCategoriesQuery(unknownId)));
-
-        Assert.Equal(nameof(Account), exception.ResourceName);
-        Assert.Equal(unknownId, exception.ResourceId);
+        var all = await _handler.ExecuteAsync(new ListCategoriesQuery(IncludeArchived: true));
+        Assert.Equal(SystemCategories.Definitions.Count + 2, all.Count);
+        Assert.Contains(all, c => c.Id == college.Id && c.IsArchived && !c.IsSystem);
+        Assert.DoesNotContain(all, c => c.Id == otherUserCategory.Id);
     }
 
     [Fact]

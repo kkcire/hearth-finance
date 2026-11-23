@@ -241,40 +241,29 @@ else
 
                     @if (_invoiceSummary is not null)
                     {
-                        <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            Valor calculado · fecha @HearthFormat.Date(_invoiceSummary.ClosingDate) · vence @HearthFormat.Date(_invoiceSummary.DueDate)
-                        </MudText>
+                        @if (_invoiceSummary.ClosingDate.HasValue && _invoiceSummary.DueDate.HasValue)
+                        {
+                            <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                Valor calculado · fecha @HearthFormat.Date(_invoiceSummary.ClosingDate) · vence @HearthFormat.Date(_invoiceSummary.DueDate)
+                            </MudText>
+                        }
                         <MudText Typo="Typo.h4" Style="font-weight: 700;" Class="my-2" data-testid="dashboard-invoice-calculated">
                             @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
                         </MudText>
 
                         <MudStack Spacing="1" Class="mt-3">
                             <div class="hearth-statement-row">
-                                <MudText Typo="Typo.body2" Color="Color.Secondary">Valor cobrado:</MudText>
-                                <MudText Typo="Typo.body2" Style="font-weight: 500;" data-testid="dashboard-invoice-charged">
-                                    @(_invoiceSummary.ChargedAmount.HasValue ? HearthFormat.Money(_invoiceSummary.ChargedAmount.Value) : "Não informado")
-                                </MudText>
-                            </div>
-
-                            @if (_invoiceSummary.Divergence.HasValue)
-                            {
-                                <div class="hearth-statement-row">
-                                    <MudText Typo="Typo.body2" Color="Color.Secondary">Divergência:</MudText>
-                                    <MudText Typo="Typo.body2"
-                                             Color="@(_invoiceSummary.Divergence.Value == 0m ? Color.Success : Color.Warning)"
-                                             Style="font-weight: 600;"
-                                             data-testid="dashboard-invoice-divergence">
-                                        @HearthFormat.Money(_invoiceSummary.Divergence.Value)
-                                    </MudText>
-                                </div>
-                            }
-
-                            <div class="hearth-statement-row">
                                 <MudText Typo="Typo.body2" Color="Color.Secondary">Status:</MudText>
-                                @if (_invoiceSummary.IsPaid)
+                                @if (_invoiceSummary.Status == InvoiceStatus.Paid)
                                 {
                                     <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
-                                        Paga em @HearthFormat.Date(_invoiceSummary.PaidOn)
+                                        Paga
+                                    </MudChip>
+                                }
+                                else if (_invoiceSummary.Status == InvoiceStatus.Closed)
+                                {
+                                    <MudChip T="string" Size="Size.Small" Color="Color.Info" Variant="Variant.Outlined">
+                                        Fechada
                                     </MudChip>
                                 }
                                 else

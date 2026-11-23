@@ -2,7 +2,6 @@
 @attribute [Authorize]
 @inherits AccountPageBase
 @using Hearth.Application.Accounts
-@using Hearth.Application.Accounts.ChangeBillingRule
 @using Hearth.Application.Accounts.GetAccount
 @using Hearth.Application.Accounts.RenameAccount
 @using Hearth.Application.Accounts.UpdateInitialBalance
@@ -91,51 +90,6 @@ else if (_account is not null)
                 </MudStack>
             </MudPaper>
         </MudItem>
-
-        <MudItem xs="12">
-            <MudPaper Elevation="2" Class="pa-5">
-                <MudText Typo="Typo.h6" GutterBottom="true">Regra do cartão de crédito</MudText>
-
-                <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-4">
-                    Alterar o dia de fechamento ou vencimento vale apenas para novas compras.
-                    Compras já registradas mantêm a regra com que foram criadas.
-                </MudAlert>
-
-                <MudGrid Spacing="3" Class="align-center">
-                    <MudItem xs="12" sm="4">
-                        <MudNumericField T="int"
-                                         @bind-Value="_closingDay"
-                                         Label="Dia de fechamento"
-                                         Variant="Variant.Outlined"
-                                         Min="1"
-                                         Max="28"
-                                         HelperText="Entre 1 e 28"
-                                         Disabled="_savingBillingRule"
-                                         data-testid="update-closing-day-input" />
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <MudNumericField T="int"
-                                         @bind-Value="_dueDay"
-                                         Label="Dia de vencimento"
-                                         Variant="Variant.Outlined"
-                                         Min="1"
-                                         Max="28"
-                                         HelperText="Entre 1 e 28"
-                                         Disabled="_savingBillingRule"
-                                         data-testid="update-due-day-input" />
-                    </MudItem>
-                    <MudItem xs="12" sm="4">
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   OnClick="SaveBillingRuleAsync"
-                                   Disabled="_savingBillingRule"
-                                   data-testid="update-billing-rule-submit">
-                            @(_savingBillingRule ? "Salvando..." : "Atualizar regra")
-                        </MudButton>
-                    </MudItem>
-                </MudGrid>
-            </MudPaper>
-        </MudItem>
     </MudGrid>
 }
 
@@ -144,13 +98,10 @@ else if (_account is not null)
     private AccountDto? _account;
     private string _name = string.Empty;
     private decimal _initialBalance;
-    private int _closingDay = 3;
-    private int _dueDay = 12;
 
     private bool _loading = true;
     private bool _savingName;
     private bool _savingBalance;
-    private bool _savingBillingRule;
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -173,8 +124,6 @@ else if (_account is not null)
         _account = account;
         _name = account.Name;
         _initialBalance = account.InitialBalance;
-        _closingDay = account.ClosingDay;
-        _dueDay = account.DueDay;
     }
 
     private async Task SaveNameAsync()
@@ -236,38 +185,6 @@ else if (_account is not null)
         finally
         {
             _savingBalance = false;
-        }
-    }
-
-    private async Task SaveBillingRuleAsync()
-    {
-        if (_savingBillingRule)
-        {
-            return;
-        }
-
-        _savingBillingRule = true;
-
-        try
-        {
-            var result = await Executor.ExecuteAsync<ChangeBillingRuleHandler>(
-                (handler, ct) => handler.ExecuteAsync(
-                    new ChangeBillingRuleCommand(AccountId, _closingDay, _dueDay), ct),
-                successMessage: "Regra do cartão atualizada.",
-                cancellationToken: ComponentCancellationToken);
-
-            if (result.IsSuccess)
-            {
-                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
-            }
-            else
-            {
-                await LoadDataAsync(ComponentCancellationToken);
-            }
-        }
-        finally
-        {
-            _savingBillingRule = false;
         }
     }
 }

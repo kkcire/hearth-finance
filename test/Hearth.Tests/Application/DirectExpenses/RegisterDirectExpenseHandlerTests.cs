@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -13,8 +13,8 @@ public class RegisterDirectExpenseHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
@@ -23,22 +23,21 @@ public class RegisterDirectExpenseHandlerTests
 
     public RegisterDirectExpenseHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new RegisterDirectExpenseHandler(_accountAccess, _categories, _directExpenses, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAccountAndCategoryAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate,
-            CardBillingRule.Of(3, 12));
+            InitialDate);
         await _accounts.AddAsync(account);
 
-        var category = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Lanches");
         await _categories.AddAsync(category);
 
         return (account, category);
@@ -107,13 +106,13 @@ public class RegisterDirectExpenseHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_CategoryFromAnotherAccount_ThrowsDomainExceptionAndDoesNotSave()
+    public async Task ExecuteAsync_CategoryFromAnotherUser_ThrowsNotFoundAndDoesNotSave()
     {
         var (account, _) = await SeedAccountAndCategoryAsync();
-        var otherCategory = Category.Create(Guid.NewGuid(), Guid.NewGuid(), "Outra");
+        var otherCategory = Category.CreateForUser(Guid.NewGuid(), Guid.NewGuid(), "Outra");
         await _categories.AddAsync(otherCategory);
 
-        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+        await Assert.ThrowsAsync<NotFoundException>(() => _handler.ExecuteAsync(
             new RegisterDirectExpenseCommand(
                 account.Id, InitialDate, 20.00m, "Café", otherCategory.Id)));
 

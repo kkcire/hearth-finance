@@ -1,5 +1,6 @@
 using Bunit;
 using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
+using Hearth.Domain;
 using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 using MudBlazor;
@@ -11,8 +12,9 @@ public sealed class CardPagesTests : WebTestBase
     [Fact]
     public async Task CreditCardPurchasesPage_DynamicCustomChipsFilterAndLockedPurchaseDisablesAmountAndDate()
     {
-        var accountId = await SeedAccountAsync(closingDay: 3, dueDay: 12);
-        var categoryId = (await Categories.GetByAccountAsync(accountId)).First().Id;
+        var accountId = await SeedAccountAsync();
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12);
+        var categoryId = SystemCategories.HealthId;
 
         // Locked purchase (Sep 15 with InitialInstallment=2: installment 1 closes Oct 3 [paid],
         // first active installment 2 closes Nov 3 <= today Nov 20 -> IsLocked == true)
@@ -20,6 +22,7 @@ public sealed class CardPagesTests : WebTestBase
             (handler, ct) => handler.ExecuteAsync(
                 new RegisterCreditCardPurchaseCommand(
                     accountId,
+                    cardId,
                     new DateOnly(2026, 9, 15),
                     300m,
                     3,
@@ -36,6 +39,7 @@ public sealed class CardPagesTests : WebTestBase
             (handler, ct) => handler.ExecuteAsync(
                 new RegisterCreditCardPurchaseCommand(
                     accountId,
+                    cardId,
                     new DateOnly(2026, 11, 10),
                     150m,
                     1,
@@ -71,16 +75,18 @@ public sealed class CardPagesTests : WebTestBase
     }
 
     [Fact]
-    public async Task InvoicesPage_RequiresChargedAmountBeforePayingAndShowsDivergence()
+    public async Task InvoicesPage_DisplaysDerivedCalculatedAmountAndAutomaticStatus()
     {
-        var accountId = await SeedAccountAsync(closingDay: 3, dueDay: 12);
-        var categoryId = (await Categories.GetByAccountAsync(accountId)).First().Id;
+        var accountId = await SeedAccountAsync();
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12);
+        var categoryId = SystemCategories.ShoppingId;
 
-        // Purchase on Oct 20 -> closes Nov 3 (cycle 11/2026)
+        // Purchase on Oct 20 -> closes Nov 3, due Nov 12 (today is Nov 20 -> Paid)
         await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
                 new RegisterCreditCardPurchaseCommand(
                     accountId,
+                    cardId,
                     new DateOnly(2026, 10, 20),
                     1000m,
                     1,
@@ -94,25 +100,7 @@ public sealed class CardPagesTests : WebTestBase
 
         var cut = Render<InvoicesPage>();
 
-        // Calculated = R$ 1.000,00; pay button disabled without charged amount
         Assert.Contains("1.000,00", cut.Find("[data-testid='invoice-calculated-amount']").TextContent);
-        Assert.True(cut.Find("[data-testid='pay-invoice-button']").HasAttribute("disabled"));
-
-        // Inform charged amount = 1.050,00 -> divergence = 50,00 -> pay enabled
-        cut.Find("input[data-testid='invoice-charged-input']").Change("1.050,00");
-        await cut.Find("[data-testid='save-charged-amount']").ClickAsync();
-
-        Assert.Contains("1.050,00", cut.Find("[data-testid='invoice-charged-amount']").TextContent);
-        Assert.Contains("50,00", cut.Find("[data-testid='invoice-divergence']").TextContent);
-        Assert.False(cut.Find("[data-testid='pay-invoice-button']").HasAttribute("disabled"));
-
-        // Pay invoice -> charged input disabled, revert button appears
-        await cut.Find("[data-testid='pay-invoice-button']").ClickAsync();
-        Assert.Contains("Paga em", cut.Find("[data-testid='invoice-status-chip']").TextContent);
-        Assert.True(cut.Find("input[data-testid='invoice-charged-input']").HasAttribute("disabled"));
-
-        // Revert payment -> back to Em aberto
-        await cut.Find("[data-testid='revert-invoice-button']").ClickAsync();
-        Assert.Contains("Em aberto", cut.Find("[data-testid='invoice-status-chip']").TextContent);
+        Assert.Contains("Paga", cut.Find("[data-testid='invoice-status-chip']").TextContent);
     }
 }

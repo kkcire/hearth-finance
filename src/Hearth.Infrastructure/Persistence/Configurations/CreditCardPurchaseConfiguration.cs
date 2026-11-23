@@ -22,6 +22,10 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
             .HasColumnName("account_id")
             .IsRequired();
 
+        builder.Property(purchase => purchase.CreditCardId)
+            .HasColumnName("credit_card_id")
+            .IsRequired();
+
         builder.Property(purchase => purchase.CategoryId)
             .HasColumnName("category_id")
             .IsRequired();
@@ -75,11 +79,18 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
         builder.Navigation(purchase => purchase.Condition).IsRequired();
 
         builder.Ignore(purchase => purchase.FirstCycle);
+        builder.Ignore(purchase => purchase.FirstActiveCycle);
 
         builder.HasOne<Account>()
             .WithMany()
             .HasForeignKey(purchase => purchase.AccountId)
             .HasConstraintName("fk_credit_card_purchases_accounts_account_id")
+            .OnDelete(DeleteBehavior.Restrict);
+
+        builder.HasOne<CreditCard>()
+            .WithMany()
+            .HasForeignKey(purchase => purchase.CreditCardId)
+            .HasConstraintName("fk_credit_card_purchases_credit_cards_credit_card_id")
             .OnDelete(DeleteBehavior.Restrict);
 
         builder.HasOne<Category>()
@@ -90,6 +101,9 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(purchase => new { purchase.AccountId, purchase.Date })
             .HasDatabaseName("ix_credit_card_purchases_account_id_date");
+
+        builder.HasIndex(purchase => purchase.CreditCardId)
+            .HasDatabaseName("ix_credit_card_purchases_credit_card_id");
 
         builder.HasIndex(purchase => purchase.CategoryId)
             .HasDatabaseName("ix_credit_card_purchases_category_id");

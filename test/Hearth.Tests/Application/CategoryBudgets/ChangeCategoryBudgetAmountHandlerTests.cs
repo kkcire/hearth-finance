@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.ChangeCategoryBudgetAmount;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,10 +10,10 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class ChangeCategoryBudgetAmountHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -21,14 +21,13 @@ public class ChangeCategoryBudgetAmountHandlerTests
 
     public ChangeCategoryBudgetAmountHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ChangeCategoryBudgetAmountHandler(_accountAccess, _budgets, _clock, _unitOfWork);
     }
 

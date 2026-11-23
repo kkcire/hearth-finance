@@ -1,6 +1,7 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
 using Hearth.Application.Categories;
+using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 
@@ -9,22 +10,26 @@ namespace Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 public sealed class RegisterCreditCardPurchaseHandler
 {
     private readonly AccountAccessGuard _accountAccess;
+    private readonly ICreditCardRepository _creditCards;
     private readonly ICategoryRepository _categories;
     private readonly ICreditCardPurchaseRepository _purchases;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterCreditCardPurchaseHandler(
         AccountAccessGuard accountAccess,
+        ICreditCardRepository creditCards,
         ICategoryRepository categories,
         ICreditCardPurchaseRepository purchases,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
+        ArgumentNullException.ThrowIfNull(creditCards);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(purchases);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
+        _creditCards = creditCards;
         _categories = categories;
         _purchases = purchases;
         _unitOfWork = unitOfWork;
@@ -41,24 +46,33 @@ public sealed class RegisterCreditCardPurchaseHandler
 
         var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
-        await CategoryValidation.EnsureUsableForAccountAsync(
-            _categories, account.Id, command.CategoryId, cancellationToken);
+        var card = await _creditCards.GetByIdAsync(command.CreditCardId, cancellationToken);
+        if (card is null || card.AccountId != account.Id)
+        {
+            throw new NotFoundException(nameof(CreditCard), command.CreditCardId);
+        }
+
+        card.EnsureActive();
+
+        await CategoryValidation.EnsureUsableForUserAsync(
+            _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
         var purchase = CreditCardPurchase.Create(
             Guid.CreateVersion7(),
             account.Id,
+            card.Id,
             command.Date,
             amount,
             command.InstallmentCount,
             command.InitialInstallment,
-            account.BillingRule,
+            card.BillingRule,
             condition,
             command.Description,
             command.CategoryId);
 
         var dateToValidate = purchase.InitialInstallment == 1
             ? purchase.Date
-            : purchase.FirstCycle.AddCycles(purchase.InitialInstallment - 1).ClosingDate;
+            : purchase.FirstActiveCycle.ClosingDate;
 
         account.EnsureCanRegisterOn(dateToValidate);
 

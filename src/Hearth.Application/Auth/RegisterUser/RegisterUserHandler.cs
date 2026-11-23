@@ -1,28 +1,35 @@
 using Hearth.Application.Abstractions;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
+using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Application.Auth.RegisterUser;
 
 public sealed class RegisterUserHandler
 {
+    public const string DefaultAccountName = "Conta Principal";
+
     private readonly IUserRepository _users;
+    private readonly IAccountRepository _accounts;
     private readonly IPasswordHasher _passwordHasher;
     private readonly IUnitOfWork _unitOfWork;
     private readonly IClock _clock;
 
     public RegisterUserHandler(
         IUserRepository users,
+        IAccountRepository accounts,
         IPasswordHasher passwordHasher,
         IUnitOfWork unitOfWork,
         IClock clock)
     {
         ArgumentNullException.ThrowIfNull(users);
+        ArgumentNullException.ThrowIfNull(accounts);
         ArgumentNullException.ThrowIfNull(passwordHasher);
         ArgumentNullException.ThrowIfNull(unitOfWork);
         ArgumentNullException.ThrowIfNull(clock);
 
         _users = users;
+        _accounts = accounts;
         _passwordHasher = passwordHasher;
         _unitOfWork = unitOfWork;
         _clock = clock;
@@ -70,7 +77,16 @@ public sealed class RegisterUserHandler
             passwordHash,
             _clock.UtcNow);
 
+        var defaultAccount = Account.Create(
+            Guid.CreateVersion7(),
+            user.Id,
+            DefaultAccountName,
+            Money.Zero,
+            _clock.Today,
+            isInitialBalanceConfirmed: false);
+
         await _users.AddAsync(user, cancellationToken);
+        await _accounts.AddAsync(defaultAccount, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 
         return AuthResult.Success(UserDto.FromEntity(user));

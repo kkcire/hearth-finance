@@ -31,13 +31,13 @@ public sealed class CreateCategoryHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
+        var ownerUserId = _accountAccess.GetRequiredUserId();
+        var category = Category.CreateForUser(Guid.CreateVersion7(), ownerUserId, command.Name);
 
-        var category = Category.Create(Guid.CreateVersion7(), account.Id, command.Name);
-
-        if (await _categories.ExistsWithNameAsync(account.Id, category.Name, cancellationToken: cancellationToken))
+        if (await _categories.ExistsWithNameForUserAsync(
+                ownerUserId, category.Name, cancellationToken: cancellationToken))
         {
-            throw new DomainException($"A category named '{category.Name}' already exists in this account.");
+            throw new DomainException($"A category named '{category.Name}' already exists.");
         }
 
         await _categories.AddAsync(category, cancellationToken);

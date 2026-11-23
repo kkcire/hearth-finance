@@ -38,8 +38,8 @@ public class DependencyInjectionTests
         Assert.NotNull(scoped.GetRequiredService<ICategoryBudgetRepository>());
         Assert.NotNull(scoped.GetRequiredService<IDirectExpenseRepository>());
         Assert.NotNull(scoped.GetRequiredService<IFixedExpenseRepository>());
+        Assert.NotNull(scoped.GetRequiredService<ICreditCardRepository>());
         Assert.NotNull(scoped.GetRequiredService<ICreditCardPurchaseRepository>());
         Assert.NotNull(scoped.GetRequiredService<IIncomeRepository>());
-        Assert.NotNull(scoped.GetRequiredService<IInvoiceRepository>());
     }
 }

@@ -19,6 +19,7 @@ public sealed class CreditCardPurchase
     private CreditCardPurchase(
         Guid id,
         Guid accountId,
+        Guid creditCardId,
         DateOnly date,
         Money amount,
         int installmentCount,
@@ -30,6 +31,7 @@ public sealed class CreditCardPurchase
     {
         Id = id;
         AccountId = accountId;
+        CreditCardId = creditCardId;
         Date = date;
         Amount = amount;
         InstallmentCount = installmentCount;
@@ -44,6 +46,9 @@ public sealed class CreditCardPurchase
 
     /// <summary>The account this purchase belongs to. Prepares the model for multiple accounts.</summary>
     public Guid AccountId { get; }
+
+    /// <summary>The credit card used for this purchase.</summary>
+    public Guid CreditCardId { get; }
 
     /// <summary>The original purchase date. It decides the cycle of the first installment.</summary>
     public DateOnly Date { get; private set; }
@@ -70,9 +75,13 @@ public sealed class CreditCardPurchase
     /// <summary>The cycle of the first installment, according to the purchase date.</summary>
     public BillingCycle FirstCycle => BillingCycle.ForPurchase(Date, Rule);
 
+    /// <summary>The cycle of the first active (non-previously-paid) installment.</summary>
+    public BillingCycle FirstActiveCycle => FirstCycle.AddCycles(InitialInstallment - 1);
+
     public static CreditCardPurchase Create(
         Guid id,
         Guid accountId,
+        Guid creditCardId,
         DateOnly date,
         Money amount,
         int installmentCount,
@@ -84,6 +93,7 @@ public sealed class CreditCardPurchase
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
+        DomainValidation.EnsureNotEmpty(creditCardId, nameof(creditCardId), "credit card id");
         ArgumentNullException.ThrowIfNull(rule);
         ArgumentNullException.ThrowIfNull(condition);
 
@@ -109,6 +119,7 @@ public sealed class CreditCardPurchase
         return new CreditCardPurchase(
             id,
             accountId,
+            creditCardId,
             date,
             amount,
             installmentCount,

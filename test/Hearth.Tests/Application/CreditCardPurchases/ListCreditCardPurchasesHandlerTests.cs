@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,8 +10,10 @@ namespace Hearth.Tests.Application.CreditCardPurchases;
 
 public class ListCreditCardPurchasesHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
+
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
@@ -19,19 +21,18 @@ public class ListCreditCardPurchasesHandlerTests
 
     public ListCreditCardPurchasesHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListCreditCardPurchasesHandler(_accountAccess, _purchases, _clock);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
         return account;
     }
@@ -41,16 +42,19 @@ public class ListCreditCardPurchasesHandlerTests
     {
         var account = await SeedAccountAsync("Minha");
         var otherAccount = await SeedAccountAsync("Outra");
+        var cardId = Guid.NewGuid();
+        var otherCardId = Guid.NewGuid();
 
         // Bought 01/10 -> closes on 03/10 -> locked on 20/10.
         var locked = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 1),
             Money.FromDecimal(100.00m),
             2,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Own,
             "Fechada",
             Guid.NewGuid());
@@ -59,11 +63,12 @@ public class ListCreditCardPurchasesHandlerTests
         var open = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(100.00m),
             3,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Others,
             "Aberta",
             Guid.NewGuid());
@@ -71,11 +76,12 @@ public class ListCreditCardPurchasesHandlerTests
         var other = CreditCardPurchase.Create(
             Guid.NewGuid(),
             otherAccount.Id,
+            otherCardId,
             new DateOnly(2026, 10, 15),
             Money.FromDecimal(500.00m),
             1,
             1,
-            otherAccount.BillingRule,
+            Rule3,
             PurchaseCondition.Own,
             "Outro",
             Guid.NewGuid());
@@ -88,6 +94,9 @@ public class ListCreditCardPurchasesHandlerTests
 
         Assert.Equal(2, result.Count);
         Assert.Equal(open.Id, result[0].Id);
+        Assert.Equal(cardId, result[0].CreditCardId);
+        Assert.Equal(2026, result[0].FirstActiveClosingYear);
+        Assert.Equal(11, result[0].FirstActiveClosingMonth);
         Assert.False(result[0].IsLocked);
         Assert.Equal(3, result[0].Installments.Count);
         Assert.Equal(33.34m, result[0].Installments[2].Amount);

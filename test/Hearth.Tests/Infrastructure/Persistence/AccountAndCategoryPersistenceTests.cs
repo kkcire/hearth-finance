@@ -1,7 +1,7 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Accounts.CreateAccount;
 using Hearth.Application.Authorization;
-using Hearth.Application.Categories;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -59,7 +59,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
                 "Conta principal",
                 Money.FromDecimal(-125.45m),
                 new DateOnly(2026, 10, 1),
-                CardBillingRule.Of(3, 12));
+                isInitialBalanceConfirmed: false);
 
             await accounts.AddAsync(account);
             await uow.SaveChangesAsync();
@@ -76,11 +76,14 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             Assert.Equal("Conta principal", loaded.Name);
             Assert.Equal(Money.FromDecimal(-125.45m), loaded.InitialBalance);
             Assert.Equal(new DateOnly(2026, 10, 1), loaded.InitialBalanceDate);
-            Assert.Equal(CardBillingRule.Of(3, 12), loaded.BillingRule);
+            Assert.False(loaded.IsInitialBalanceConfirmed);
 
+            loaded.ConfirmInitialBalance(
+                Money.FromDecimal(1200.00m),
+                new DateOnly(2026, 10, 5),
+                new DateOnly(2026, 10, 10));
             loaded.Rename("Nubank");
             loaded.UpdateInitialBalance(Money.FromDecimal(1500.00m));
-            loaded.ChangeBillingRule(CardBillingRule.Of(10, 20));
 
             await accounts.UpdateAsync(loaded);
             await uow.SaveChangesAsync();
@@ -96,13 +99,29 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var reloaded = Assert.Single(owned);
             Assert.Equal("Nubank", reloaded.Name);
             Assert.Equal(Money.FromDecimal(1500.00m), reloaded.InitialBalance);
-            Assert.Equal(new DateOnly(2026, 10, 1), reloaded.InitialBalanceDate);
-            Assert.Equal(CardBillingRule.Of(10, 20), reloaded.BillingRule);
+            Assert.Equal(new DateOnly(2026, 10, 5), reloaded.InitialBalanceDate);
+            Assert.True(reloaded.IsInitialBalanceConfirmed);
         }
     }
 
     [Fact]
-    public async Task CreateAccountHandler_SeedsEightDefaultCategoriesInSingleTransaction()
+    public async Task Migrations_SeedEightGlobalSystemCategoriesWithFixedIds()
+    {
+        var userId = await SeedUserAsync();
+
+        await using var scope = _fixture.CreateScope();
+        var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+        var visible = await categories.GetVisibleForUserAsync(userId);
+
+        Assert.Equal(SystemCategories.Definitions.Count, visible.Count);
+        Assert.All(visible, c => Assert.True(c.IsSystem));
+        Assert.Equal(
+            SystemCategories.Definitions.Select(s => (s.Id, s.Name)).OrderBy(x => x.Name),
+            visible.Select(c => (c.Id, c.Name)).OrderBy(x => x.Name));
+    }
+
+    [Fact]
+    public async Task CreateAccountHandler_PersistsAccountWithoutDuplicatingSystemCategories()
     {
         var userId = await SeedUserAsync();
         Guid accountId;
@@ -114,29 +133,31 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var handler = new CreateAccountHandler(
                 guard,
                 accounts,
-                scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
 
             accountId = await handler.ExecuteAsync(new CreateAccountCommand(
-                "Principal", 500.00m, new DateOnly(2026, 10, 1), 3, 12));
+                "Principal", 500.00m, new DateOnly(2026, 10, 1)));
         }
 
         await using (var scope = _fixture.CreateScope())
         {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
             var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
-            var saved = await categories.GetByAccountAsync(accountId);
 
-            Assert.Equal(DefaultCategories.Names.Count, saved.Count);
-            Assert.Equal(
-                DefaultCategories.Names.OrderBy(n => n),
-                saved.Select(c => c.Name).OrderBy(n => n));
+            var savedAccount = await accounts.GetByIdAsync(accountId);
+            Assert.NotNull(savedAccount);
+            Assert.True(savedAccount.IsInitialBalanceConfirmed);
+
+            var visible = await categories.GetVisibleForUserAsync(userId);
+            Assert.Equal(SystemCategories.Definitions.Count, visible.Count);
         }
     }
 
     [Fact]
-    public async Task CategoryRepository_EnforcesCaseInsensitiveUniqueIndexAndRestrictFk()
+    public async Task CategoryRepository_EnforcesCaseInsensitiveUniquenessAgainstSystemAndUserCategoriesAndRestrictFk()
     {
         var userId = await SeedUserAsync();
+        var otherUserId = await SeedUserAsync("outro2@hearth.app");
         var accountId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
 
@@ -147,8 +168,8 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             await accounts.AddAsync(Account.Create(
-                accountId, userId, "Conta", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
-            await categories.AddAsync(Category.Create(categoryId, accountId, "Alimentação"));
+                accountId, userId, "Conta", Money.Zero, new DateOnly(2026, 1, 1)));
+            await categories.AddAsync(Category.CreateForUser(categoryId, userId, "Faculdade"));
             await uow.SaveChangesAsync();
         }
 
@@ -156,17 +177,22 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
         {
             var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
 
-            Assert.True(await categories.ExistsWithNameAsync(accountId, "ALIMENTAÇÃO"));
-            Assert.False(await categories.ExistsWithNameAsync(accountId, "ALIMENTAÇÃO", excludeCategoryId: categoryId));
+            Assert.True(await categories.ExistsWithNameForUserAsync(userId, "FACULDADE"));
+            Assert.False(await categories.ExistsWithNameForUserAsync(userId, "FACULDADE", excludeCategoryId: categoryId));
+            // Must also detect case-insensitive collisions against global system categories!
+            Assert.True(await categories.ExistsWithNameForUserAsync(userId, "transporte"));
+            Assert.True(await categories.ExistsWithNameForUserAsync(userId, "ALIMENTAÇÃO"));
+            // Another user can reuse a custom category name from the first user.
+            Assert.False(await categories.ExistsWithNameForUserAsync(otherUserId, "Faculdade"));
         }
 
-        // Duplicate name differing only by case must be rejected by PostgreSQL unique index.
+        // Duplicate custom category name differing only by case for same user must be rejected by PostgreSQL unique index.
         await using (var scope = _fixture.CreateScope())
         {
             var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            await categories.AddAsync(Category.Create(Guid.CreateVersion7(), accountId, "alimentação"));
+            await categories.AddAsync(Category.CreateForUser(Guid.CreateVersion7(), userId, "faculdade"));
             await Assert.ThrowsAsync<DbUpdateException>(() => uow.SaveChangesAsync());
         }
 
@@ -177,7 +203,7 @@ public sealed class AccountAndCategoryPersistenceTests : IAsyncLifetime
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             await directExpenses.AddAsync(DirectExpense.Create(
-                Guid.CreateVersion7(), accountId, new DateOnly(2026, 10, 10), Money.FromDecimal(45.00m), "Mercado", categoryId));
+                Guid.CreateVersion7(), accountId, new DateOnly(2026, 10, 10), Money.FromDecimal(45.00m), "Mensalidade", categoryId));
             await uow.SaveChangesAsync();
         }
 

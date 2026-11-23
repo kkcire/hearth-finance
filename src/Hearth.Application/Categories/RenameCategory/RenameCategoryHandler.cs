@@ -32,25 +32,32 @@ public sealed class RenameCategoryHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        _accountAccess.GetRequiredUserId();
+        var ownerUserId = _accountAccess.GetRequiredUserId();
 
         var category = await _categories.GetByIdAsync(command.CategoryId, cancellationToken)
                        ?? throw new NotFoundException(nameof(Category), command.CategoryId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
-            category.AccountId, nameof(Category), category.Id, cancellationToken);
+        if (category.IsSystem)
+        {
+            category.EnsureModifiable();
+        }
+
+        if (category.OwnerUserId != ownerUserId)
+        {
+            throw new NotFoundException(nameof(Category), command.CategoryId);
+        }
 
         var originalName = category.Name;
         category.Rename(command.Name);
 
-        if (await _categories.ExistsWithNameAsync(
-                category.AccountId,
+        if (await _categories.ExistsWithNameForUserAsync(
+                ownerUserId,
                 category.Name,
                 excludeCategoryId: category.Id,
                 cancellationToken: cancellationToken))
         {
             category.Rename(originalName);
-            throw new DomainException($"A category named '{command.Name.Trim()}' already exists in this account.");
+            throw new DomainException($"A category named '{command.Name.Trim()}' already exists.");
         }
 
         await _categories.UpdateAsync(category, cancellationToken);

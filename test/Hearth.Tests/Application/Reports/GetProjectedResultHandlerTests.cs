@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetProjectedResult;
 using Hearth.Domain.Entities;
@@ -10,8 +10,8 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetProjectedResultHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
@@ -21,7 +21,7 @@ public class GetProjectedResultHandlerTests
 
     public GetProjectedResultHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetProjectedResultHandler(
             _accountAccess,
             _incomes,
@@ -33,12 +33,11 @@ public class GetProjectedResultHandlerTests
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
         return account;
     }
@@ -67,11 +66,12 @@ public class GetProjectedResultHandlerTests
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            Guid.NewGuid(),
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             1,
             1,
-            account.BillingRule,
+            CardBillingRule.Of(3, 12),
             PurchaseCondition.Others,
             "Compra",
             Guid.NewGuid());

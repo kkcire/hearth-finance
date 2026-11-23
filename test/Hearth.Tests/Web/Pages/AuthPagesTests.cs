@@ -128,7 +128,7 @@ public sealed class AuthPagesTests : WebTestBase
     {
         var user = await SeedUserAsync();
         await Accounts.AddAsync(Account.Create(
-            Guid.CreateVersion7(), user.Id, "Principal", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
+            Guid.CreateVersion7(), user.Id, "Principal", Money.Zero, new DateOnly(2026, 1, 1)));
 
         var nav = Services.GetRequiredService<NavigationManager>();
         nav.NavigateTo("/login?returnUrl=%2Fcartao%2Ffaturas");
@@ -149,7 +149,7 @@ public sealed class AuthPagesTests : WebTestBase
     {
         var user = await SeedUserAsync();
         await Accounts.AddAsync(Account.Create(
-            Guid.CreateVersion7(), user.Id, "Principal", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
+            Guid.CreateVersion7(), user.Id, "Principal", Money.Zero, new DateOnly(2026, 1, 1)));
 
         var nav = Services.GetRequiredService<NavigationManager>();
         nav.NavigateTo("/login?returnUrl=https%3A%2F%2Fevil.com");

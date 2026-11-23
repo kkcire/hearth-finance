@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.CreateCategoryBudget;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -13,8 +13,8 @@ public class CreateCategoryBudgetHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 15);
 
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
@@ -23,22 +23,21 @@ public class CreateCategoryBudgetHandlerTests
 
     public CreateCategoryBudgetHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new CreateCategoryBudgetHandler(_accountAccess, _categories, _budgets, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Category)> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            InitialDate,
-            CardBillingRule.Of(3, 12));
+            InitialDate);
         await _accounts.AddAsync(account);
 
-        var category = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");
         await _categories.AddAsync(category);
 
         return (account, category);

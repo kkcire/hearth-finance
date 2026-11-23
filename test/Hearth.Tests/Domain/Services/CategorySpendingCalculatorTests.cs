@@ -9,6 +9,7 @@ public class CategorySpendingCalculatorTests
 {
     private static readonly Guid AccountId = Guid.NewGuid();
     private static readonly Guid OtherAccountId = Guid.NewGuid();
+    private static readonly Guid CardId = Guid.NewGuid();
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
 
     private static readonly Guid TransportCategoryId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -67,6 +68,7 @@ public class CategorySpendingCalculatorTests
         CreditCardPurchase.Create(
             Guid.NewGuid(),
             accountId ?? AccountId,
+            CardId,
             date,
             M(amount),
             count,
@@ -158,7 +160,7 @@ public class CategorySpendingCalculatorTests
     public void Calculate_FixedExpenses_UseAmountOfMonth_AndCountWhetherPaidOrNot()
     {
         var rent = NewFixed(YM(2026, 1), null, 1000.00m, ServicesCategoryId);
-        rent.ChangeAmount(M(1200.00m), Day(2026, 6, 10), Rule3);
+        rent.ChangeAmount(M(1200.00m), Day(2026, 7, 10));
         rent.MarkAsPaid(YM(2026, 7), Day(2026, 8, 2));
 
         var june = Calc(YM(2026, 6), fixedExpenses: new[] { rent });

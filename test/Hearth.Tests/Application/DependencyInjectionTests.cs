@@ -53,8 +53,8 @@ public sealed class DependencyInjectionTests
         var directExpenses = new InMemoryDirectExpenseRepository();
         var fixedExpenses = new InMemoryFixedExpenseRepository();
         var purchases = new InMemoryCreditCardPurchaseRepository();
+        var creditCards = new InMemoryCreditCardRepository();
         var incomes = new InMemoryIncomeRepository();
-        var invoices = new InMemoryInvoiceRepository();
 
         services.AddSingleton<ICurrentUser>(new FakeCurrentUser());
         services.AddSingleton<IUserRepository>(users);
@@ -64,9 +64,9 @@ public sealed class DependencyInjectionTests
         services.AddSingleton<ICategoryBudgetRepository>(budgets);
         services.AddSingleton<IDirectExpenseRepository>(directExpenses);
         services.AddSingleton<IFixedExpenseRepository>(fixedExpenses);
+        services.AddSingleton<ICreditCardRepository>(creditCards);
         services.AddSingleton<ICreditCardPurchaseRepository>(purchases);
         services.AddSingleton<IIncomeRepository>(incomes);
-        services.AddSingleton<IInvoiceRepository>(invoices);
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddSingleton<IClock>(new FakeClock(new DateOnly(2026, 11, 20)));
     }

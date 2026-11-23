@@ -8,6 +8,7 @@ namespace Hearth.Tests.Domain.Services;
 public class InvoiceCalculatorTests
 {
     private static readonly Guid AccountId = Guid.NewGuid();
+    private static readonly Guid CardId = Guid.NewGuid();
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
@@ -27,6 +28,7 @@ public class InvoiceCalculatorTests
         CreditCardPurchase.Create(
             Guid.NewGuid(),
             accountId ?? AccountId,
+            CardId,
             date,
             M(amount),
             count,

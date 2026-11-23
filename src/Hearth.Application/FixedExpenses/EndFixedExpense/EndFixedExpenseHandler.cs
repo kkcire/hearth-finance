@@ -42,10 +42,10 @@ public sealed class EndFixedExpenseHandler
         var expense = await _fixedExpenses.GetByIdAsync(command.FixedExpenseId, cancellationToken)
                       ?? throw new NotFoundException(nameof(FixedExpense), command.FixedExpenseId);
 
-        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+        await _accountAccess.EnsureCanAccessEntityAsync(
             expense.AccountId, nameof(FixedExpense), expense.Id, cancellationToken);
 
-        expense.End(lastMonth, _clock.Today, account.BillingRule);
+        expense.End(lastMonth, _clock.Today);
 
         await _fixedExpenses.UpdateAsync(expense, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

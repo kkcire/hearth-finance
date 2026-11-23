@@ -14,10 +14,13 @@ public sealed record InstallmentDto(
 public sealed record CreditCardPurchaseDto(
     Guid Id,
     Guid AccountId,
+    Guid CreditCardId,
     DateOnly Date,
     decimal Amount,
     int InstallmentCount,
     int InitialInstallment,
+    int FirstActiveClosingYear,
+    int FirstActiveClosingMonth,
     PurchaseConditionKind ConditionKind,
     string? ConditionName,
     string Description,
@@ -25,14 +28,20 @@ public sealed record CreditCardPurchaseDto(
     bool IsLocked,
     IReadOnlyList<InstallmentDto> Installments)
 {
-    internal static CreditCardPurchaseDto FromEntity(CreditCardPurchase purchase, DateOnly today) =>
-        new(
+    internal static CreditCardPurchaseDto FromEntity(CreditCardPurchase purchase, DateOnly today)
+    {
+        var firstActive = purchase.FirstActiveCycle.ClosingMonth;
+
+        return new(
             purchase.Id,
             purchase.AccountId,
+            purchase.CreditCardId,
             purchase.Date,
             purchase.Amount.Amount,
             purchase.InstallmentCount,
             purchase.InitialInstallment,
+            firstActive.Year,
+            firstActive.Month,
             purchase.Condition.Kind,
             purchase.Condition.Name,
             purchase.Description,
@@ -47,6 +56,7 @@ public sealed record CreditCardPurchaseDto(
                     installment.Cycle.DueDate,
                     installment.IsPreviouslyPaid))
                 .ToList());
+    }
 }
 
 internal static class PurchaseConditionMapper

@@ -4,16 +4,15 @@ using Hearth.Domain.ValueObjects;
 namespace Hearth.Domain.Entities;
 
 /// <summary>
-/// A bank account with its credit card configuration. It holds the starting point of the real
-/// balance (initial balance and date) and the user's billing rule. Entries (purchases, expenses,
-/// incomes) are separate aggregates that point to the account by id.
+/// A financial account holding the starting point of the cash balance (initial balance and
+/// reference date). Entries (incomes, direct expenses, fixed expenses, credit card purchases)
+/// and credit cards point to the account by id.
 /// </summary>
 public sealed class Account
 {
     private Account()
     {
         Name = null!;
-        BillingRule = null!;
     }
 
     private Account(
@@ -22,14 +21,14 @@ public sealed class Account
         string name,
         Money initialBalance,
         DateOnly initialBalanceDate,
-        CardBillingRule billingRule)
+        bool isInitialBalanceConfirmed)
     {
         Id = id;
         OwnerUserId = ownerUserId;
         Name = name;
         InitialBalance = initialBalance;
         InitialBalanceDate = initialBalanceDate;
-        BillingRule = billingRule;
+        IsInitialBalanceConfirmed = isInitialBalanceConfirmed;
     }
 
     public Guid Id { get; }
@@ -44,14 +43,15 @@ public sealed class Account
 
     /// <summary>
     /// The date the initial balance refers to. No entry can be registered before it, except the
-    /// earlier installments of purchases already in progress. It cannot be changed after creation.
+    /// earlier installments of purchases already in progress. It becomes immutable once confirmed.
     /// </summary>
-    public DateOnly InitialBalanceDate { get; }
+    public DateOnly InitialBalanceDate { get; private set; }
 
     /// <summary>
-    /// The user's card configuration. Its closing day also decides when fixed expenses freeze.
+    /// True once the user has either confirmed or explicitly skipped the initial balance setup.
+    /// Prevents the first-access modal from reappearing even when the chosen initial balance is zero.
     /// </summary>
-    public CardBillingRule BillingRule { get; private set; }
+    public bool IsInitialBalanceConfirmed { get; private set; }
 
     public static Account Create(
         Guid id,
@@ -59,14 +59,19 @@ public sealed class Account
         string name,
         Money initialBalance,
         DateOnly initialBalanceDate,
-        CardBillingRule billingRule)
+        bool isInitialBalanceConfirmed = false)
     {
         DomainValidation.EnsureNotEmpty(id, nameof(id));
         DomainValidation.EnsureNotEmpty(ownerUserId, nameof(ownerUserId), "owner user id");
         var validName = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
-        ArgumentNullException.ThrowIfNull(billingRule);
 
-        return new Account(id, ownerUserId, validName, initialBalance, initialBalanceDate, billingRule);
+        return new Account(
+            id,
+            ownerUserId,
+            validName,
+            initialBalance,
+            initialBalanceDate,
+            isInitialBalanceConfirmed);
     }
 
     /// <summary>True if an entry dated on the given day respects the initial balance date.</summary>
@@ -82,6 +87,38 @@ public sealed class Account
         }
     }
 
+    /// <summary>
+    /// Completes the one-time initial balance setup, locking <see cref="InitialBalanceDate"/>.
+    /// </summary>
+    /// <exception cref="DomainException">
+    /// The initial balance was already confirmed, or <paramref name="initialBalanceDate"/> is in the future.
+    /// </exception>
+    public void ConfirmInitialBalance(Money initialBalance, DateOnly initialBalanceDate, DateOnly today)
+    {
+        if (IsInitialBalanceConfirmed)
+        {
+            throw new DomainException(
+                "The initial balance has already been confirmed. Use UpdateInitialBalance to change the amount.");
+        }
+
+        if (initialBalanceDate > today)
+        {
+            throw new DomainException("The initial balance date cannot be in the future.");
+        }
+
+        InitialBalance = initialBalance;
+        InitialBalanceDate = initialBalanceDate;
+        IsInitialBalanceConfirmed = true;
+    }
+
+    /// <summary>
+    /// Skips the initial balance setup by recording zero starting from <paramref name="today"/>.
+    /// </summary>
+    public void SkipInitialBalance(DateOnly today)
+    {
+        ConfirmInitialBalance(Money.Zero, today, today);
+    }
+
     public void Rename(string name)
     {
         Name = DomainValidation.ValidateRequiredText(name, nameof(name), DomainValidation.MaxNameLength);
@@ -93,16 +130,5 @@ public sealed class Account
     public void UpdateInitialBalance(Money newInitialBalance)
     {
         InitialBalance = newInitialBalance;
-    }
-
-    /// <summary>
-    /// Replaces the card configuration. Purchases already registered keep the rule they were
-    /// created with; fixed expenses and later purchases follow the new one.
-    /// </summary>
-    public void ChangeBillingRule(CardBillingRule billingRule)
-    {
-        ArgumentNullException.ThrowIfNull(billingRule);
-
-        BillingRule = billingRule;
     }
 }

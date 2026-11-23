@@ -40,8 +40,8 @@ public sealed class RegisterDirectExpenseHandler
 
         var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
-        await CategoryValidation.EnsureUsableForAccountAsync(
-            _categories, account.Id, command.CategoryId, cancellationToken);
+        await CategoryValidation.EnsureUsableForUserAsync(
+            _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
         account.EnsureCanRegisterOn(command.Date);
 

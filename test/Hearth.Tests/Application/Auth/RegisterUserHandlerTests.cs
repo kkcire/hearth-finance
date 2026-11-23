@@ -1,6 +1,7 @@
 using Hearth.Application.Auth;
 using Hearth.Application.Auth.RegisterUser;
 using Hearth.Domain;
+using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
 using Xunit;
 
@@ -9,6 +10,7 @@ namespace Hearth.Tests.Application.Auth;
 public sealed class RegisterUserHandlerTests
 {
     private readonly InMemoryUserRepository _users = new();
+    private readonly InMemoryAccountRepository _accounts = new();
     private readonly FakePasswordHasher _hasher = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(
@@ -16,10 +18,10 @@ public sealed class RegisterUserHandlerTests
         new DateTimeOffset(2026, 11, 22, 15, 0, 0, TimeSpan.Zero));
 
     private RegisterUserHandler CreateHandler() =>
-        new(_users, _hasher, _unitOfWork, _clock);
+        new(_users, _accounts, _hasher, _unitOfWork, _clock);
 
     [Fact]
-    public async Task ExecuteAsync_WithValidInput_CreatesUserNormalizesEmailAndHashesPassword()
+    public async Task ExecuteAsync_WithValidInput_CreatesUserAndUnconfirmedDefaultAccountInSingleTransaction()
     {
         var handler = CreateHandler();
 
@@ -32,10 +34,18 @@ public sealed class RegisterUserHandlerTests
         Assert.Equal("Erick", result.User!.Name);
         Assert.Equal("erick@hearth.app", result.User.Email);
 
-        var saved = Assert.Single(_users.Users);
-        Assert.Equal(result.User.Id, saved.Id);
-        Assert.Equal("fake-hash:segredo123", saved.PasswordHash);
-        Assert.Equal(_clock.UtcNow, saved.CreatedAtUtc);
+        var savedUser = Assert.Single(_users.Users);
+        Assert.Equal(result.User.Id, savedUser.Id);
+        Assert.Equal("fake-hash:segredo123", savedUser.PasswordHash);
+        Assert.Equal(_clock.UtcNow, savedUser.CreatedAtUtc);
+
+        var defaultAccount = Assert.Single(_accounts.Accounts);
+        Assert.Equal(savedUser.Id, defaultAccount.OwnerUserId);
+        Assert.Equal(RegisterUserHandler.DefaultAccountName, defaultAccount.Name);
+        Assert.Equal(Money.Zero, defaultAccount.InitialBalance);
+        Assert.Equal(_clock.Today, defaultAccount.InitialBalanceDate);
+        Assert.False(defaultAccount.IsInitialBalanceConfirmed);
+
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
 
@@ -51,6 +61,7 @@ public sealed class RegisterUserHandlerTests
         Assert.Equal(AuthErrorCode.EmailAlreadyInUse, duplicate.ErrorCode);
         Assert.Null(duplicate.User);
         Assert.Single(_users.Users);
+        Assert.Single(_accounts.Accounts);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
 
@@ -65,6 +76,7 @@ public sealed class RegisterUserHandlerTests
         Assert.False(result.IsSuccess);
         Assert.Equal(AuthErrorCode.InvalidName, result.ErrorCode);
         Assert.Empty(_users.Users);
+        Assert.Empty(_accounts.Accounts);
     }
 
     [Fact]

@@ -19,14 +19,12 @@ public sealed class OnboardingPageTests : WebTestBase
     }
 
     [Fact]
-    public async Task Submit_WithPortugueseDecimalInitialBalance_CreatesAccountWithDefaultCategoriesAndNavigatesHome()
+    public async Task Submit_WithPortugueseDecimalInitialBalance_CreatesAccountAndNavigatesHome()
     {
         var cut = Render<OnboardingPage>();
 
         cut.Find("input[data-testid='account-name-input']").Input("Conta Erick");
         cut.Find("input[data-testid='initial-balance-input']").Change("1.234,56");
-        cut.Find("input[data-testid='closing-day-input']").Change("5");
-        cut.Find("input[data-testid='due-day-input']").Change("15");
 
         await cut.Find("[data-testid='create-account-submit']").ClickAsync();
 
@@ -37,10 +35,8 @@ public sealed class OnboardingPageTests : WebTestBase
         Assert.Equal("Conta Erick", created.Name);
         Assert.Equal(Money.FromDecimal(1234.56m), created.InitialBalance);
         Assert.Equal(Clock.Today, created.InitialBalanceDate);
-        Assert.Equal(5, created.BillingRule.ClosingDay);
-        Assert.Equal(15, created.BillingRule.DueDay);
 
-        var categories = await Categories.GetByAccountAsync(created.Id);
+        var categories = await Categories.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
         Assert.Equal(8, categories.Count);
 
         Assert.Equal(created.Id, AccountContext.CurrentAccountId);

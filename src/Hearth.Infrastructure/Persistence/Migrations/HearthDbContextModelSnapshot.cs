@@ -37,6 +37,10 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("date")
                         .HasColumnName("initial_balance_date");
 
+                    b.Property<bool>("IsInitialBalanceConfirmed")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_initial_balance_confirmed");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -62,10 +66,6 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
                     b.Property<bool>("IsArchived")
                         .HasColumnType("boolean")
                         .HasColumnName("is_archived");
@@ -83,17 +83,77 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnName("normalized_name")
                         .HasComputedColumnSql("lower(name)", true);
 
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
                     b.HasKey("Id")
                         .HasName("pk_categories");
 
-                    b.HasIndex("AccountId")
-                        .HasDatabaseName("ix_categories_account_id");
-
-                    b.HasIndex("AccountId", "NormalizedName")
+                    b.HasIndex("NormalizedName")
                         .IsUnique()
-                        .HasDatabaseName("ux_categories_account_id_normalized_name");
+                        .HasDatabaseName("ux_categories_system_normalized_name")
+                        .HasFilter("owner_user_id IS NULL");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_categories_owner_user_id");
+
+                    b.HasIndex("OwnerUserId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_categories_owner_normalized_name")
+                        .HasFilter("owner_user_id IS NOT NULL");
 
                     b.ToTable("categories", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000101"),
+                            IsArchived = false,
+                            Name = "Transporte"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000102"),
+                            IsArchived = false,
+                            Name = "Alimentação"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000103"),
+                            IsArchived = false,
+                            Name = "Saúde"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000104"),
+                            IsArchived = false,
+                            Name = "Educação"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000105"),
+                            IsArchived = false,
+                            Name = "Entretenimento"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000106"),
+                            IsArchived = false,
+                            Name = "Serviços"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000107"),
+                            IsArchived = false,
+                            Name = "Compras"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000108"),
+                            IsArchived = false,
+                            Name = "Pessoal"
+                        });
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.CategoryBudget", b =>
@@ -130,6 +190,41 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.ToTable("category_budgets", (string)null);
                 });
 
+            modelBuilder.Entity("Hearth.Domain.Entities.CreditCard", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<decimal?>("Limit")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("limit");
+
+                    b.Property<string>("Name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.HasKey("Id")
+                        .HasName("pk_credit_cards");
+
+                    b.HasIndex("AccountId")
+                        .IsUnique()
+                        .HasDatabaseName("ux_credit_cards_account_id_active")
+                        .HasFilter("is_archived = false");
+
+                    b.ToTable("credit_cards", (string)null);
+                });
+
             modelBuilder.Entity("Hearth.Domain.Entities.CreditCardPurchase", b =>
                 {
                     b.Property<Guid>("Id")
@@ -148,6 +243,10 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.Property<Guid>("CategoryId")
                         .HasColumnType("uuid")
                         .HasColumnName("category_id");
+
+                    b.Property<Guid>("CreditCardId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("credit_card_id");
 
                     b.Property<DateOnly>("Date")
                         .HasColumnType("date")
@@ -172,6 +271,9 @@ namespace Hearth.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_credit_card_purchases_category_id");
+
+                    b.HasIndex("CreditCardId")
+                        .HasDatabaseName("ix_credit_card_purchases_credit_card_id");
 
                     b.HasIndex("AccountId", "Date")
                         .HasDatabaseName("ix_credit_card_purchases_account_id_date");
@@ -298,34 +400,6 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.ToTable("incomes", (string)null);
                 });
 
-            modelBuilder.Entity("Hearth.Domain.Entities.Invoice", b =>
-                {
-                    b.Property<Guid>("Id")
-                        .HasColumnType("uuid")
-                        .HasColumnName("id");
-
-                    b.Property<Guid>("AccountId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("account_id");
-
-                    b.Property<decimal?>("ChargedAmount")
-                        .HasPrecision(18, 2)
-                        .HasColumnType("numeric(18,2)")
-                        .HasColumnName("charged_amount");
-
-                    b.Property<DateOnly?>("PaidOn")
-                        .HasColumnType("date")
-                        .HasColumnName("paid_on");
-
-                    b.HasKey("Id")
-                        .HasName("pk_invoices");
-
-                    b.HasIndex("AccountId")
-                        .HasDatabaseName("ix_invoices_account_id");
-
-                    b.ToTable("invoices", (string)null);
-                });
-
             modelBuilder.Entity("Hearth.Domain.Entities.User", b =>
                 {
                     b.Property<Guid>("Id")
@@ -372,40 +446,15 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_accounts_users_owner_user_id");
-
-                    b.OwnsOne("Hearth.Domain.ValueObjects.CardBillingRule", "BillingRule", b1 =>
-                        {
-                            b1.Property<Guid>("AccountId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<int>("ClosingDay")
-                                .HasColumnType("integer")
-                                .HasColumnName("closing_day");
-
-                            b1.Property<int>("DueDay")
-                                .HasColumnType("integer")
-                                .HasColumnName("due_day");
-
-                            b1.HasKey("AccountId");
-
-                            b1.ToTable("accounts");
-
-                            b1.WithOwner()
-                                .HasForeignKey("AccountId");
-                        });
-
-                    b.Navigation("BillingRule")
-                        .IsRequired();
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.Category", b =>
                 {
-                    b.HasOne("Hearth.Domain.Entities.Account", null)
+                    b.HasOne("Hearth.Domain.Entities.User", null)
                         .WithMany()
-                        .HasForeignKey("AccountId")
+                        .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_categories_accounts_account_id");
+                        .HasConstraintName("fk_categories_users_owner_user_id");
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.CategoryBudget", b =>
@@ -452,6 +501,40 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.Navigation("_amountHistory");
                 });
 
+            modelBuilder.Entity("Hearth.Domain.Entities.CreditCard", b =>
+                {
+                    b.HasOne("Hearth.Domain.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_credit_cards_accounts_account_id");
+
+                    b.OwnsOne("Hearth.Domain.ValueObjects.CardBillingRule", "BillingRule", b1 =>
+                        {
+                            b1.Property<Guid>("CreditCardId")
+                                .HasColumnType("uuid");
+
+                            b1.Property<int>("ClosingDay")
+                                .HasColumnType("integer")
+                                .HasColumnName("closing_day");
+
+                            b1.Property<int>("DueDay")
+                                .HasColumnType("integer")
+                                .HasColumnName("due_day");
+
+                            b1.HasKey("CreditCardId");
+
+                            b1.ToTable("credit_cards");
+
+                            b1.WithOwner()
+                                .HasForeignKey("CreditCardId");
+                        });
+
+                    b.Navigation("BillingRule")
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Hearth.Domain.Entities.CreditCardPurchase", b =>
                 {
                     b.HasOne("Hearth.Domain.Entities.Account", null)
@@ -467,6 +550,13 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_credit_card_purchases_categories_category_id");
+
+                    b.HasOne("Hearth.Domain.Entities.CreditCard", null)
+                        .WithMany()
+                        .HasForeignKey("CreditCardId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_credit_card_purchases_credit_cards_credit_card_id");
 
                     b.OwnsOne("Hearth.Domain.ValueObjects.CardBillingRule", "Rule", b1 =>
                         {
@@ -613,60 +703,6 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_incomes_accounts_account_id");
-                });
-
-            modelBuilder.Entity("Hearth.Domain.Entities.Invoice", b =>
-                {
-                    b.HasOne("Hearth.Domain.Entities.Account", null)
-                        .WithMany()
-                        .HasForeignKey("AccountId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired()
-                        .HasConstraintName("fk_invoices_accounts_account_id");
-
-                    b.OwnsOne("Hearth.Domain.ValueObjects.BillingCycle", "Cycle", b1 =>
-                        {
-                            b1.Property<Guid>("InvoiceId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<int>("ClosingMonth")
-                                .HasColumnType("integer")
-                                .HasColumnName("closing_month");
-
-                            b1.HasKey("InvoiceId");
-
-                            b1.ToTable("invoices");
-
-                            b1.WithOwner()
-                                .HasForeignKey("InvoiceId");
-
-                            b1.OwnsOne("Hearth.Domain.ValueObjects.CardBillingRule", "Rule", b2 =>
-                                {
-                                    b2.Property<Guid>("BillingCycleInvoiceId")
-                                        .HasColumnType("uuid");
-
-                                    b2.Property<int>("ClosingDay")
-                                        .HasColumnType("integer")
-                                        .HasColumnName("closing_day");
-
-                                    b2.Property<int>("DueDay")
-                                        .HasColumnType("integer")
-                                        .HasColumnName("due_day");
-
-                                    b2.HasKey("BillingCycleInvoiceId");
-
-                                    b2.ToTable("invoices");
-
-                                    b2.WithOwner()
-                                        .HasForeignKey("BillingCycleInvoiceId");
-                                });
-
-                            b1.Navigation("Rule")
-                                .IsRequired();
-                        });
-
-                    b.Navigation("Cycle")
-                        .IsRequired();
                 });
 #pragma warning restore 612, 618
         }

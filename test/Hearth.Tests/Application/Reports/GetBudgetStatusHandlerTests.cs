@@ -1,7 +1,8 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -11,8 +12,8 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetBudgetStatusHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
@@ -23,7 +24,7 @@ public class GetBudgetStatusHandlerTests
 
     public GetBudgetStatusHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetBudgetStatusHandler(
             _accountAccess,
             _categories,
@@ -37,33 +38,29 @@ public class GetBudgetStatusHandlerTests
     public async Task ExecuteAsync_ReturnsBudgetedCategoriesWithNamesTotalsAndConditionFiltering()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
-            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
 
-        var transport = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
-        var food = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
-        await _categories.AddAsync(transport);
-        await _categories.AddAsync(food);
-
         await _budgets.AddAsync(CategoryBudget.Create(
-            Guid.NewGuid(), account.Id, transport.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m)));
+            Guid.NewGuid(), account.Id, SystemCategories.TransportId, YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m)));
         await _budgets.AddAsync(CategoryBudget.Create(
-            Guid.NewGuid(), account.Id, food.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(500.00m)));
+            Guid.NewGuid(), account.Id, SystemCategories.FoodId, YearMonth.Of(2026, 1), null, Money.FromDecimal(500.00m)));
 
         await _directExpenses.AddAsync(DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(120.00m), "Ônibus", transport.Id));
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(120.00m), "Ônibus", SystemCategories.TransportId));
         await _purchases.AddAsync(CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            Guid.NewGuid(),
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(300.00m),
             1,
             1,
-            account.BillingRule,
+            CardBillingRule.Of(3, 12),
             PurchaseCondition.Others,
             "Terceiro",
-            food.Id));
+            SystemCategories.FoodId));
 
         var ownOnly = await _handler.ExecuteAsync(new GetBudgetStatusQuery(
             account.Id,

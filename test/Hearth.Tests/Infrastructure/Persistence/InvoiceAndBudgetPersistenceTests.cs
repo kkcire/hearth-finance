@@ -1,10 +1,11 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
+using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Application.Reports.GetBudgetStatus;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
-using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
 
@@ -25,74 +26,81 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task<(Guid UserId, Guid AccountId, Guid CategoryId)> SeedAccountAndCategoryAsync()
+    private async Task<(Guid UserId, Guid AccountId)> SeedUserAndAccountAsync()
     {
         var userId = Guid.CreateVersion7();
         var accountId = Guid.CreateVersion7();
-        var categoryId = Guid.CreateVersion7();
 
         await using var scope = _fixture.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
-        var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await users.AddAsync(User.Create(
             userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
-        await categories.AddAsync(Category.Create(categoryId, accountId, "Transporte"));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1)));
         await uow.SaveChangesAsync();
 
-        return (userId, accountId, categoryId);
+        return (userId, accountId);
     }
 
     [Fact]
-    public async Task InvoiceRepository_QueriesByClosingMonthAndEnforcesUniqueAccountClosingMonth()
+    public async Task GetInvoiceSummaryHandler_DerivesInvoiceDirectlyFromPersistedCardsAndPurchases()
     {
-        var (_, accountId, _) = await SeedAccountAndCategoryAsync();
-        var cycle = BillingCycle.Closing(YearMonth.Of(2026, 11), CardBillingRule.Of(3, 12));
+        var (userId, accountId) = await SeedUserAndAccountAsync();
+        var cardId = Guid.CreateVersion7();
+        var rule = CardBillingRule.Of(3, 12);
 
         await using (var scope = _fixture.CreateScope())
         {
-            var invoices = scope.ServiceProvider.GetRequiredService<IInvoiceRepository>();
+            var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
+            var purchases = scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>();
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
-            var invoice = Invoice.Create(Guid.CreateVersion7(), accountId, cycle);
-            invoice.InformChargedAmount(Money.FromDecimal(450.75m));
-            invoice.MarkAsPaid(new DateOnly(2026, 11, 12));
-
-            await invoices.AddAsync(invoice);
+            await cards.AddAsync(CreditCard.Create(cardId, accountId, rule, "Nubank", Money.FromDecimal(3000.00m)));
+            await purchases.AddAsync(CreditCardPurchase.Create(
+                Guid.CreateVersion7(),
+                accountId,
+                cardId,
+                new DateOnly(2026, 10, 10),
+                Money.FromDecimal(300.00m),
+                3,
+                1,
+                rule,
+                PurchaseCondition.Own,
+                "Passagem",
+                SystemCategories.TransportId));
             await uow.SaveChangesAsync();
         }
 
         await using (var scope = _fixture.CreateScope())
         {
-            var invoices = scope.ServiceProvider.GetRequiredService<IInvoiceRepository>();
+            var guard = new AccountAccessGuard(
+                scope.ServiceProvider.GetRequiredService<IAccountRepository>(),
+                new FakeCurrentUser(userId));
+            var handler = new GetInvoiceSummaryHandler(
+                guard,
+                scope.ServiceProvider.GetRequiredService<ICreditCardRepository>(),
+                scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>(),
+                new FakeClock(new DateOnly(2026, 11, 15)));
 
-            var found = await invoices.GetByAccountAndClosingMonthAsync(accountId, YearMonth.Of(2026, 11));
-            Assert.NotNull(found);
-            Assert.Equal(cycle, found.Cycle);
-            Assert.Equal(Money.FromDecimal(450.75m), found.ChargedAmount);
-            Assert.Equal(new DateOnly(2026, 11, 12), found.PaidOn);
-            Assert.Null(await invoices.GetByAccountAndClosingMonthAsync(accountId, YearMonth.Of(2026, 12)));
-        }
+            var summary = await handler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 11));
 
-        // Second invoice for same (AccountId, ClosingMonth) must be rejected by PostgreSQL unique index.
-        await using (var scope = _fixture.CreateScope())
-        {
-            var invoices = scope.ServiceProvider.GetRequiredService<IInvoiceRepository>();
-            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
-
-            await invoices.AddAsync(Invoice.Create(Guid.CreateVersion7(), accountId, cycle));
-            await Assert.ThrowsAsync<DbUpdateException>(() => uow.SaveChangesAsync());
+            Assert.True(summary.HasActiveCard);
+            Assert.False(summary.IsEmptyWithoutCard);
+            Assert.Equal(100.00m, summary.CalculatedAmount);
+            Assert.Equal(InvoiceStatus.Paid, summary.Status);
+            Assert.Equal(new DateOnly(2026, 11, 12), summary.DueDate);
+            Assert.Single(summary.Installments);
         }
     }
 
     [Fact]
     public async Task CategoryBudgetRepository_PersistsAmountHistoryUpdatesAndIntegratesWithGetBudgetStatus()
     {
-        var (userId, accountId, categoryId) = await SeedAccountAndCategoryAsync();
+        var (userId, accountId) = await SeedUserAndAccountAsync();
+        var categoryId = SystemCategories.TransportId;
         var budgetId = Guid.CreateVersion7();
 
         await using (var scope = _fixture.CreateScope())

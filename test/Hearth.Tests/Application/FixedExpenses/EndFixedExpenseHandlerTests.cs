@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.EndFixedExpense;
 using Hearth.Domain.Entities;
@@ -11,8 +11,8 @@ namespace Hearth.Tests.Application.FixedExpenses;
 
 public class EndFixedExpenseHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 10, 10));
@@ -21,19 +21,18 @@ public class EndFixedExpenseHandlerTests
 
     public EndFixedExpenseHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new EndFixedExpenseHandler(_accountAccess, _fixedExpenses, _clock, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
 
         var expense = FixedExpense.Create(
@@ -52,11 +51,12 @@ public class EndFixedExpenseHandlerTests
     [Fact]
     public async Task ExecuteAsync_OpenMonthBoundary_SetsEndMonthAndSaves()
     {
+        // Today is 2026-10-10 -> first open calendar month is October, so ending at September stops October onward.
         var expense = await SeedAsync();
 
-        await _handler.ExecuteAsync(new EndFixedExpenseCommand(expense.Id, 2026, 10));
+        await _handler.ExecuteAsync(new EndFixedExpenseCommand(expense.Id, 2026, 9));
 
-        Assert.Equal(YearMonth.Of(2026, 10), expense.EndMonth);
+        Assert.Equal(YearMonth.Of(2026, 9), expense.EndMonth);
         Assert.Equal(1, _fixedExpenses.UpdateCount);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
@@ -64,11 +64,11 @@ public class EndFixedExpenseHandlerTests
     [Fact]
     public async Task ExecuteAsync_WouldStopFrozenMonth_ThrowsDomainExceptionAndDoesNotSave()
     {
-        // Today is 2026-10-10, closing day 3 -> October is frozen, so ending at September is rejected.
+        // Today is 2026-10-10 -> September is frozen, so ending at August would stop September and is rejected.
         var expense = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new EndFixedExpenseCommand(expense.Id, 2026, 9)));
+            new EndFixedExpenseCommand(expense.Id, 2026, 8)));
 
         Assert.Null(expense.EndMonth);
         Assert.Equal(0, _fixedExpenses.UpdateCount);

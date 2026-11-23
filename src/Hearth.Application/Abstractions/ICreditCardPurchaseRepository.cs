@@ -12,7 +12,13 @@ public interface ICreditCardPurchaseRepository
         Guid accountId,
         CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<CreditCardPurchase>> GetByCreditCardAsync(
+        Guid creditCardId,
+        CancellationToken cancellationToken = default);
+
     Task<bool> AnyByCategoryAsync(Guid categoryId, CancellationToken cancellationToken = default);
+
+    Task<bool> AnyByCreditCardAsync(Guid creditCardId, CancellationToken cancellationToken = default);
 
     Task UpdateAsync(CreditCardPurchase purchase, CancellationToken cancellationToken = default);
 

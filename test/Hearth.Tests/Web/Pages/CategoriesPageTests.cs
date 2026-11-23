@@ -1,4 +1,5 @@
 using Bunit;
+using Hearth.Application.Categories.CreateCategory;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
 using Hearth.Web.Components.Pages;
 using MudBlazor;
@@ -10,7 +11,7 @@ public sealed class CategoriesPageTests : WebTestBase
     [Fact]
     public async Task Lifecycle_CreateRenameArchiveRestoreAndDeleteCategory()
     {
-        var accountId = await SeedAccountAsync();
+        await SeedAccountAsync();
         var cut = Render<CategoriesPage>();
 
         cut.WaitForAssertion(() => Assert.Contains("Alimentação", cut.Markup));
@@ -19,7 +20,7 @@ public sealed class CategoriesPageTests : WebTestBase
         cut.Find("input[data-testid='new-category-name']").Input("Pets");
         await cut.Find("[data-testid='create-category-submit']").ClickAsync();
 
-        var pets = (await Categories.GetByAccountAsync(accountId)).Single(c => c.Name == "Pets");
+        var pets = (await Categories.GetVisibleForUserAsync(CurrentUser.UserId!.Value)).Single(c => c.Name == "Pets");
         Assert.Contains("Pets", cut.Markup);
 
         // Rename
@@ -58,21 +59,24 @@ public sealed class CategoriesPageTests : WebTestBase
     public async Task Delete_WhenCategoryIsInUse_ShowsWarningAndKeepsCategory()
     {
         var accountId = await SeedAccountAsync();
-        var category = (await Categories.GetByAccountAsync(accountId)).First();
+        var customResult = await Executor.ExecuteAsync<CreateCategoryHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(new CreateCategoryCommand("Mercado Extra"), ct),
+            showErrorSnackbar: false);
+        var categoryId = customResult.Value;
 
         var registerResult = await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
-                new RegisterDirectExpenseCommand(accountId, Clock.Today, 50m, "Mercado", category.Id), ct),
+                new RegisterDirectExpenseCommand(accountId, Clock.Today, 50m, "Mercado", categoryId), ct),
             showErrorSnackbar: false);
         Assert.True(registerResult.IsSuccess);
 
         var cut = Render<CategoriesPage>();
-        cut.WaitForAssertion(() => Assert.Contains(category.Name, cut.Markup));
+        cut.WaitForAssertion(() => Assert.Contains("Mercado Extra", cut.Markup));
 
-        await cut.Find($"[data-testid='delete-{category.Id}']").ClickAsync();
-        await cut.Find($"[data-testid='confirm-delete-{category.Id}']").ClickAsync();
+        await cut.Find($"[data-testid='delete-{categoryId}']").ClickAsync();
+        await cut.Find($"[data-testid='confirm-delete-{categoryId}']").ClickAsync();
 
-        Assert.NotNull(await Categories.GetByIdAsync(category.Id));
+        Assert.NotNull(await Categories.GetByIdAsync(categoryId));
         Assert.Contains(Snackbar.ShownSnackbars, s => s.Severity == Severity.Warning);
     }
 }

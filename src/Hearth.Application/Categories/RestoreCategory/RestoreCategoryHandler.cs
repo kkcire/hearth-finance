@@ -31,13 +31,20 @@ public sealed class RestoreCategoryHandler
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        _accountAccess.GetRequiredUserId();
+        var ownerUserId = _accountAccess.GetRequiredUserId();
 
         var category = await _categories.GetByIdAsync(command.CategoryId, cancellationToken)
                        ?? throw new NotFoundException(nameof(Category), command.CategoryId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
-            category.AccountId, nameof(Category), category.Id, cancellationToken);
+        if (category.IsSystem)
+        {
+            category.EnsureModifiable();
+        }
+
+        if (category.OwnerUserId != ownerUserId)
+        {
+            throw new NotFoundException(nameof(Category), command.CategoryId);
+        }
 
         var changed = category.Restore();
 

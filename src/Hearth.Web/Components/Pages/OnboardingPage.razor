@@ -59,31 +59,6 @@
                                    Disabled="_saving"
                                    data-testid="initial-balance-date-input" />
 
-                    <MudGrid>
-                        <MudItem xs="12" sm="6">
-                            <MudNumericField T="int"
-                                             @bind-Value="_closingDay"
-                                             Label="Dia de fechamento do cartão"
-                                             Variant="Variant.Outlined"
-                                             Min="1"
-                                             Max="28"
-                                             HelperText="Entre 1 e 28"
-                                             Disabled="_saving"
-                                             data-testid="closing-day-input" />
-                        </MudItem>
-                        <MudItem xs="12" sm="6">
-                            <MudNumericField T="int"
-                                             @bind-Value="_dueDay"
-                                             Label="Dia de vencimento do cartão"
-                                             Variant="Variant.Outlined"
-                                             Min="1"
-                                             Max="28"
-                                             HelperText="Entre 1 e 28"
-                                             Disabled="_saving"
-                                             data-testid="due-day-input" />
-                        </MudItem>
-                    </MudGrid>
-
                     @if (!string.IsNullOrWhiteSpace(_errorMessage))
                     {
                         <MudAlert Severity="Severity.Warning" data-testid="onboarding-error">
@@ -130,8 +105,6 @@
     private string _name = string.Empty;
     private decimal _initialBalance;
     private DateTime? _initialBalanceDate;
-    private int _closingDay = 3;
-    private int _dueDay = 12;
     private bool _saving;
     private string? _errorMessage;
     private string? _userName;
@@ -177,12 +150,6 @@
             return;
         }
 
-        if (_closingDay is < 1 or > 28 || _dueDay is < 1 or > 28)
-        {
-            _errorMessage = "Os dias de fechamento e vencimento devem estar entre 1 e 28.";
-            return;
-        }
-
         _saving = true;
 
         try
@@ -190,9 +157,7 @@
             var command = new CreateAccountCommand(
                 _name.Trim(),
                 _initialBalance,
-                HearthFormat.ToDateOnly(_initialBalanceDate.Value),
-                _closingDay,
-                _dueDay);
+                HearthFormat.ToDateOnly(_initialBalanceDate.Value));
 
             var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
                 (handler, ct) => handler.ExecuteAsync(command, ct),

@@ -1,5 +1,5 @@
-using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.RenameAccount;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -10,27 +10,26 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class RenameAccountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly RenameAccountHandler _handler;
 
     public RenameAccountHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new RenameAccountHandler(_accountAccess, _accounts, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta principal")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.FromDecimal(1000.00m),
-            new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 10, 1));
 
         await _accounts.AddAsync(account);
         return account;

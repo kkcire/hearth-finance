@@ -1,6 +1,7 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Categories.DeleteCategory;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -11,10 +12,11 @@ namespace Hearth.Tests.Application.Categories;
 
 public class DeleteCategoryHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly Guid _cardId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
@@ -25,14 +27,13 @@ public class DeleteCategoryHandlerTests
 
     public DeleteCategoryHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new DeleteCategoryHandler(
             _accountAccess,
             _categories,
@@ -46,7 +47,7 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UnusedCategory_DeletesAndSaves()
     {
-        var category = Category.Create(Guid.NewGuid(), _accountId, "Temporária");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Temporária");
         await _categories.AddAsync(category);
 
         await _handler.ExecuteAsync(new DeleteCategoryCommand(category.Id));
@@ -57,13 +58,22 @@ public class DeleteCategoryHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_SystemCategory_ThrowsDomainException()
+    {
+        await Assert.ThrowsAsync<DomainException>(() =>
+            _handler.ExecuteAsync(new DeleteCategoryCommand(SystemCategories.TransportId)));
+
+        Assert.NotNull(await _categories.GetByIdAsync(SystemCategories.TransportId));
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
     public async Task ExecuteAsync_UsedByDirectExpense_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var category = Category.Create(Guid.NewGuid(), accountId, "Alimentação");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Lanches");
         await _categories.AddAsync(category);
         await _directExpenses.AddAsync(DirectExpense.Create(
-            Guid.NewGuid(), accountId, new DateOnly(2026, 10, 10), Money.FromDecimal(20m), "Lanche", category.Id));
+            Guid.NewGuid(), _accountId, new DateOnly(2026, 10, 10), Money.FromDecimal(20m), "Lanche", category.Id));
 
         await Assert.ThrowsAsync<DomainException>(() =>
             _handler.ExecuteAsync(new DeleteCategoryCommand(category.Id)));
@@ -75,11 +85,10 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByFixedExpense_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var category = Category.Create(Guid.NewGuid(), accountId, "Serviços");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Assinaturas");
         await _categories.AddAsync(category);
         await _fixedExpenses.AddAsync(FixedExpense.Create(
-            Guid.NewGuid(), accountId, YearMonth.Of(2026, 1), null, Money.FromDecimal(100m), "Internet", category.Id));
+            Guid.NewGuid(), _accountId, YearMonth.Of(2026, 1), null, Money.FromDecimal(100m), "Internet", category.Id));
 
         await Assert.ThrowsAsync<DomainException>(() =>
             _handler.ExecuteAsync(new DeleteCategoryCommand(category.Id)));
@@ -90,12 +99,12 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByCreditCardPurchase_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var category = Category.Create(Guid.NewGuid(), accountId, "Compras");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
         await _categories.AddAsync(category);
         await _purchases.AddAsync(CreditCardPurchase.Create(
             Guid.NewGuid(),
-            accountId,
+            _accountId,
+            _cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(100m),
             1,
@@ -114,11 +123,10 @@ public class DeleteCategoryHandlerTests
     [Fact]
     public async Task ExecuteAsync_UsedByCategoryBudget_ThrowsDomainException()
     {
-        var accountId = _accountId;
-        var category = Category.Create(Guid.NewGuid(), accountId, "Transporte");
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Viagens");
         await _categories.AddAsync(category);
         await _budgets.AddAsync(CategoryBudget.Create(
-            Guid.NewGuid(), accountId, category.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(160m)));
+            Guid.NewGuid(), _accountId, category.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(160m)));
 
         await Assert.ThrowsAsync<DomainException>(() =>
             _handler.ExecuteAsync(new DeleteCategoryCommand(category.Id)));

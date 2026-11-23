@@ -29,9 +29,9 @@ public sealed class ListCategoryBudgetsHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
-        var categories = await _categories.GetByAccountAsync(query.AccountId, cancellationToken);
+        var categories = await _categories.GetVisibleForUserAsync(account.OwnerUserId, cancellationToken);
         var categoryNames = categories.ToDictionary(category => category.Id, category => category.Name);
 
         var budgets = await _budgets.GetByAccountAsync(query.AccountId, cancellationToken);

@@ -1,5 +1,6 @@
 using Bunit;
 using Hearth.Application.Categories.ArchiveCategory;
+using Hearth.Application.Categories.CreateCategory;
 using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 using MudBlazor;
@@ -12,11 +13,13 @@ public sealed class BudgetsPageTests : WebTestBase
     public async Task CreateChangeAmountEndAndDeleteBudget_WorksEndToEnd()
     {
         var accountId = await SeedAccountAsync();
-        var allCategories = (await Categories.GetByAccountAsync(accountId)).OrderBy(c => c.Name).ToList();
-        var archivedCategory = allCategories[0];
+        var customResult = await Executor.ExecuteAsync<CreateCategoryHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(new CreateCategoryCommand("Temporária"), ct),
+            showErrorSnackbar: false);
+        var archivedCategoryId = customResult.Value;
 
         await Executor.ExecuteAsync<ArchiveCategoryHandler, bool>(
-            (handler, ct) => handler.ExecuteAsync(new ArchiveCategoryCommand(archivedCategory.Id), ct),
+            (handler, ct) => handler.ExecuteAsync(new ArchiveCategoryCommand(archivedCategoryId), ct),
             showErrorSnackbar: false);
 
         Render<MudPopoverProvider>();
@@ -29,7 +32,7 @@ public sealed class BudgetsPageTests : WebTestBase
         var offeredCategoryIds = select.FindComponents<MudSelectItem<Guid?>>()
             .Select(item => item.Instance.Value)
             .ToList();
-        Assert.DoesNotContain(archivedCategory.Id, offeredCategoryIds);
+        Assert.DoesNotContain(archivedCategoryId, offeredCategoryIds);
 
         // Create budget with pt-BR decimal
         cut.Find("input[data-testid='budget-amount-input']").Change("1.250,50");

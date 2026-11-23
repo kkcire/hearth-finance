@@ -2,6 +2,7 @@ using Bunit;
 using Hearth.Application;
 using Hearth.Application.Abstractions;
 using Hearth.Application.Accounts.CreateAccount;
+using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Web.Auth;
 using Hearth.Web.Services;
 using Hearth.Tests.Application.Fakes;
@@ -31,9 +32,9 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
     internal InMemoryCategoryBudgetRepository CategoryBudgets { get; } = new();
     internal InMemoryDirectExpenseRepository DirectExpenses { get; } = new();
     internal InMemoryFixedExpenseRepository FixedExpenses { get; } = new();
+    internal InMemoryCreditCardRepository CreditCards { get; } = new();
     internal InMemoryCreditCardPurchaseRepository CreditCardPurchases { get; } = new();
     internal InMemoryIncomeRepository Incomes { get; } = new();
-    internal InMemoryInvoiceRepository Invoices { get; } = new();
     internal FakeUnitOfWork UnitOfWork { get; } = new();
     internal FakeClock Clock { get; } = new(new DateOnly(2026, 11, 20));
 
@@ -53,9 +54,9 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         Services.AddSingleton<ICategoryBudgetRepository>(CategoryBudgets);
         Services.AddSingleton<IDirectExpenseRepository>(DirectExpenses);
         Services.AddSingleton<IFixedExpenseRepository>(FixedExpenses);
+        Services.AddSingleton<ICreditCardRepository>(CreditCards);
         Services.AddSingleton<ICreditCardPurchaseRepository>(CreditCardPurchases);
         Services.AddSingleton<IIncomeRepository>(Incomes);
-        Services.AddSingleton<IInvoiceRepository>(Invoices);
         Services.AddSingleton<IUnitOfWork>(UnitOfWork);
         Services.AddSingleton<IClock>(Clock);
 
@@ -81,15 +82,13 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         string name = "Conta Principal",
         decimal initialBalance = 1000m,
         DateOnly? initialBalanceDate = null,
-        int closingDay = 3,
-        int dueDay = 12,
         bool initializeContext = true)
     {
         var date = initialBalanceDate ?? new DateOnly(2026, 1, 1);
 
         var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
-                new CreateAccountCommand(name, initialBalance, date, closingDay, dueDay),
+                new CreateAccountCommand(name, initialBalance, date),
                 ct),
             showErrorSnackbar: false);
 
@@ -100,6 +99,23 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
             await AccountContext.ReloadAsync(result.Value);
         }
 
+        return result.Value;
+    }
+
+    protected async Task<Guid> SeedCreditCardAsync(
+        Guid accountId,
+        int closingDay = 3,
+        int dueDay = 12,
+        string? name = "Cartão Principal",
+        decimal? limit = 5000m)
+    {
+        var result = await Executor.ExecuteAsync<CreateCreditCardHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(
+                new CreateCreditCardCommand(accountId, closingDay, dueDay, name, limit),
+                ct),
+            showErrorSnackbar: false);
+
+        Assert.True(result.IsSuccess, result.ErrorMessage);
         return result.Value;
     }
 

@@ -10,6 +10,7 @@ public class BudgetStatusCalculatorTests
 {
     private static readonly Guid AccountId = Guid.NewGuid();
     private static readonly Guid OtherAccountId = Guid.NewGuid();
+    private static readonly Guid CardId = Guid.NewGuid();
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
 
     private static readonly Guid TransportId = Guid.Parse("00000000-0000-0000-0000-000000000001");
@@ -34,7 +35,7 @@ public class BudgetStatusCalculatorTests
         var directTransport = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 5), M(200.00m), "Uber", TransportId);
         var fixedFood = FixedExpense.Create(Guid.NewGuid(), AccountId, YM(2026, 1), null, M(250.00m), "Marmita", FoodId);
         var cardFood = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, Day(2026, 10, 10), M(100.00m), 1, 1, Rule3, PurchaseCondition.Own, "Mercado", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(100.00m), 1, 1, Rule3, PurchaseCondition.Own, "Mercado", FoodId);
         var unbudgetedExpense = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 10), M(900.00m), "Extra", UnbudgetedId);
 
         var status = BudgetStatusCalculator.Calculate(
@@ -80,9 +81,9 @@ public class BudgetStatusCalculatorTests
     {
         var foodBudget = CategoryBudget.Create(Guid.NewGuid(), AccountId, FoodId, YM(2026, 1), null, M(300.00m));
         var own = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, Day(2026, 10, 10), M(120.00m), 1, 1, Rule3, PurchaseCondition.Own, "Meu", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(120.00m), 1, 1, Rule3, PurchaseCondition.Own, "Meu", FoodId);
         var others = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, Day(2026, 10, 11), M(400.00m), 1, 1, Rule3, PurchaseCondition.Others, "Terceiro", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 11), M(400.00m), 1, 1, Rule3, PurchaseCondition.Others, "Terceiro", FoodId);
 
         var status = BudgetStatusCalculator.Calculate(
             AccountId,

@@ -1,4 +1,4 @@
-using Hearth.Application.Accounts.ChangeBillingRule;
+using Hearth.Application.Accounts.ConfirmInitialBalance;
 using Hearth.Application.Accounts.CreateAccount;
 using Hearth.Application.Accounts.GetAccount;
 using Hearth.Application.Accounts.ListAccounts;
@@ -24,6 +24,12 @@ using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseAmount;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
+using Hearth.Application.CreditCards.ArchiveCreditCard;
+using Hearth.Application.CreditCards.CreateCreditCard;
+using Hearth.Application.CreditCards.DeleteCreditCard;
+using Hearth.Application.CreditCards.GetActiveCreditCard;
+using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.UpdateCreditCard;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
@@ -43,10 +49,6 @@ using Hearth.Application.Incomes.RegisterIncome;
 using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
-using Hearth.Application.Invoices.InformInvoiceChargedAmount;
-using Hearth.Application.Invoices.ListInvoices;
-using Hearth.Application.Invoices.MarkInvoiceAsPaid;
-using Hearth.Application.Invoices.RevertInvoicePayment;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Application.Reports.GetProjectedResult;
@@ -68,11 +70,11 @@ public static class DependencyInjection
 
         // Accounts
         services.AddScoped<CreateAccountHandler>();
+        services.AddScoped<ConfirmInitialBalanceHandler>();
         services.AddScoped<GetAccountHandler>();
         services.AddScoped<ListAccountsHandler>();
         services.AddScoped<RenameAccountHandler>();
         services.AddScoped<UpdateInitialBalanceHandler>();
-        services.AddScoped<ChangeBillingRuleHandler>();
 
         // Categories
         services.AddScoped<CreateCategoryHandler>();
@@ -105,6 +107,14 @@ public static class DependencyInjection
         services.AddScoped<DeleteFixedExpenseHandler>();
         services.AddScoped<ListFixedExpensesHandler>();
 
+        // Credit cards
+        services.AddScoped<CreateCreditCardHandler>();
+        services.AddScoped<UpdateCreditCardHandler>();
+        services.AddScoped<ArchiveCreditCardHandler>();
+        services.AddScoped<DeleteCreditCardHandler>();
+        services.AddScoped<GetActiveCreditCardHandler>();
+        services.AddScoped<ListCreditCardsHandler>();
+
         // Credit card purchases
         services.AddScoped<RegisterCreditCardPurchaseHandler>();
         services.AddScoped<UpdateCreditCardPurchaseAmountHandler>();
@@ -121,11 +131,7 @@ public static class DependencyInjection
         services.AddScoped<DeleteIncomeHandler>();
         services.AddScoped<ListIncomesHandler>();
 
-        // Invoices
-        services.AddScoped<InformInvoiceChargedAmountHandler>();
-        services.AddScoped<MarkInvoiceAsPaidHandler>();
-        services.AddScoped<RevertInvoicePaymentHandler>();
-        services.AddScoped<ListInvoicesHandler>();
+        // Invoices (derived)
         services.AddScoped<GetInvoiceSummaryHandler>();
 
         // Reports

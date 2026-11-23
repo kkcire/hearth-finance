@@ -5,9 +5,8 @@ namespace Hearth.Domain.Entities;
 
 /// <summary>
 /// A monthly recurring expense (rent, internet, subscriptions), active from a start month until
-/// an optional end month. Months already frozen never change: edits to the amount keep a history
-/// and only apply to months that are still open. The freeze day is the closing day of the user's
-/// card, so it is received as a <see cref="CardBillingRule"/> and never stored here.
+/// an optional end month. Past calendar months are frozen and never change: edits to the amount
+/// keep a history and apply from the current calendar month onward.
 /// </summary>
 public sealed class FixedExpense
 {
@@ -90,17 +89,10 @@ public sealed class FixedExpense
     }
 
     /// <summary>
-    /// The first month that can still be changed. Edits are accepted up to and including the
-    /// closing day of the card; after it, they only apply from the next month.
+    /// The first month that can still be changed: the current calendar month.
+    /// Past calendar months are frozen and never change.
     /// </summary>
-    public static YearMonth FirstOpenMonth(DateOnly today, CardBillingRule rule)
-    {
-        ArgumentNullException.ThrowIfNull(rule);
-
-        var current = YearMonth.From(today);
-
-        return today.Day <= rule.ClosingDay ? current : current.AddMonths(1);
-    }
+    public static YearMonth FirstOpenMonth(DateOnly today) => YearMonth.From(today);
 
     public bool IsActiveIn(YearMonth month)
     {
@@ -140,11 +132,11 @@ public sealed class FixedExpense
     /// <exception cref="DomainException">
     /// The expense has already ended for the open months, or a month affected by the change is already paid.
     /// </exception>
-    public YearMonth ChangeAmount(Money newAmount, DateOnly today, CardBillingRule rule)
+    public YearMonth ChangeAmount(Money newAmount, DateOnly today)
     {
         DomainValidation.EnsurePositiveAmount(newAmount, nameof(newAmount), "expense amount");
 
-        var firstOpen = FirstOpenMonth(today, rule);
+        var firstOpen = FirstOpenMonth(today);
         var effectiveFrom = firstOpen > StartMonth ? firstOpen : StartMonth;
 
         if (EndMonth is not null && effectiveFrom > EndMonth)
@@ -170,7 +162,7 @@ public sealed class FixedExpense
     /// Does nothing if the end month is already the given one.
     /// </summary>
     /// <exception cref="DomainException">The change would affect a frozen or paid month.</exception>
-    public void End(YearMonth lastMonth, DateOnly today, CardBillingRule rule)
+    public void End(YearMonth lastMonth, DateOnly today)
     {
         ArgumentNullException.ThrowIfNull(lastMonth);
 
@@ -192,7 +184,7 @@ public sealed class FixedExpense
         {
             var firstChangedMonth = lastUnchangedMonth.AddMonths(1);
 
-            if (firstChangedMonth < FirstOpenMonth(today, rule))
+            if (firstChangedMonth < FirstOpenMonth(today))
             {
                 throw new DomainException("Months that are already frozen cannot be changed.");
             }

@@ -9,6 +9,7 @@ public class ProjectedResultCalculatorTests
 {
     private static readonly Guid AccountId = Guid.NewGuid();
     private static readonly Guid OtherAccountId = Guid.NewGuid();
+    private static readonly Guid CardId = Guid.NewGuid();
     private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
@@ -40,6 +41,7 @@ public class ProjectedResultCalculatorTests
         CreditCardPurchase.Create(
             Guid.NewGuid(),
             accountId ?? AccountId,
+            CardId,
             date,
             M(amount),
             count,
@@ -213,8 +215,8 @@ public class ProjectedResultCalculatorTests
     public void FixedExpenses_UseTheAmountOfEachMonth()
     {
         var expense = NewFixed(YM(2026, 1), null, 1000.00m);
-        // Changed on 10/06 (after the closing day), so the new amount applies from July.
-        expense.ChangeAmount(M(1200.00m), Day(2026, 6, 10), Rule3);
+        // Changed in July, so June remains frozen at 1000 and the new amount applies from July.
+        expense.ChangeAmount(M(1200.00m), Day(2026, 7, 10));
 
         Assert.Equal(M(1000.00m), Calc(YM(2026, 6), fixedExpenses: new[] { expense }).FixedExpenses);
         Assert.Equal(M(1200.00m), Calc(YM(2026, 7), fixedExpenses: new[] { expense }).FixedExpenses);
@@ -267,20 +269,6 @@ public class ProjectedResultCalculatorTests
         Assert.Equal(Money.Zero, Calc(YM(2026, 8), purchases: purchases).CardInvoice);
         Assert.Equal(Money.Zero, Calc(YM(2026, 10), purchases: purchases).CardInvoice);
         Assert.Equal(M(100.00m), Calc(YM(2026, 11), purchases: purchases).CardInvoice);
-    }
-
-    [Fact]
-    public void CardInvoice_DoesNotDependOnWhatTheBankCharged()
-    {
-        // A charged amount lives on the Invoice entity, which is not an input of the projected result.
-        var purchase = NewPurchase(Day(2026, 10, 10), 100.00m);
-        var invoice = Invoice.Create(
-            Guid.NewGuid(), AccountId, BillingCycle.ForPurchase(Day(2026, 10, 10), Rule3));
-        invoice.InformChargedAmount(M(999.00m));
-
-        var result = Calc(YM(2026, 11), purchases: new[] { purchase });
-
-        Assert.Equal(M(100.00m), result.CardInvoice);
     }
 
     // ---------- Result ----------
@@ -464,11 +452,10 @@ public class ProjectedResultCalculatorTests
             if (random.Next(2) == 0)
             {
                 var changeDate = start.AddMonths(random.Next(1, 6)).FirstDay;
-                var changeRule = CardBillingRule.Of(random.Next(1, 29), random.Next(1, 29));
-                var effective = FixedExpense.FirstOpenMonth(changeDate, changeRule);
+                var effective = FixedExpense.FirstOpenMonth(changeDate);
                 if (end is null || effective <= end)
                 {
-                    fixedExpense.ChangeAmount(M(RandomAmount(random)), changeDate, changeRule);
+                    fixedExpense.ChangeAmount(M(RandomAmount(random)), changeDate);
                 }
             }
 

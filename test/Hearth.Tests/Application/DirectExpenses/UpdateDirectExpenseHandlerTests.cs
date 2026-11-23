@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.UpdateDirectExpense;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -13,8 +13,8 @@ public class UpdateDirectExpenseHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
@@ -23,23 +23,22 @@ public class UpdateDirectExpenseHandlerTests
 
     public UpdateDirectExpenseHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new UpdateDirectExpenseHandler(_accountAccess, _categories, _directExpenses, _unitOfWork);
     }
 
     private async Task<(Account Account, Category Food, Category Health, DirectExpense Expense)> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate,
-            CardBillingRule.Of(3, 12));
+            InitialDate);
         await _accounts.AddAsync(account);
 
-        var food = Category.Create(Guid.NewGuid(), account.Id, "Alimentação");
-        var health = Category.Create(Guid.NewGuid(), account.Id, "Saúde");
+        var food = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Mercado");
+        var health = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Farmácia");
         await _categories.AddAsync(food);
         await _categories.AddAsync(health);
 

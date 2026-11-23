@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,24 +10,23 @@ namespace Hearth.Tests.Application.DirectExpenses;
 
 public class DeleteDirectExpenseHandlerTests
 {
-    private readonly Guid _accountId = Guid.NewGuid();
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
-    private readonly AccountAccessGuard _accountAccess;
+    private readonly Guid _accountId = Guid.NewGuid();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
+    private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly DeleteDirectExpenseHandler _handler;
 
     public DeleteDirectExpenseHandlerTests()
     {
-        _accounts.AddAsync(Account.Create(
-            _accountId,
-            FakeCurrentUser.DefaultUserId,
-            "Conta",
-            Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12))).GetAwaiter().GetResult();
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accounts.AddAsync(Account.Create(
+            _accountId,
+            FakeCurrentUser.DefaultUserId,
+            "Conta",
+            Money.Zero,
+            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new DeleteDirectExpenseHandler(_accountAccess, _directExpenses, _unitOfWork);
     }
 

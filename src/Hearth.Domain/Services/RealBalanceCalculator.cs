@@ -4,19 +4,21 @@ using Hearth.Domain.ValueObjects;
 namespace Hearth.Domain.Services;
 
 /// <summary>
-/// Calculates the real balance of an account by cash: each item counts on the day the money moves,
+/// Calculates the cash balance of an account: each item counts on the day the money moves,
 /// not on the month it refers to. The projected result, by accrual, is a separate calculation.
 /// </summary>
 public static class RealBalanceCalculator
 {
     /// <summary>
-    /// Real balance on <paramref name="until"/> (inclusive) = initial balance + received incomes
-    /// − direct expenses − paid fixed expenses − paid card invoices.
+    /// Cash balance on <paramref name="until"/> (inclusive) = initial balance + received incomes
+    /// − direct expenses − paid fixed expenses − credit card installments whose invoice due date
+    /// has arrived on or before <paramref name="until"/>.
     /// </summary>
     /// <remarks>
     /// Items dated before the account's initial balance date are ignored, because they are already
     /// inside the initial balance. Items dated on that day count. Only items of the given account are
-    /// considered. Card purchases do not appear here: their money leaves on the payment of the invoice.
+    /// considered. Credit card installments settle automatically on their cycle's <see cref="BillingCycle.DueDate"/>
+    /// (symmetric with <see cref="CreditCardLimitCalculator"/>, where <c>DueDate &gt; today</c> occupies limit).
     /// </remarks>
     public static RealBalance Calculate(
         Account account,
@@ -24,13 +26,13 @@ public static class RealBalanceCalculator
         IEnumerable<Income> incomes,
         IEnumerable<DirectExpense> directExpenses,
         IEnumerable<FixedExpense> fixedExpenses,
-        IEnumerable<Invoice> invoices)
+        IEnumerable<CreditCardPurchase> purchases)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(incomes);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
-        ArgumentNullException.ThrowIfNull(invoices);
+        ArgumentNullException.ThrowIfNull(purchases);
 
         var receivedIncomes = Money.Sum(
             incomes
@@ -55,14 +57,15 @@ public static class RealBalanceCalculator
                                 ?? throw new InvalidOperationException(
                                     "A paid fixed expense has no amount in the month it was paid.")));
 
+        // Credit card invoices settle automatically on their cycle's DueDate, including purchases
+        // from archived cards so historical cash balance never changes.
         var paidInvoices = Money.Sum(
-            invoices
-                .Where(invoice => invoice.AccountId == account.Id
-                                  && invoice.PaidOn is { } paidOn
-                                  && CountsIn(account, paidOn, until))
-                .Select(invoice => invoice.ChargedAmount
-                                   ?? throw new InvalidOperationException(
-                                       "A paid invoice has no charged amount.")));
+            purchases
+                .Where(purchase => purchase.AccountId == account.Id)
+                .SelectMany(purchase => purchase.GetInstallments())
+                .Where(installment => !installment.IsPreviouslyPaid
+                                      && CountsIn(account, installment.Cycle.DueDate, until))
+                .Select(installment => installment.Amount));
 
         return new RealBalance(
             until,

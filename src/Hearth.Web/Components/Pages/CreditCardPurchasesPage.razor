@@ -3,6 +3,8 @@
 @inherits AccountPageBase
 @using Hearth.Application.Categories
 @using Hearth.Application.Categories.ListCategories
+@using Hearth.Application.CreditCards
+@using Hearth.Application.CreditCards.GetActiveCreditCard
 @using Hearth.Application.CreditCardPurchases
 @using Hearth.Application.CreditCardPurchases.DeleteCreditCardPurchase
 @using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases
@@ -500,6 +502,7 @@ else
     private IReadOnlyList<CreditCardPurchaseDto> _purchases = [];
     private IReadOnlyList<CategoryDto> _allCategories = [];
     private Dictionary<Guid, string> _categoryNames = [];
+    private Guid? _activeCardId;
 
     private (PurchaseConditionKind Kind, string? Name)? _conditionFilter;
     private Guid? _expandedPurchaseId;
@@ -547,7 +550,8 @@ else
             : _purchases.Where(MatchesFilter).ToList();
 
     private bool CanSubmitCreate =>
-        !string.IsNullOrWhiteSpace(_description)
+        _activeCardId.HasValue
+        && !string.IsNullOrWhiteSpace(_description)
         && _categoryId.HasValue
         && _amount > 0
         && _date.HasValue
@@ -560,13 +564,22 @@ else
     {
         _loading = true;
 
+        var cardResult = await Executor.ExecuteAsync<GetActiveCreditCardHandler, CreditCardDto?>(
+            (handler, ct) => handler.ExecuteAsync(new GetActiveCreditCardQuery(AccountId), ct),
+            cancellationToken: cancellationToken);
+
         var purchasesResult = await Executor.ExecuteAsync<ListCreditCardPurchasesHandler, IReadOnlyList<CreditCardPurchaseDto>>(
             (handler, ct) => handler.ExecuteAsync(new ListCreditCardPurchasesQuery(AccountId), ct),
             cancellationToken: cancellationToken);
 
         var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
-            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, IncludeArchived: true), ct),
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(IncludeArchived: true), ct),
             cancellationToken: cancellationToken);
+
+        if (cardResult.IsSuccess)
+        {
+            _activeCardId = cardResult.Value?.Id;
+        }
 
         if (purchasesResult.IsSuccess && purchasesResult.Value is not null)
         {
@@ -649,6 +662,7 @@ else
         {
             var command = new RegisterCreditCardPurchaseCommand(
                 AccountId,
+                _activeCardId!.Value,
                 HearthFormat.ToDateOnly(_date!.Value),
                 _amount,
                 _installmentCount,

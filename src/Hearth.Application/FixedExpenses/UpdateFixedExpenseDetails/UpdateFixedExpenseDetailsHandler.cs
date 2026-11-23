@@ -41,13 +41,13 @@ public sealed class UpdateFixedExpenseDetailsHandler
         var expense = await _fixedExpenses.GetByIdAsync(command.FixedExpenseId, cancellationToken)
                       ?? throw new NotFoundException(nameof(FixedExpense), command.FixedExpenseId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
             expense.AccountId, nameof(FixedExpense), expense.Id, cancellationToken);
 
         if (command.CategoryId != expense.CategoryId)
         {
-            await CategoryValidation.EnsureUsableForAccountAsync(
-                _categories, expense.AccountId, command.CategoryId, cancellationToken);
+            await CategoryValidation.EnsureUsableForUserAsync(
+                _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
         }
 
         expense.UpdateDescription(command.Description);

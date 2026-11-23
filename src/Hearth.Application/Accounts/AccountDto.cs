@@ -7,15 +7,17 @@ public sealed record AccountDto(
     string Name,
     decimal InitialBalance,
     DateOnly InitialBalanceDate,
-    int ClosingDay,
-    int DueDay)
+    bool IsInitialBalanceConfirmed)
 {
-    internal static AccountDto FromEntity(Account account) =>
-        new(
+    public static AccountDto FromEntity(Account account)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+
+        return new AccountDto(
             account.Id,
             account.Name,
             account.InitialBalance.Amount,
             account.InitialBalanceDate,
-            account.BillingRule.ClosingDay,
-            account.BillingRule.DueDay);
+            account.IsInitialBalanceConfirmed);
+    }
 }

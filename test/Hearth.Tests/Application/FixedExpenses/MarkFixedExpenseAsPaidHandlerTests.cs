@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.FixedExpenses.MarkFixedExpenseAsPaid;
 using Hearth.Domain.Entities;
@@ -13,8 +13,8 @@ public class MarkFixedExpenseAsPaidHandlerTests
 {
     private static readonly DateOnly InitialDate = new(2026, 10, 1);
 
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -22,19 +22,18 @@ public class MarkFixedExpenseAsPaidHandlerTests
 
     public MarkFixedExpenseAsPaidHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new MarkFixedExpenseAsPaidHandler(_accountAccess, _fixedExpenses, _unitOfWork);
     }
 
     private async Task<FixedExpense> SeedAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate,
-            CardBillingRule.Of(3, 12));
+            InitialDate);
         await _accounts.AddAsync(account);
 
         var expense = FixedExpense.Create(

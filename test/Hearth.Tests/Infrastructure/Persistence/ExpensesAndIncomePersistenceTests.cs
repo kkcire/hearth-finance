@@ -21,34 +21,37 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task<(Guid AccountId, Guid CategoryId)> SeedAccountAndCategoryAsync()
+    private async Task<(Guid AccountId, Guid CardId, Guid CategoryId)> SeedAccountCardAndCategoryAsync()
     {
         var userId = Guid.CreateVersion7();
         var accountId = Guid.CreateVersion7();
+        var cardId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
 
         await using var scope = _fixture.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+        var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
         var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await users.AddAsync(User.Create(
             userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12)));
-        await categories.AddAsync(Category.Create(categoryId, accountId, "Geral"));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1)));
+        await cards.AddAsync(CreditCard.Create(
+            cardId, accountId, CardBillingRule.Of(3, 12), "Nubank", Money.FromDecimal(3000.00m)));
+        await categories.AddAsync(Category.CreateForUser(categoryId, userId, "Geral"));
         await uow.SaveChangesAsync();
 
-        return (accountId, categoryId);
+        return (accountId, cardId, categoryId);
     }
 
     [Fact]
     public async Task FixedExpenseRepository_PersistsAmountHistoryPaymentsUpdatesAndCascadeDelete()
     {
-        var (accountId, categoryId) = await SeedAccountAndCategoryAsync();
+        var (accountId, _, categoryId) = await SeedAccountCardAndCategoryAsync();
         var expenseId = Guid.CreateVersion7();
-        var rule = CardBillingRule.Of(3, 12);
 
         await using (var scope = _fixture.CreateScope())
         {
@@ -73,10 +76,10 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             Assert.NotNull(loaded);
             Assert.True(loaded.IsPaid(YearMonth.Of(2026, 1)));
 
-            loaded.ChangeAmount(Money.FromDecimal(1250.00m), new DateOnly(2026, 6, 10), rule); // effective 2026-07
+            loaded.ChangeAmount(Money.FromDecimal(1250.00m), new DateOnly(2026, 7, 10)); // effective 2026-07
             loaded.MarkAsPaid(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 4));
             loaded.RevertPayment(YearMonth.Of(2026, 1));
-            loaded.End(YearMonth.Of(2026, 12), new DateOnly(2026, 6, 10), rule);
+            loaded.End(YearMonth.Of(2026, 12), new DateOnly(2026, 7, 10));
 
             await repo.UpdateAsync(loaded);
             await uow.SaveChangesAsync();
@@ -113,7 +116,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
     [Fact]
     public async Task DirectExpenseIncomeAndCreditCardPurchase_RoundTripAllFieldsAndConditions()
     {
-        var (accountId, categoryId) = await SeedAccountAndCategoryAsync();
+        var (accountId, cardId, categoryId) = await SeedAccountCardAndCategoryAsync();
         var directId = Guid.CreateVersion7();
         var incomeId = Guid.CreateVersion7();
         var purchaseId = Guid.CreateVersion7();
@@ -136,6 +139,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             await purchases.AddAsync(CreditCardPurchase.Create(
                 purchaseId,
                 accountId,
+                cardId,
                 new DateOnly(2026, 10, 10),
                 Money.FromDecimal(300.00m),
                 3,
@@ -166,10 +170,12 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
             var purchase = await purchases.GetByIdAsync(purchaseId);
             Assert.NotNull(purchase);
+            Assert.Equal(cardId, purchase.CreditCardId);
             Assert.Equal(PurchaseCondition.Custom("Viagem"), purchase.Condition);
             Assert.Equal(CardBillingRule.Of(3, 12), purchase.Rule);
             Assert.Equal(2, purchase.InitialInstallment);
             Assert.True(await purchases.AnyByCategoryAsync(categoryId));
+            Assert.True(await purchases.AnyByCreditCardAsync(cardId));
         }
     }
 }

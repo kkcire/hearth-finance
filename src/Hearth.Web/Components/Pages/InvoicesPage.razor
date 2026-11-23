@@ -3,12 +3,7 @@
 @inherits AccountPageBase
 @using Hearth.Application.Categories
 @using Hearth.Application.Categories.ListCategories
-@using Hearth.Application.Invoices
 @using Hearth.Application.Invoices.GetInvoiceSummary
-@using Hearth.Application.Invoices.InformInvoiceChargedAmount
-@using Hearth.Application.Invoices.ListInvoices
-@using Hearth.Application.Invoices.MarkInvoiceAsPaid
-@using Hearth.Application.Invoices.RevertInvoicePayment
 @using Hearth.Web.Components.Shared
 
 <PageTitle>Faturas do Cartão — Hearth</PageTitle>
@@ -17,7 +12,7 @@
     <MudText Typo="Typo.h4">Faturas do Cartão</MudText>
 
     <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-        <MonthNavigator Month="_selectedCycle" MonthChanged="OnCycleChangedAsync" Disabled="_saving" />
+        <MonthNavigator Month="_selectedCycle" MonthChanged="OnCycleChangedAsync" Disabled="_loading" />
         <MudButton Variant="Variant.Filled"
                    Color="Color.Primary"
                    StartIcon="@Icons.Material.Filled.AddShoppingCart"
@@ -38,20 +33,29 @@ else if (_summary is not null)
         <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
             <div>
                 <MudText Typo="Typo.h5">Ciclo @HearthFormat.MonthYear(_summary.ClosingYear, _summary.ClosingMonth)</MudText>
-                <MudText Typo="Typo.body2" Color="Color.Secondary">
-                    Período: @HearthFormat.Date(_summary.StartDate) a @HearthFormat.Date(_summary.EndDate)
-                    · Fecha em @HearthFormat.Date(_summary.ClosingDate)
-                    · Vence em @HearthFormat.Date(_summary.DueDate)
-                </MudText>
+                @if (_summary.StartDate.HasValue && _summary.EndDate.HasValue && _summary.ClosingDate.HasValue && _summary.DueDate.HasValue)
+                {
+                    <MudText Typo="Typo.body2" Color="Color.Secondary">
+                        Período: @HearthFormat.Date(_summary.StartDate) a @HearthFormat.Date(_summary.EndDate)
+                        · Fecha em @HearthFormat.Date(_summary.ClosingDate)
+                        · Vence em @HearthFormat.Date(_summary.DueDate)
+                    </MudText>
+                }
             </div>
 
-            @if (_summary.IsPaid)
+            @if (_summary.Status == InvoiceStatus.Paid)
             {
                 <MudChip T="string" Color="Color.Success" Variant="Variant.Outlined" data-testid="invoice-status-chip">
-                    Paga em @HearthFormat.Date(_summary.PaidOn)
+                    Paga
                 </MudChip>
             }
-            else
+            else if (_summary.Status == InvoiceStatus.Closed)
+            {
+                <MudChip T="string" Color="Color.Info" Variant="Variant.Outlined" data-testid="invoice-status-chip">
+                    Fechada
+                </MudChip>
+            }
+            else if (_summary.Status == InvoiceStatus.Open)
             {
                 <MudChip T="string" Color="Color.Warning" Variant="Variant.Outlined" data-testid="invoice-status-chip">
                     Em aberto
@@ -59,115 +63,12 @@ else if (_summary is not null)
             }
         </MudStack>
 
-        <MudGrid Spacing="3" Class="mb-4">
-            <MudItem xs="12" sm="4">
-                <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Fatura calculada (parcelas)</MudText>
-                    <MudText Typo="Typo.h5" Style="font-weight: 600;" data-testid="invoice-calculated-amount">
-                        @HearthFormat.Money(_summary.CalculatedAmount)
-                    </MudText>
-                </MudPaper>
-            </MudItem>
-
-            <MudItem xs="12" sm="4">
-                <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Valor cobrado pelo banco</MudText>
-                    <MudText Typo="Typo.h5" Style="font-weight: 600;" data-testid="invoice-charged-amount">
-                        @(_summary.ChargedAmount.HasValue ? HearthFormat.Money(_summary.ChargedAmount.Value) : "Não informado")
-                    </MudText>
-                </MudPaper>
-            </MudItem>
-
-            <MudItem xs="12" sm="4">
-                <MudPaper Outlined="true" Class="pa-4">
-                    <MudText Typo="Typo.caption" Color="Color.Secondary">Divergência (cobrado − calculado)</MudText>
-                    @if (_summary.Divergence.HasValue)
-                    {
-                        var divergenceColor = _summary.Divergence.Value == 0m ? Color.Success : Color.Warning;
-                        <MudText Typo="Typo.h5" Color="divergenceColor" Style="font-weight: 600;" data-testid="invoice-divergence">
-                            @HearthFormat.Money(_summary.Divergence.Value)
-                        </MudText>
-                    }
-                    else
-                    {
-                        <MudText Typo="Typo.h5" Color="Color.Secondary" data-testid="invoice-divergence">—</MudText>
-                    }
-                </MudPaper>
-            </MudItem>
-        </MudGrid>
-
-        <MudDivider Class="my-4" />
-
-        <MudGrid Spacing="3" Class="align-center">
-            <MudItem xs="12" md="5">
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center">
-                    <MudNumericField T="decimal"
-                                     @bind-Value="_chargedAmountInput"
-                                     Label="Valor cobrado pelo banco"
-                                     Variant="Variant.Outlined"
-                                     Margin="Margin.Dense"
-                                     Culture="@HearthFormat.PtBr"
-                                     Format="N2"
-                                     Adornment="Adornment.Start"
-                                     AdornmentText="R$"
-                                     HideSpinButtons="true"
-                                     Disabled="_saving || _summary.IsPaid"
-                                     data-testid="invoice-charged-input" />
-                    <MudButton Variant="Variant.Outlined"
-                               Color="Color.Primary"
-                               OnClick="SaveChargedAmountAsync"
-                               Disabled="_saving || _summary.IsPaid || _chargedAmountInput < 0"
-                               data-testid="save-charged-amount">
-                        Salvar cobrado
-                    </MudButton>
-                </MudStack>
-            </MudItem>
-
-            <MudItem xs="12" md="7">
-                <MudStack Row="true" Spacing="2" AlignItems="AlignItems.Center" Justify="Justify.FlexEnd" Wrap="Wrap.Wrap">
-                    @if (!_summary.IsPaid)
-                    {
-                        <MudDatePicker @bind-Date="_paidOnInput"
-                                       Label="Data do pagamento"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       DateFormat="dd/MM/yyyy"
-                                       Culture="@HearthFormat.PtBr"
-                                       Editable="true"
-                                       Disabled="_saving || !_summary.ChargedAmount.HasValue"
-                                       data-testid="invoice-paid-on-input" />
-
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Success"
-                                   StartIcon="@Icons.Material.Filled.CheckCircle"
-                                   OnClick="MarkAsPaidAsync"
-                                   Disabled="_saving || !_summary.InvoiceId.HasValue || !_summary.ChargedAmount.HasValue || !_paidOnInput.HasValue"
-                                   data-testid="pay-invoice-button">
-                            Pagar fatura
-                        </MudButton>
-                    }
-                    else
-                    {
-                        <MudButton Variant="Variant.Outlined"
-                                   Color="Color.Warning"
-                                   StartIcon="@Icons.Material.Filled.Undo"
-                                   OnClick="RevertPaymentAsync"
-                                   Disabled="_saving || !_summary.InvoiceId.HasValue"
-                                   data-testid="revert-invoice-button">
-                            Reverter pagamento
-                        </MudButton>
-                    }
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-
-        @if (!_summary.ChargedAmount.HasValue)
-        {
-            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mt-3">
-                Informe o valor cobrado pelo banco para liberar o pagamento desta fatura.
-                A divergência é apenas informativa e nunca cria lançamento de ajuste.
-            </MudAlert>
-        }
+        <MudPaper Outlined="true" Class="pa-4">
+            <MudText Typo="Typo.caption" Color="Color.Secondary">Fatura calculada (parcelas)</MudText>
+            <MudText Typo="Typo.h5" Style="font-weight: 600;" data-testid="invoice-calculated-amount">
+                @HearthFormat.Money(_summary.CalculatedAmount)
+            </MudText>
+        </MudPaper>
     </MudPaper>
 
     <MudPaper Elevation="2" Class="mb-4">
@@ -202,58 +103,18 @@ else if (_summary is not null)
             </NoRecordsContent>
         </MudTable>
     </MudPaper>
-
-    @if (_invoicesHistory.Count > 0)
-    {
-        <MudPaper Elevation="2">
-            <MudText Typo="Typo.h6" Class="pa-4 pb-2">Faturas registradas</MudText>
-            <MudTable Items="_invoicesHistory" Hover="true" Dense="true" Elevation="0">
-                <HeaderContent>
-                    <MudTh>Ciclo</MudTh>
-                    <MudTh>Vencimento</MudTh>
-                    <MudTh Style="text-align: right;">Valor cobrado</MudTh>
-                    <MudTh>Status</MudTh>
-                    <MudTh Style="width: 120px; text-align: right;">Abrir</MudTh>
-                </HeaderContent>
-                <RowTemplate>
-                    <MudTd DataLabel="Ciclo">@HearthFormat.MonthYear(context.ClosingYear, context.ClosingMonth)</MudTd>
-                    <MudTd DataLabel="Vencimento">@HearthFormat.Date(context.DueDate)</MudTd>
-                    <MudTd DataLabel="Valor cobrado" Style="text-align: right;">
-                        @(context.ChargedAmount.HasValue ? HearthFormat.Money(context.ChargedAmount.Value) : "—")
-                    </MudTd>
-                    <MudTd DataLabel="Status">
-                        @(context.IsPaid ? $"Paga em {HearthFormat.Date(context.PaidOn)}" : "Em aberto")
-                    </MudTd>
-                    <MudTd DataLabel="Abrir" Style="text-align: right;">
-                        <MudButton Size="Size.Small"
-                                   Variant="Variant.Text"
-                                   Color="Color.Primary"
-                                   OnClick="() => OnCycleChangedAsync(YearMonth.Of(context.ClosingYear, context.ClosingMonth))">
-                            Visualizar
-                        </MudButton>
-                    </MudTd>
-                </RowTemplate>
-            </MudTable>
-        </MudPaper>
-    }
 }
 
 @code
 {
     private YearMonth _selectedCycle = YearMonth.Of(2026, 1);
     private InvoiceSummaryDto? _summary;
-    private IReadOnlyList<InvoiceDto> _invoicesHistory = [];
     private Dictionary<Guid, string> _categoryNames = [];
-
-    private decimal _chargedAmountInput;
-    private DateTime? _paidOnInput;
     private bool _loading = true;
-    private bool _saving;
 
     protected override void OnInitialized()
     {
         _selectedCycle = YearMonth.From(Clock.Today);
-        _paidOnInput = HearthFormat.ToDateTime(Clock.Today);
     }
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
@@ -265,24 +126,13 @@ else if (_summary is not null)
                 new GetInvoiceSummaryQuery(AccountId, _selectedCycle.Year, _selectedCycle.Month), ct),
             cancellationToken: cancellationToken);
 
-        var historyResult = await Executor.ExecuteAsync<ListInvoicesHandler, IReadOnlyList<InvoiceDto>>(
-            (handler, ct) => handler.ExecuteAsync(new ListInvoicesQuery(AccountId), ct),
-            cancellationToken: cancellationToken);
-
         var categoriesResult = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
-            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, IncludeArchived: true), ct),
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(IncludeArchived: true), ct),
             cancellationToken: cancellationToken);
 
         if (summaryResult.IsSuccess && summaryResult.Value is not null)
         {
             _summary = summaryResult.Value;
-            _chargedAmountInput = _summary.ChargedAmount ?? _summary.CalculatedAmount;
-            _paidOnInput = HearthFormat.ToDateTime(_summary.PaidOn ?? Clock.Today);
-        }
-
-        if (historyResult.IsSuccess && historyResult.Value is not null)
-        {
-            _invoicesHistory = historyResult.Value;
         }
 
         if (categoriesResult.IsSuccess && categoriesResult.Value is not null)
@@ -297,84 +147,6 @@ else if (_summary is not null)
     {
         _selectedCycle = cycle;
         await LoadDataAsync(ComponentCancellationToken);
-    }
-
-    private async Task SaveChargedAmountAsync()
-    {
-        if (_saving || _chargedAmountInput < 0)
-        {
-            return;
-        }
-
-        _saving = true;
-
-        try
-        {
-            await Executor.ExecuteAsync<InformInvoiceChargedAmountHandler, Guid>(
-                (handler, ct) => handler.ExecuteAsync(
-                    new InformInvoiceChargedAmountCommand(AccountId, _selectedCycle.Year, _selectedCycle.Month, _chargedAmountInput), ct),
-                successMessage: "Valor cobrado atualizado.",
-                cancellationToken: ComponentCancellationToken);
-
-            await LoadDataAsync(ComponentCancellationToken);
-        }
-        finally
-        {
-            _saving = false;
-        }
-    }
-
-    private async Task MarkAsPaidAsync()
-    {
-        if (_saving || _summary?.InvoiceId is null || !_paidOnInput.HasValue)
-        {
-            return;
-        }
-
-        _saving = true;
-
-        try
-        {
-            var invoiceId = _summary.InvoiceId.Value;
-            var paidOn = HearthFormat.ToDateOnly(_paidOnInput.Value);
-
-            await Executor.ExecuteAsync<MarkInvoiceAsPaidHandler, bool>(
-                (handler, ct) => handler.ExecuteAsync(new MarkInvoiceAsPaidCommand(invoiceId, paidOn), ct),
-                successMessage: "Fatura marcada como paga.",
-                cancellationToken: ComponentCancellationToken);
-
-            await LoadDataAsync(ComponentCancellationToken);
-        }
-        finally
-        {
-            _saving = false;
-        }
-    }
-
-    private async Task RevertPaymentAsync()
-    {
-        if (_saving || _summary?.InvoiceId is null)
-        {
-            return;
-        }
-
-        _saving = true;
-
-        try
-        {
-            var invoiceId = _summary.InvoiceId.Value;
-
-            await Executor.ExecuteAsync<RevertInvoicePaymentHandler, bool>(
-                (handler, ct) => handler.ExecuteAsync(new RevertInvoicePaymentCommand(invoiceId), ct),
-                successMessage: "Pagamento da fatura revertido.",
-                cancellationToken: ComponentCancellationToken);
-
-            await LoadDataAsync(ComponentCancellationToken);
-        }
-        finally
-        {
-            _saving = false;
-        }
     }
 
     private string GetCategoryName(Guid categoryId) =>

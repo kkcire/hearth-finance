@@ -205,7 +205,7 @@ else
         _loading = true;
 
         var result = await Executor.ExecuteAsync<ListCategoriesHandler, IReadOnlyList<CategoryDto>>(
-            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(AccountId, _showArchived), ct),
+            (handler, ct) => handler.ExecuteAsync(new ListCategoriesQuery(_showArchived), ct),
             cancellationToken: cancellationToken);
 
         if (result.IsSuccess && result.Value is not null)
@@ -235,7 +235,7 @@ else
         {
             var result = await Executor.ExecuteAsync<CreateCategoryHandler, Guid>(
                 (handler, ct) => handler.ExecuteAsync(
-                    new CreateCategoryCommand(AccountId, _newCategoryName.Trim()), ct),
+                    new CreateCategoryCommand(_newCategoryName.Trim()), ct),
                 successMessage: "Categoria criada.",
                 cancellationToken: ComponentCancellationToken);
 

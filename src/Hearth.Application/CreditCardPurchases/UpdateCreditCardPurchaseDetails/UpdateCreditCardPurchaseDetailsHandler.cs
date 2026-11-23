@@ -42,13 +42,13 @@ public sealed class UpdateCreditCardPurchaseDetailsHandler
         var purchase = await _purchases.GetByIdAsync(command.PurchaseId, cancellationToken)
                        ?? throw new NotFoundException(nameof(CreditCardPurchase), command.PurchaseId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
             purchase.AccountId, nameof(CreditCardPurchase), purchase.Id, cancellationToken);
 
         if (command.CategoryId != purchase.CategoryId)
         {
-            await CategoryValidation.EnsureUsableForAccountAsync(
-                _categories, purchase.AccountId, command.CategoryId, cancellationToken);
+            await CategoryValidation.EnsureUsableForUserAsync(
+                _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
         }
 
         purchase.UpdateDescription(command.Description);

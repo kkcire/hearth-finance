@@ -1,4 +1,4 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.CategoryBudgets.ListCategoryBudgets;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
@@ -10,8 +10,8 @@ namespace Hearth.Tests.Application.CategoryBudgets;
 
 public class ListCategoryBudgetsHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
@@ -19,7 +19,7 @@ public class ListCategoryBudgetsHandlerTests
 
     public ListCategoryBudgetsHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListCategoryBudgetsHandler(_accountAccess, _categories, _budgets);
     }
 
@@ -27,15 +27,15 @@ public class ListCategoryBudgetsHandlerTests
     public async Task ExecuteAsync_ReturnsAccountBudgetsWithCategoryNamesAndHistory()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
-            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1), CardBillingRule.Of(3, 12));
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
 
-        var transport = Category.Create(Guid.NewGuid(), account.Id, "Transporte");
-        await _categories.AddAsync(transport);
+        var mobility = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Mobilidade");
+        await _categories.AddAsync(mobility);
 
         var budget = CategoryBudget.Create(
-            Guid.NewGuid(), account.Id, transport.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
+            Guid.NewGuid(), account.Id, mobility.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(160.00m));
         budget.ChangeAmount(Money.FromDecimal(200.00m), new DateOnly(2026, 11, 10));
         await _budgets.AddAsync(budget);
 
@@ -43,8 +43,8 @@ public class ListCategoryBudgetsHandlerTests
 
         var dto = Assert.Single(result);
         Assert.Equal(budget.Id, dto.Id);
-        Assert.Equal(transport.Id, dto.CategoryId);
-        Assert.Equal("Transporte", dto.CategoryName);
+        Assert.Equal(mobility.Id, dto.CategoryId);
+        Assert.Equal("Mobilidade", dto.CategoryName);
         Assert.Equal(2, dto.AmountHistory.Count);
         Assert.Equal(160.00m, dto.AmountHistory[0].Amount);
         Assert.Equal(200.00m, dto.AmountHistory[1].Amount);

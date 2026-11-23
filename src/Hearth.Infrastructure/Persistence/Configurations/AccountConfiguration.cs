@@ -36,18 +36,9 @@ internal sealed class AccountConfiguration : IEntityTypeConfiguration<Account>
             .HasColumnName("initial_balance_date")
             .IsRequired();
 
-        builder.OwnsOne(account => account.BillingRule, rule =>
-        {
-            rule.Property(r => r.ClosingDay)
-                .HasColumnName("closing_day")
-                .IsRequired();
-
-            rule.Property(r => r.DueDay)
-                .HasColumnName("due_day")
-                .IsRequired();
-        });
-
-        builder.Navigation(account => account.BillingRule).IsRequired();
+        builder.Property(account => account.IsInitialBalanceConfirmed)
+            .HasColumnName("is_initial_balance_confirmed")
+            .IsRequired();
 
         builder.HasOne<User>()
             .WithMany()

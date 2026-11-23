@@ -7,94 +7,98 @@ namespace Hearth.Tests.Domain.Entities;
 
 public class CategoryTests
 {
-    private static Category NewCategory(string name = "Alimentação", Guid? accountId = null) =>
-        Category.Create(Guid.NewGuid(), accountId ?? Guid.NewGuid(), name);
+    private static readonly Guid DefaultOwnerUserId = Guid.NewGuid();
+
+    private static Category NewUserCategory(string name = "Pets", Guid? ownerUserId = null) =>
+        Category.CreateForUser(Guid.NewGuid(), ownerUserId ?? DefaultOwnerUserId, name);
 
     [Fact]
-    public void Create_StoresValuesAndTrimsName_StartsActive()
+    public void CreateForUser_StoresValuesAndTrimsName_StartsActiveAndNonSystem()
     {
         var id = Guid.NewGuid();
-        var accountId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
 
-        var category = Category.Create(id, accountId, "  Alimentação  ");
+        var category = Category.CreateForUser(id, ownerId, "  Pets  ");
 
         Assert.Equal(id, category.Id);
-        Assert.Equal(accountId, category.AccountId);
-        Assert.Equal("Alimentação", category.Name);
+        Assert.Equal(ownerId, category.OwnerUserId);
+        Assert.False(category.IsSystem);
+        Assert.Equal("Pets", category.Name);
         Assert.False(category.IsArchived);
     }
 
     [Fact]
-    public void Create_EmptyIdOrAccountId_Throws()
+    public void CreateSystem_HasNullOwnerAndIsReadOnly()
     {
-        Assert.Throws<ArgumentException>(() => Category.Create(Guid.Empty, Guid.NewGuid(), "Transporte"));
-        Assert.Throws<ArgumentException>(() => Category.Create(Guid.NewGuid(), Guid.Empty, "Transporte"));
+        var category = Category.CreateSystem(SystemCategories.TransportId, "Transporte");
+
+        Assert.Equal(SystemCategories.TransportId, category.Id);
+        Assert.Null(category.OwnerUserId);
+        Assert.True(category.IsSystem);
+        Assert.False(category.IsArchived);
+
+        Assert.Throws<DomainException>(() => category.Rename("Outro"));
+        Assert.Throws<DomainException>(() => category.Archive());
+        Assert.Throws<DomainException>(() => category.Restore());
+        Assert.Throws<DomainException>(category.EnsureModifiable);
+        Assert.Null(Record.Exception(category.EnsureUsable));
+    }
+
+    [Fact]
+    public void SystemCategories_ContainsEightUniqueDeterministicCategories()
+    {
+        var all = SystemCategories.CreateAll();
+
+        Assert.Equal(8, all.Count);
+        Assert.Equal(8, all.Select(c => c.Id).Distinct().Count());
+        Assert.All(all, c =>
+        {
+            Assert.True(c.IsSystem);
+            Assert.Null(c.OwnerUserId);
+            Assert.False(c.IsArchived);
+        });
+    }
+
+    [Fact]
+    public void CreateForUser_EmptyIdOrOwnerUserId_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => Category.CreateForUser(Guid.Empty, DefaultOwnerUserId, "Pets"));
+        Assert.Throws<ArgumentException>(() => Category.CreateForUser(Guid.NewGuid(), Guid.Empty, "Pets"));
     }
 
     [Theory]
     [InlineData(null)]
     [InlineData("")]
     [InlineData("   ")]
-    public void Create_NameIsRequired(string? name)
+    public void CreateForUser_NameIsRequired(string? name)
     {
-        Assert.ThrowsAny<ArgumentException>(() => NewCategory(name: name!));
+        Assert.ThrowsAny<ArgumentException>(() => NewUserCategory(name: name!));
     }
 
     [Fact]
-    public void Create_NameExceedingMaxLength_Throws()
+    public void CreateForUser_NameExceedingMaxLength_Throws()
     {
         var tooLong = new string('a', DomainValidation.MaxNameLength + 1);
 
-        Assert.Throws<ArgumentException>(() => NewCategory(name: tooLong));
+        Assert.Throws<ArgumentException>(() => NewUserCategory(name: tooLong));
     }
 
     [Fact]
-    public void Rename_ChangesAndTrimsName()
+    public void Rename_Archive_Restore_WorkForUserCategory()
     {
-        var category = NewCategory("Transporte");
+        var category = NewUserCategory("Pets");
 
-        category.Rename("  Mobilidade  ");
-
-        Assert.Equal("Mobilidade", category.Name);
-    }
-
-    [Fact]
-    public void Rename_ExceedingMaxLength_ThrowsAndKeepsOriginalName()
-    {
-        var category = NewCategory("Transporte");
-        var tooLong = new string('a', DomainValidation.MaxNameLength + 1);
-
-        Assert.Throws<ArgumentException>(() => category.Rename(tooLong));
-        Assert.Equal("Transporte", category.Name);
-    }
-
-    [Fact]
-    public void Archive_AndRestore_AreIdempotent()
-    {
-        var category = NewCategory();
+        category.Rename("  Animais  ");
+        Assert.Equal("Animais", category.Name);
 
         Assert.True(category.Archive());
         Assert.True(category.IsArchived);
         Assert.False(category.Archive());
+        Assert.Throws<DomainException>(category.EnsureUsable);
 
         Assert.True(category.Restore());
         Assert.False(category.IsArchived);
         Assert.False(category.Restore());
-    }
-
-    [Fact]
-    public void EnsureUsable_ActiveDoesNotThrow_ArchivedThrowsDomainException()
-    {
-        var category = NewCategory();
-
-        Assert.Null(Record.Exception(category.EnsureUsable));
-
-        category.Archive();
-
-        Assert.Throws<DomainException>(category.EnsureUsable);
-
-        category.Restore();
-
         Assert.Null(Record.Exception(category.EnsureUsable));
     }
 }

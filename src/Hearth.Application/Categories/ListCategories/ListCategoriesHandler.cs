@@ -25,9 +25,8 @@ public sealed class ListCategoriesHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
-
-        var categories = await _categories.GetByAccountAsync(query.AccountId, cancellationToken);
+        var ownerUserId = _accountAccess.GetRequiredUserId();
+        var categories = await _categories.GetVisibleForUserAsync(ownerUserId, cancellationToken);
 
         return categories
             .Where(category => query.IncludeArchived || !category.IsArchived)

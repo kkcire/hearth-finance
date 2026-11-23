@@ -1,5 +1,5 @@
-using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.GetAccount;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -10,14 +10,14 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class GetAccountHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly GetAccountHandler _handler;
 
     public GetAccountHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetAccountHandler(_accountAccess);
     }
 
@@ -25,12 +25,12 @@ public class GetAccountHandlerTests
     public async Task ExecuteAsync_ExistingAccount_ReturnsDto()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1500.50m),
             new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            isInitialBalanceConfirmed: true);
         await _accounts.AddAsync(account);
 
         var dto = await _handler.ExecuteAsync(new GetAccountQuery(account.Id));
@@ -39,8 +39,7 @@ public class GetAccountHandlerTests
         Assert.Equal("Conta principal", dto.Name);
         Assert.Equal(1500.50m, dto.InitialBalance);
         Assert.Equal(new DateOnly(2026, 10, 1), dto.InitialBalanceDate);
-        Assert.Equal(3, dto.ClosingDay);
-        Assert.Equal(12, dto.DueDay);
+        Assert.True(dto.IsInitialBalanceConfirmed);
     }
 
     [Fact]
@@ -65,12 +64,11 @@ public class GetAccountHandlerTests
     public async Task ExecuteAsync_ForwardsCancellationToken()
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 10, 1));
         await _accounts.AddAsync(account);
         using var cts = new CancellationTokenSource();
 

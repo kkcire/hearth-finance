@@ -42,10 +42,10 @@ public sealed class ChangeFixedExpenseAmountHandler
         var expense = await _fixedExpenses.GetByIdAsync(command.FixedExpenseId, cancellationToken)
                       ?? throw new NotFoundException(nameof(FixedExpense), command.FixedExpenseId);
 
-        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+        await _accountAccess.EnsureCanAccessEntityAsync(
             expense.AccountId, nameof(FixedExpense), expense.Id, cancellationToken);
 
-        var effectiveFrom = expense.ChangeAmount(newAmount, _clock.Today, account.BillingRule);
+        var effectiveFrom = expense.ChangeAmount(newAmount, _clock.Today);
 
         await _fixedExpenses.UpdateAsync(expense, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

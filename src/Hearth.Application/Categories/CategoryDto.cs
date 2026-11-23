@@ -4,10 +4,20 @@ namespace Hearth.Application.Categories;
 
 public sealed record CategoryDto(
     Guid Id,
-    Guid AccountId,
+    Guid? OwnerUserId,
     string Name,
-    bool IsArchived)
+    bool IsArchived,
+    bool IsSystem)
 {
-    internal static CategoryDto FromEntity(Category category) =>
-        new(category.Id, category.AccountId, category.Name, category.IsArchived);
+    public static CategoryDto FromEntity(Category category)
+    {
+        ArgumentNullException.ThrowIfNull(category);
+
+        return new CategoryDto(
+            category.Id,
+            category.OwnerUserId,
+            category.Name,
+            category.IsArchived,
+            category.IsSystem);
+    }
 }

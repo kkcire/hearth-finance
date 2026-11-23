@@ -56,13 +56,13 @@ public sealed class PostgresFixture : IAsyncLifetime
                 category_budget_amount_changes,
                 category_budgets,
                 credit_card_purchases,
+                credit_cards,
                 direct_expenses,
                 incomes,
-                invoices,
-                categories,
-                accounts,
-                users
+                accounts
             RESTART IDENTITY CASCADE;
+            DELETE FROM categories WHERE owner_user_id IS NOT NULL;
+            DELETE FROM users;
             """);
     }
 

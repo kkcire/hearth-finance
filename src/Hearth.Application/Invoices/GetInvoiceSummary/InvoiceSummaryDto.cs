@@ -4,6 +4,7 @@ namespace Hearth.Application.Invoices.GetInvoiceSummary;
 
 public sealed record InvoiceInstallmentDto(
     Guid PurchaseId,
+    Guid CreditCardId,
     DateOnly PurchaseDate,
     string Description,
     Guid CategoryId,
@@ -11,20 +12,28 @@ public sealed record InvoiceInstallmentDto(
     string? ConditionName,
     int InstallmentNumber,
     int InstallmentCount,
-    decimal Amount);
+    decimal Amount,
+    DateOnly ClosingDate,
+    DateOnly DueDate);
 
 public sealed record InvoiceSummaryDto(
     Guid AccountId,
-    Guid? InvoiceId,
+    bool HasActiveCard,
     int ClosingYear,
     int ClosingMonth,
-    DateOnly StartDate,
-    DateOnly EndDate,
-    DateOnly ClosingDate,
-    DateOnly DueDate,
+    int DefaultOpenClosingYear,
+    int DefaultOpenClosingMonth,
+    DateOnly? StartDate,
+    DateOnly? EndDate,
+    DateOnly? ClosingDate,
+    DateOnly? DueDate,
     decimal CalculatedAmount,
-    decimal? ChargedAmount,
-    decimal? Divergence,
-    DateOnly? PaidOn,
-    bool IsPaid,
-    IReadOnlyList<InvoiceInstallmentDto> Installments);
+    InvoiceStatus? Status,
+    IReadOnlyList<InvoiceInstallmentDto> Installments)
+{
+    /// <summary>
+    /// True only when the account has no active credit card AND no installments from
+    /// archived cards in the requested closing month.
+    /// </summary>
+    public bool IsEmptyWithoutCard => !HasActiveCard && Installments.Count == 0;
+}

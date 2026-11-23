@@ -30,7 +30,7 @@ public sealed class UseCaseExecutorTests : WebTestBase
 
         var createdId = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
-                new CreateAccountCommand("Pessoal", 500m, new DateOnly(2026, 1, 1), 3, 12), ct),
+                new CreateAccountCommand("Pessoal", 500m, new DateOnly(2026, 1, 1)), ct),
             successMessage: "Conta criada.");
 
         var listed = await Executor.ExecuteAsync<ListAccountsHandler, IReadOnlyList<AccountDto>>(
@@ -60,7 +60,7 @@ public sealed class UseCaseExecutorTests : WebTestBase
     {
         var result = await Executor.ExecuteAsync<CreateAccountHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
-                new CreateAccountCommand("Conta", 10.123m, new DateOnly(2026, 1, 1), 3, 12), ct));
+                new CreateAccountCommand("Conta", 10.123m, new DateOnly(2026, 1, 1)), ct));
 
         Assert.False(result.IsSuccess);
         Assert.True(result.IsBusinessError);

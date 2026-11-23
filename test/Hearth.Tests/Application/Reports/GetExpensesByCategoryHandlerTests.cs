@@ -1,6 +1,7 @@
-using Hearth.Application.Authorization;
+using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetExpensesByCategory;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -10,8 +11,10 @@ namespace Hearth.Tests.Application.Reports;
 
 public class GetExpensesByCategoryHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private static readonly CardBillingRule Rule3 = CardBillingRule.Of(3, 12);
+
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
@@ -21,7 +24,7 @@ public class GetExpensesByCategoryHandlerTests
 
     public GetExpensesByCategoryHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new GetExpensesByCategoryHandler(
             _accountAccess,
             _categories,
@@ -33,19 +36,18 @@ public class GetExpensesByCategoryHandlerTests
     private async Task<Account> SeedAccountAsync(string name = "Conta")
     {
         var account = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 1, 1),
-            CardBillingRule.Of(3, 12));
+            new DateOnly(2026, 1, 1));
         await _accounts.AddAsync(account);
         return account;
     }
 
-    private async Task<Category> SeedCategoryAsync(Guid accountId, string name)
+    private async Task<Category> SeedUserCategoryAsync(string name)
     {
-        var category = Category.Create(Guid.NewGuid(), accountId, name);
+        var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, name);
         await _categories.AddAsync(category);
         return category;
     }
@@ -55,43 +57,41 @@ public class GetExpensesByCategoryHandlerTests
     {
         var account = await SeedAccountAsync("Minha");
         var otherAccount = await SeedAccountAsync("Outra");
-
-        var food = await SeedCategoryAsync(account.Id, "Alimentação");
-        var services = await SeedCategoryAsync(account.Id, "Serviços");
-        var shopping = await SeedCategoryAsync(account.Id, "Compras");
-        var otherFood = await SeedCategoryAsync(otherAccount.Id, "Alimentação");
+        var cardId = Guid.NewGuid();
 
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(120.00m), "Mercado", food.Id);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(120.00m), "Mercado", SystemCategories.FoodId);
         var otherDirect = DirectExpense.Create(
-            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(900.00m), "Outro", otherFood.Id);
+            Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(900.00m), "Outro", SystemCategories.FoodId);
 
         var rent = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", services.Id);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(1000.00m), "Aluguel", SystemCategories.ServicesId);
 
         var ownPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(80.00m),
             1,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Own,
             "Restaurante",
-            food.Id);
+            SystemCategories.FoodId);
 
         var othersPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 11),
             Money.FromDecimal(300.00m),
             1,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Others,
             "Compra de terceiro",
-            shopping.Id);
+            SystemCategories.ShoppingId);
 
         await _directExpenses.AddAsync(direct);
         await _directExpenses.AddAsync(otherDirect);
@@ -110,15 +110,15 @@ public class GetExpensesByCategoryHandlerTests
         Assert.Equal(1500.00m, dto.Total);
 
         Assert.Equal(3, dto.Categories.Count);
-        Assert.Equal(services.Id, dto.Categories[0].CategoryId);
+        Assert.Equal(SystemCategories.ServicesId, dto.Categories[0].CategoryId);
         Assert.Equal("Serviços", dto.Categories[0].CategoryName);
         Assert.Equal(1000.00m, dto.Categories[0].Total);
 
-        Assert.Equal(shopping.Id, dto.Categories[1].CategoryId);
+        Assert.Equal(SystemCategories.ShoppingId, dto.Categories[1].CategoryId);
         Assert.Equal("Compras", dto.Categories[1].CategoryName);
         Assert.Equal(300.00m, dto.Categories[1].CardInstallments);
 
-        Assert.Equal(food.Id, dto.Categories[2].CategoryId);
+        Assert.Equal(SystemCategories.FoodId, dto.Categories[2].CategoryId);
         Assert.Equal("Alimentação", dto.Categories[2].CategoryName);
         Assert.Equal(120.00m, dto.Categories[2].DirectExpenses);
         Assert.Equal(80.00m, dto.Categories[2].CardInstallments);
@@ -129,7 +129,7 @@ public class GetExpensesByCategoryHandlerTests
     public async Task ExecuteAsync_ArchivedCategoryStillAppearsInHistoricalReport()
     {
         var account = await SeedAccountAsync();
-        var college = await SeedCategoryAsync(account.Id, "Faculdade");
+        var college = await SeedUserCategoryAsync("Faculdade");
         college.Archive();
 
         var direct = DirectExpense.Create(
@@ -148,49 +148,49 @@ public class GetExpensesByCategoryHandlerTests
     public async Task ExecuteAsync_WithOrthogonalSourceAndConditionFilters_FiltersCardOnlyForOwnAndCustom()
     {
         var account = await SeedAccountAsync();
-        var food = await SeedCategoryAsync(account.Id, "Alimentação");
-        var services = await SeedCategoryAsync(account.Id, "Serviços");
-        var entertainment = await SeedCategoryAsync(account.Id, "Entretenimento");
-        var shopping = await SeedCategoryAsync(account.Id, "Compras");
+        var cardId = Guid.NewGuid();
 
         var direct = DirectExpense.Create(
-            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(50.00m), "Pix", food.Id);
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(50.00m), "Pix", SystemCategories.FoodId);
         var fixedExpense = FixedExpense.Create(
-            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(100.00m), "Internet", services.Id);
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 1), null, Money.FromDecimal(100.00m), "Internet", SystemCategories.ServicesId);
 
         var own = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 10),
             Money.FromDecimal(200.00m),
             1,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Own,
             "Propria",
-            food.Id);
+            SystemCategories.FoodId);
         var trip = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 11),
             Money.FromDecimal(150.00m),
             1,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Custom("Viagem"),
             "Hotel",
-            entertainment.Id);
+            SystemCategories.EntertainmentId);
         var others = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
+            cardId,
             new DateOnly(2026, 10, 12),
             Money.FromDecimal(400.00m),
             1,
             1,
-            account.BillingRule,
+            Rule3,
             PurchaseCondition.Others,
             "Terceiro",
-            shopping.Id);
+            SystemCategories.ShoppingId);
 
         await _directExpenses.AddAsync(direct);
         await _fixedExpenses.AddAsync(fixedExpense);
@@ -216,8 +216,8 @@ public class GetExpensesByCategoryHandlerTests
         Assert.Equal(350.00m, dto.CardInstallments);
         Assert.Equal(350.00m, dto.Total);
         Assert.Equal(2, dto.Categories.Count);
-        Assert.Equal(food.Id, dto.Categories[0].CategoryId);
-        Assert.Equal(entertainment.Id, dto.Categories[1].CategoryId);
+        Assert.Equal(SystemCategories.FoodId, dto.Categories[0].CategoryId);
+        Assert.Equal(SystemCategories.EntertainmentId, dto.Categories[1].CategoryId);
     }
 
     [Fact]

@@ -1,5 +1,5 @@
-using Hearth.Application.Authorization;
 using Hearth.Application.Accounts.ListAccounts;
+using Hearth.Application.Authorization;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -9,14 +9,14 @@ namespace Hearth.Tests.Application.Accounts;
 
 public class ListAccountsHandlerTests
 {
-    private readonly InMemoryAccountRepository _accounts = new();
-    private readonly FakeCurrentUser _currentUser = new();
+    private readonly InMemoryAccountRepository _accounts = new();
+    private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly ListAccountsHandler _handler;
 
     public ListAccountsHandlerTests()
     {
-        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
+        _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new ListAccountsHandler(_accountAccess, _accounts);
     }
 
@@ -32,19 +32,19 @@ public class ListAccountsHandlerTests
     public async Task ExecuteAsync_MultipleAccounts_ReturnsAllMappedDtos()
     {
         var first = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Nubank",
             Money.FromDecimal(1000.00m),
             new DateOnly(2026, 10, 1),
-            CardBillingRule.Of(3, 12));
+            isInitialBalanceConfirmed: true);
         var second = Account.Create(
-            Guid.NewGuid(),
+            Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Inter",
             Money.FromDecimal(-250.50m),
             new DateOnly(2026, 11, 1),
-            CardBillingRule.Of(15, 22));
+            isInitialBalanceConfirmed: false);
         await _accounts.AddAsync(first);
         await _accounts.AddAsync(second);
 
@@ -55,14 +55,12 @@ public class ListAccountsHandlerTests
                                        && dto.Name == "Nubank"
                                        && dto.InitialBalance == 1000.00m
                                        && dto.InitialBalanceDate == new DateOnly(2026, 10, 1)
-                                       && dto.ClosingDay == 3
-                                       && dto.DueDay == 12);
+                                       && dto.IsInitialBalanceConfirmed);
         Assert.Contains(result, dto => dto.Id == second.Id
                                        && dto.Name == "Inter"
                                        && dto.InitialBalance == -250.50m
                                        && dto.InitialBalanceDate == new DateOnly(2026, 11, 1)
-                                       && dto.ClosingDay == 15
-                                       && dto.DueDay == 22);
+                                       && !dto.IsInitialBalanceConfirmed);
     }
 
     [Fact]

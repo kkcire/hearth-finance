@@ -24,15 +24,15 @@ internal sealed class CategoryRepository : ICategoryRepository
     public Task<Category?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _context.Categories.FirstOrDefaultAsync(category => category.Id == id, cancellationToken);
 
-    public async Task<IReadOnlyList<Category>> GetByAccountAsync(
-        Guid accountId,
+    public async Task<IReadOnlyList<Category>> GetVisibleForUserAsync(
+        Guid ownerUserId,
         CancellationToken cancellationToken = default) =>
         await _context.Categories
-            .Where(category => category.AccountId == accountId)
+            .Where(category => category.OwnerUserId == null || category.OwnerUserId == ownerUserId)
             .ToListAsync(cancellationToken);
 
-    public Task<bool> ExistsWithNameAsync(
-        Guid accountId,
+    public Task<bool> ExistsWithNameForUserAsync(
+        Guid ownerUserId,
         string name,
         Guid? excludeCategoryId = null,
         CancellationToken cancellationToken = default)
@@ -42,7 +42,7 @@ internal sealed class CategoryRepository : ICategoryRepository
         var normalized = name.Trim().ToLowerInvariant();
 
         var query = _context.Categories.Where(category =>
-            category.AccountId == accountId
+            (category.OwnerUserId == null || category.OwnerUserId == ownerUserId)
             && EF.Property<string>(category, CategoryConfiguration.NormalizedNameShadowProperty) == normalized);
 
         if (excludeCategoryId.HasValue)

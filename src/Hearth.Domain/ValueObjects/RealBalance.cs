@@ -37,7 +37,7 @@ public sealed record RealBalance
     /// <summary>Fixed expenses paid on or before <see cref="Until"/>, at the amount of the month paid.</summary>
     public Money FixedExpenses { get; }
 
-    /// <summary>Card invoices paid on or before <see cref="Until"/>, at the amount the bank charged.</summary>
+    /// <summary>Card installments whose due date is on or before <see cref="Until"/>.</summary>
     public Money CardInvoices { get; }
 
     /// <summary>

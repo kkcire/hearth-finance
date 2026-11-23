@@ -1,4 +1,5 @@
 using Hearth.Application.Abstractions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 
 namespace Hearth.Tests.Application.Fakes;
@@ -6,6 +7,17 @@ namespace Hearth.Tests.Application.Fakes;
 internal sealed class InMemoryCategoryRepository : ICategoryRepository
 {
     private readonly Dictionary<Guid, Category> _categories = new();
+
+    public InMemoryCategoryRepository(bool seedSystemCategories = true)
+    {
+        if (seedSystemCategories)
+        {
+            foreach (var systemCategory in SystemCategories.CreateAll())
+            {
+                _categories.Add(systemCategory.Id, systemCategory);
+            }
+        }
+    }
 
     public IReadOnlyCollection<Category> Categories => _categories.Values;
 
@@ -28,28 +40,28 @@ internal sealed class InMemoryCategoryRepository : ICategoryRepository
         return Task.FromResult(_categories.GetValueOrDefault(id));
     }
 
-    public Task<IReadOnlyList<Category>> GetByAccountAsync(
-        Guid accountId,
+    public Task<IReadOnlyList<Category>> GetVisibleForUserAsync(
+        Guid ownerUserId,
         CancellationToken cancellationToken = default)
     {
         LastCancellationToken = cancellationToken;
         IReadOnlyList<Category> result = _categories.Values
-            .Where(category => category.AccountId == accountId)
+            .Where(category => category.IsSystem || category.OwnerUserId == ownerUserId)
             .ToList();
         return Task.FromResult(result);
     }
 
-    public Task<bool> ExistsWithNameAsync(
-        Guid accountId,
+    public Task<bool> ExistsWithNameForUserAsync(
+        Guid ownerUserId,
         string name,
         Guid? excludeCategoryId = null,
         CancellationToken cancellationToken = default)
     {
         LastCancellationToken = cancellationToken;
         var exists = _categories.Values.Any(category =>
-            category.AccountId == accountId
+            (category.IsSystem || category.OwnerUserId == ownerUserId)
             && (!excludeCategoryId.HasValue || category.Id != excludeCategoryId.Value)
-            && string.Equals(category.Name, name, StringComparison.OrdinalIgnoreCase));
+            && string.Equals(category.Name, name.Trim(), StringComparison.OrdinalIgnoreCase));
         return Task.FromResult(exists);
     }
 
