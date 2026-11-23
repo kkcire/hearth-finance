@@ -1,14 +1,136 @@
 @inherits LayoutComponentBase
 
-<div class="hearth-auth-page">
-    <main class="hearth-auth-card">
-        <header class="hearth-auth-brand">
-            <svg class="hearth-auth-logo" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" focusable="false">
-                @((MarkupString)Icons.Material.Filled.LocalFireDepartment)
-            </svg>
-            <span class="hearth-auth-brand-name">Hearth Finance</span>
-        </header>
+<div class="hearth-auth-shell">
+    <aside class="hearth-auth-showcase" aria-label="Sobre o Hearth Finance">
+        <div class="hearth-auth-showcase-inner">
+            <div class="hearth-auth-showcase-top">
+                <div class="hearth-auth-brand">
+                    <svg class="hearth-auth-emblem" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+                        <path d="M18.6 4.2C18.6 4.2 25.4 9.7 25.4 16.9C25.4 21.1 22.1 24.4 18 24.4C13.9 24.4 10.6 21.1 10.6 16.9C10.6 14.3 11.9 11.7 13.7 9.7C13.5 11.5 14.3 13 15.6 13.5C15.1 10.4 16.3 6.8 18.6 4.2Z" fill="currentColor" />
+                        <path d="M18 14.2C19.8 16.1 20.8 18 20.8 19.7C20.8 21.3 19.5 22.6 18 22.6C16.5 22.6 15.2 21.3 15.2 19.7C15.2 18.6 15.8 17.4 16.7 16.4C16.7 17.2 17.1 17.8 17.6 18C17.4 16.8 17.6 15.3 18 14.2Z" fill="#0F0F10" fill-opacity="0.72" />
+                        <path d="M9.5 27.6L26.5 24.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.82" />
+                        <path d="M9.5 24.6L26.5 27.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.52" />
+                    </svg>
+                    <span class="hearth-auth-brand-name" translate="no">Hearth&nbsp;Finance</span>
+                </div>
 
-        @Body
+                <div class="hearth-auth-showcase-copy">
+                    <p class="hearth-auth-showcase-headline">
+                        Clareza de caixa e competência para o mês inteiro.
+                    </p>
+                    <p class="hearth-auth-showcase-lead">
+                        Veja quanto existe na conta hoje, quanto fecha na próxima fatura do cartão e como o mês termina — tudo calculado a partir dos seus lançamentos.
+                    </p>
+                </div>
+            </div>
+
+            <div class="hearth-auth-preview" aria-hidden="true">
+                <div class="hearth-auth-preview-bar">
+                    <span class="hearth-auth-preview-title">Painel do mês</span>
+                    <div class="hearth-auth-preview-tags">
+                        <span class="hearth-auth-preview-tag">Conta Principal</span>
+                        <span class="hearth-auth-preview-tag">Exemplo ilustrativo</span>
+                    </div>
+                </div>
+
+                <div class="hearth-auth-preview-grid">
+                    <section class="hearth-auth-preview-pane">
+                        <div class="hearth-auth-preview-pane-head">
+                            <span class="hearth-auth-preview-pane-title">Saldo real (caixa)</span>
+                            <span class="hearth-auth-preview-pane-meta">Até hoje</span>
+                        </div>
+                        <p class="hearth-auth-preview-amount hearth-auth-preview-amount--accent">R$&nbsp;10.900,00</p>
+                        <dl class="hearth-auth-preview-list">
+                            <div class="hearth-auth-preview-row">
+                                <dt>Saldo inicial</dt>
+                                <dd>R$&nbsp;5.400,00</dd>
+                            </div>
+                            <div class="hearth-auth-preview-row">
+                                <dt>Receitas recebidas</dt>
+                                <dd class="is-positive">+R$&nbsp;12.300,00</dd>
+                            </div>
+                            <div class="hearth-auth-preview-row">
+                                <dt>Saídas e faturas pagas</dt>
+                                <dd class="is-negative">&minus;R$&nbsp;6.800,00</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+                    <section class="hearth-auth-preview-pane">
+                        <div class="hearth-auth-preview-pane-head">
+                            <span class="hearth-auth-preview-pane-title">Resultado projetado</span>
+                            <span class="hearth-auth-preview-pane-meta">Competência</span>
+                        </div>
+                        <p class="hearth-auth-preview-amount is-positive">+R$&nbsp;6.400,00</p>
+                        <dl class="hearth-auth-preview-list">
+                            <div class="hearth-auth-preview-row">
+                                <dt>Receitas previstas</dt>
+                                <dd class="is-positive">+R$&nbsp;14.500,00</dd>
+                            </div>
+                            <div class="hearth-auth-preview-row">
+                                <dt>Diretos e fixos</dt>
+                                <dd class="is-negative">&minus;R$&nbsp;4.900,00</dd>
+                            </div>
+                            <div class="hearth-auth-preview-row">
+                                <dt>Fatura calculada</dt>
+                                <dd class="is-negative">&minus;R$&nbsp;3.200,00</dd>
+                            </div>
+                        </dl>
+                    </section>
+                </div>
+
+                <div class="hearth-auth-preview-foot">
+                    <div class="hearth-auth-preview-budget">
+                        <div class="hearth-auth-preview-budget-row">
+                            <span>Alimentação</span>
+                            <span class="hearth-auth-preview-budget-vals">R$&nbsp;620 / R$&nbsp;800</span>
+                        </div>
+                        <div class="hearth-auth-preview-meter">
+                            <span class="hearth-auth-preview-meter-fill" style="width: 78%;"></span>
+                        </div>
+                    </div>
+                    <div class="hearth-auth-preview-budget">
+                        <div class="hearth-auth-preview-budget-row">
+                            <span>Moradia e serviços</span>
+                            <span class="hearth-auth-preview-budget-vals">R$&nbsp;1.500 / R$&nbsp;1.800</span>
+                        </div>
+                        <div class="hearth-auth-preview-meter">
+                            <span class="hearth-auth-preview-meter-fill hearth-auth-preview-meter-fill--neutral" style="width: 83%;"></span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <dl class="hearth-auth-pillars">
+                <div class="hearth-auth-pillar">
+                    <dt>Caixa vs. competência</dt>
+                    <dd>Saldo real separado da previsão de fechamento do mês.</dd>
+                </div>
+                <div class="hearth-auth-pillar">
+                    <dt>Ciclos de cartão</dt>
+                    <dd>Parcelas alocadas automaticamente pelo fechamento da fatura.</dd>
+                </div>
+                <div class="hearth-auth-pillar">
+                    <dt>Orçamento por categoria</dt>
+                    <dd>Metas mensais informativas com histórico preservado.</dd>
+                </div>
+            </dl>
+        </div>
+    </aside>
+
+    <main id="main-content" class="hearth-auth-stage">
+        <div class="hearth-auth-panel">
+            <header class="hearth-auth-mobile-brand">
+                <svg class="hearth-auth-emblem" viewBox="0 0 36 36" fill="none" aria-hidden="true" focusable="false">
+                    <path d="M18.6 4.2C18.6 4.2 25.4 9.7 25.4 16.9C25.4 21.1 22.1 24.4 18 24.4C13.9 24.4 10.6 21.1 10.6 16.9C10.6 14.3 11.9 11.7 13.7 9.7C13.5 11.5 14.3 13 15.6 13.5C15.1 10.4 16.3 6.8 18.6 4.2Z" fill="currentColor" />
+                    <path d="M18 14.2C19.8 16.1 20.8 18 20.8 19.7C20.8 21.3 19.5 22.6 18 22.6C16.5 22.6 15.2 21.3 15.2 19.7C15.2 18.6 15.8 17.4 16.7 16.4C16.7 17.2 17.1 17.8 17.6 18C17.4 16.8 17.6 15.3 18 14.2Z" fill="#18181A" fill-opacity="0.78" />
+                    <path d="M9.5 27.6L26.5 24.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.82" />
+                    <path d="M9.5 24.6L26.5 27.6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" opacity="0.52" />
+                </svg>
+                <span class="hearth-auth-brand-name" translate="no">Hearth&nbsp;Finance</span>
+            </header>
+
+            @Body
+        </div>
     </main>
 </div>

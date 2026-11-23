@@ -57,7 +57,46 @@ public sealed class AuthPagesTests : WebTestBase
 
         Assert.Equal("email", cut.Find("[data-testid='login-email-input']").GetAttribute("autocomplete"));
         Assert.Equal("current-password", cut.Find("[data-testid='login-password-input']").GetAttribute("autocomplete"));
+        Assert.Equal("false", cut.Find("[data-testid='login-email-input']").GetAttribute("spellcheck"));
+        Assert.Equal("false", cut.Find("[data-testid='login-password-input']").GetAttribute("spellcheck"));
+        Assert.False(cut.Find("[data-testid='login-email-input']").HasAttribute("autofocus"));
+        Assert.False(cut.Find("[data-testid='login-password-input']").HasAttribute("autofocus"));
+        Assert.Equal("Entrando\u2026", cut.Find("[data-testid='login-submit']").GetAttribute("data-loading-text"));
+        Assert.Equal("login-password", cut.Find("[data-toggle-password='login-password']").GetAttribute("aria-controls"));
         Assert.Empty(cut.FindAll("[data-testid='go-to-register']"));
+    }
+
+    [Fact]
+    public async Task LoginPage_EmptySubmit_RendersFocusableErrorSummaryAndInlineFieldErrors()
+    {
+        var httpContext = CreateHttpContext();
+        var cut = Render<LoginPage>(p => p.AddCascadingValue(httpContext));
+
+        await cut.Find("form").SubmitAsync();
+
+        var summary = cut.Find("[data-testid='login-error-summary']");
+        Assert.Equal("alert", summary.GetAttribute("role"));
+        Assert.Equal("-1", summary.GetAttribute("tabindex"));
+        Assert.Equal("true", summary.GetAttribute("data-focus-on-load"));
+        Assert.Single(summary.QuerySelectorAll("a[href='#login-email']"));
+        Assert.Single(summary.QuerySelectorAll("a[href='#login-password']"));
+        Assert.Equal("true", cut.Find("[data-testid='login-email-input']").GetAttribute("aria-invalid"));
+        Assert.Equal("true", cut.Find("[data-testid='login-password-input']").GetAttribute("aria-invalid"));
+    }
+
+    [Fact]
+    public async Task LoginPage_InvalidEmailOnly_FocusesEmailWithoutSummary()
+    {
+        var httpContext = CreateHttpContext();
+        var cut = Render<LoginPage>(p => p.AddCascadingValue(httpContext));
+        cut.Instance.Input!.Email = "invalido";
+        cut.Instance.Input!.Password = "password123";
+
+        await cut.Find("form").SubmitAsync();
+
+        Assert.Empty(cut.FindAll("[data-testid='login-error-summary']"));
+        Assert.Equal("true", cut.Find("[data-testid='login-email-input']").GetAttribute("data-focus-on-load"));
+        Assert.Contains("nome@exemplo.com", cut.Find("#login-email-error").TextContent);
     }
 
     [Fact]

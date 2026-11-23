@@ -13,13 +13,50 @@
 
 <PageTitle>Entrar — Hearth Finance</PageTitle>
 
-<h1 class="hearth-auth-title">Entrar</h1>
-<p class="hearth-auth-subtitle">Acesse seu painel financeiro pessoal.</p>
+<div class="hearth-auth-heading">
+    <h1 class="hearth-auth-title">Entrar</h1>
+    <p class="hearth-auth-subtitle">Acesse sua conta para acompanhar caixa e faturas.</p>
+</div>
 
 @if (!string.IsNullOrWhiteSpace(_serverError))
 {
-    <div class="hearth-auth-alert" role="alert" data-testid="login-error">
-        @_serverError
+    <div class="hearth-auth-alert"
+         role="alert"
+         tabindex="-1"
+         data-testid="login-error">
+        <svg class="hearth-auth-alert-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.6" />
+            <path d="M10 6.2V10.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <circle cx="10" cy="13.6" r="0.9" fill="currentColor" />
+        </svg>
+        <div class="hearth-auth-alert-body">@_serverError</div>
+    </div>
+}
+
+@if (_fieldErrors.Count > 1)
+{
+    <div class="hearth-auth-alert hearth-auth-summary"
+         role="alert"
+         tabindex="-1"
+         aria-labelledby="login-error-summary-title"
+         data-focus-on-load="true"
+         data-testid="login-error-summary">
+        <svg class="hearth-auth-alert-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="1.6" />
+            <path d="M10 6.2V10.6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+            <circle cx="10" cy="13.6" r="0.9" fill="currentColor" />
+        </svg>
+        <div class="hearth-auth-alert-body">
+            <p id="login-error-summary-title" class="hearth-auth-summary-title">Revise os campos abaixo:</p>
+            <ul class="hearth-auth-summary-list">
+                @foreach (var entry in _fieldErrors)
+                {
+                    <li>
+                        <a href="#@GetFieldInputId(entry.Key)" class="hearth-auth-summary-link">@entry.Value</a>
+                    </li>
+                }
+            </ul>
+        </div>
     </div>
 }
 
@@ -38,17 +75,28 @@
                type="email"
                inputmode="email"
                autocomplete="email"
+               autocapitalize="none"
+               autocorrect="off"
+               spellcheck="false"
+               placeholder="nome@exemplo.com…"
                maxlength="@DomainValidation.MaxEmailLength"
                value="@(Input?.Email ?? string.Empty)"
                class="hearth-auth-input @(HasError("Email") ? "is-invalid" : null)"
                aria-invalid="@(HasError("Email") ? "true" : "false")"
                aria-describedby="@(HasError("Email") ? "login-email-error" : null)"
-               autofocus="@(_firstErrorField is null or "Email")"
+               data-focus-on-load="@(ShouldFocusField("Email") ? "true" : null)"
                required
                data-testid="login-email-input" />
         @if (GetError("Email") is { } emailError)
         {
-            <p id="login-email-error" class="hearth-auth-error" role="alert">@emailError</p>
+            <p id="login-email-error" class="hearth-auth-error" role="alert">
+                <svg class="hearth-auth-error-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M8 4.8V8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                    <circle cx="8" cy="11.1" r="0.75" fill="currentColor" />
+                </svg>
+                <span>@emailError</span>
+            </p>
         }
     </div>
 
@@ -59,40 +107,62 @@
                    name="Input.Password"
                    type="password"
                    autocomplete="current-password"
+                   autocapitalize="none"
+                   autocorrect="off"
+                   spellcheck="false"
                    maxlength="@DomainValidation.MaxPasswordLength"
                    value="@(Input?.Password ?? string.Empty)"
                    class="hearth-auth-input @(HasError("Password") ? "is-invalid" : null)"
                    aria-invalid="@(HasError("Password") ? "true" : "false")"
                    aria-describedby="@(HasError("Password") ? "login-password-error" : null)"
-                   autofocus="@(_firstErrorField == "Password")"
+                   data-focus-on-load="@(ShouldFocusField("Password") ? "true" : null)"
                    required
                    data-testid="login-password-input" />
             <button type="button"
                     class="hearth-auth-toggle-password"
                     data-toggle-password="login-password"
+                    data-label-show="Mostrar senha"
+                    data-label-hide="Ocultar senha"
+                    aria-controls="login-password"
                     aria-label="Mostrar senha"
                     aria-pressed="false">
-                Mostrar
+                <svg class="hearth-auth-eye hearth-auth-eye--show" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                    <path d="M2.2 10C3.8 6.8 6.6 5 10 5C13.4 5 16.2 6.8 17.8 10C16.2 13.2 13.4 15 10 15C6.6 15 3.8 13.2 2.2 10Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" />
+                    <circle cx="10" cy="10" r="2.5" stroke="currentColor" stroke-width="1.5" />
+                </svg>
+                <svg class="hearth-auth-eye hearth-auth-eye--hide" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                    <path d="M3 3L17 17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                    <path d="M8.2 5.3C8.8 5.1 9.4 5 10 5C13.4 5 16.2 6.8 17.8 10C17.1 11.4 16.1 12.6 14.9 13.4M12.3 14.6C11.6 14.9 10.8 15 10 15C6.6 15 3.8 13.2 2.2 10C3.1 8.3 4.3 7 5.8 6.1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" />
+                </svg>
+                <span class="hearth-auth-toggle-text">Mostrar</span>
             </button>
         </div>
         @if (GetError("Password") is { } passwordError)
         {
-            <p id="login-password-error" class="hearth-auth-error" role="alert">@passwordError</p>
+            <p id="login-password-error" class="hearth-auth-error" role="alert">
+                <svg class="hearth-auth-error-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
+                    <circle cx="8" cy="8" r="6.5" stroke="currentColor" stroke-width="1.4" />
+                    <path d="M8 4.8V8.5" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
+                    <circle cx="8" cy="11.1" r="0.75" fill="currentColor" />
+                </svg>
+                <span>@passwordError</span>
+            </p>
         }
     </div>
 
     <button type="submit"
             class="hearth-auth-submit"
-            data-loading-text="Entrando..."
+            data-loading-text="Entrando…"
             data-testid="login-submit">
-        Entrar
+        <span class="hearth-auth-spinner" aria-hidden="true"></span>
+        <span class="hearth-auth-submit-label">Entrar</span>
     </button>
 </form>
 
 @if (AuthOptions.Value.AllowRegistration)
 {
     <p class="hearth-auth-footer">
-        Ainda não tem conta?
+        <span>Ainda não tem conta?</span>
         <a href="/cadastro" class="hearth-auth-link" data-testid="go-to-register">Criar conta</a>
     </p>
 }
@@ -141,12 +211,12 @@
 
         if (!DomainValidation.IsValidEmail(email))
         {
-            AddFieldError("Email", "Informe um e-mail válido.");
+            AddFieldError("Email", "Informe um e-mail válido, como nome@exemplo.com.");
         }
 
         if (string.IsNullOrEmpty(password))
         {
-            AddFieldError("Password", "Informe sua senha.");
+            AddFieldError("Password", "Informe sua senha para continuar.");
         }
 
         if (_fieldErrors.Count > 0)
@@ -190,6 +260,17 @@
             _firstErrorField ??= field;
         }
     }
+
+    private bool ShouldFocusField(string field) =>
+        _fieldErrors.Count <= 1 && string.Equals(_firstErrorField, field, StringComparison.Ordinal);
+
+    private static string GetFieldInputId(string field) =>
+        field switch
+        {
+            "Email" => "login-email",
+            "Password" => "login-password",
+            _ => "main-content",
+        };
 
     private bool HasError(string field) => _fieldErrors.ContainsKey(field);
 
