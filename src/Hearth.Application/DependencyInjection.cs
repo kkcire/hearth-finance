@@ -29,6 +29,7 @@ using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Application.CreditCards.DeleteCreditCard;
 using Hearth.Application.CreditCards.GetActiveCreditCard;
 using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.CreditCards.UpdateCreditCard;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
@@ -49,6 +50,8 @@ using Hearth.Application.Incomes.RegisterIncome;
 using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
+using Hearth.Application.PurchaseConditions.CreatePurchaseCondition;
+using Hearth.Application.PurchaseConditions.ListPurchaseConditions;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Application.Reports.GetMonthlySurplus;
@@ -112,6 +115,7 @@ public static class DependencyInjection
         services.AddScoped<CreateCreditCardHandler>();
         services.AddScoped<UpdateCreditCardHandler>();
         services.AddScoped<ArchiveCreditCardHandler>();
+        services.AddScoped<RestoreCreditCardHandler>();
         services.AddScoped<DeleteCreditCardHandler>();
         services.AddScoped<GetActiveCreditCardHandler>();
         services.AddScoped<ListCreditCardsHandler>();
@@ -123,6 +127,10 @@ public static class DependencyInjection
         services.AddScoped<UpdateCreditCardPurchaseDetailsHandler>();
         services.AddScoped<DeleteCreditCardPurchaseHandler>();
         services.AddScoped<ListCreditCardPurchasesHandler>();
+
+        // Purchase conditions
+        services.AddScoped<CreatePurchaseConditionHandler>();
+        services.AddScoped<ListPurchaseConditionsHandler>();
 
         // Incomes
         services.AddScoped<RegisterIncomeHandler>();

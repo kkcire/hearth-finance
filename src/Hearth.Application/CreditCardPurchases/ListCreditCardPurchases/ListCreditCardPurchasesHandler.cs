@@ -1,5 +1,6 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
+using Hearth.Application.PurchaseConditions;
 
 namespace Hearth.Application.CreditCardPurchases.ListCreditCardPurchases;
 
@@ -28,6 +29,7 @@ public sealed class ListCreditCardPurchasesHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        PurchaseConditionValidation.EnsureOptionalFilterNotEmpty(query.ConditionId, nameof(query));
 
         _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
@@ -35,6 +37,7 @@ public sealed class ListCreditCardPurchasesHandler
         var today = _clock.Today;
 
         return purchases
+            .Where(purchase => !query.ConditionId.HasValue || purchase.ConditionId == query.ConditionId.Value)
             .OrderByDescending(purchase => purchase.Date)
             .Select(purchase => CreditCardPurchaseDto.FromEntity(purchase, today))
             .ToList();

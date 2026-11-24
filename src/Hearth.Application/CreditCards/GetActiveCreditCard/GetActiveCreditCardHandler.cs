@@ -41,6 +41,6 @@ public sealed class GetActiveCreditCardHandler
         }
 
         var purchases = await _purchases.GetByCreditCardAsync(card.Id, cancellationToken);
-        return CreditCardDto.FromEntity(card, _clock.Today, purchases);
+        return CreditCardDto.FromEntity(card, _clock.Today, purchases, account.InitialBalanceDate);
     }
 }

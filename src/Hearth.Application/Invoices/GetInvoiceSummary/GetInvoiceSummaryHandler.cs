@@ -1,5 +1,6 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
+using Hearth.Application.PurchaseConditions;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -34,21 +35,28 @@ public sealed class GetInvoiceSummaryHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        PurchaseConditionValidation.EnsureOptionalFilterNotEmpty(query.ConditionId, nameof(query));
 
-        var closingMonth = YearMonth.Of(query.ClosingYear, query.ClosingMonth);
+        var targetMonth = YearMonth.Of(query.ClosingYear, query.ClosingMonth);
         var today = _clock.Today;
 
         var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
         var activeCard = await _creditCards.GetActiveByAccountAsync(account.Id, cancellationToken);
         var purchases = await _purchases.GetByAccountAsync(account.Id, cancellationToken);
 
-        var calculatedAmount = InvoiceCalculator.Calculate(account.Id, closingMonth, purchases);
+        var groupByDueMonth = query.MonthBasis == InvoiceMonthBasis.DueMonth;
+        var calculatedAmount = groupByDueMonth
+            ? InvoiceCalculator.CalculateByDueMonth(account.Id, targetMonth, purchases, query.ConditionId)
+            : InvoiceCalculator.Calculate(account.Id, targetMonth, purchases, query.ConditionId);
 
         var matchingInstallments = purchases
-            .Where(purchase => purchase.AccountId == account.Id)
+            .Where(purchase => purchase.AccountId == account.Id
+                               && (!query.ConditionId.HasValue || purchase.ConditionId == query.ConditionId.Value))
             .SelectMany(purchase => purchase.GetInstallments()
                 .Where(installment => !installment.IsPreviouslyPaid
-                                      && installment.Cycle.ClosingMonth == closingMonth)
+                                      && (groupByDueMonth
+                                          ? installment.Cycle.DueMonth == targetMonth
+                                          : installment.Cycle.ClosingMonth == targetMonth))
                 .Select(installment => (Purchase: purchase, Installment: installment)))
             .ToList();
 
@@ -59,8 +67,7 @@ public sealed class GetInvoiceSummaryHandler
                 item.Purchase.Date,
                 item.Purchase.Description,
                 item.Purchase.CategoryId,
-                item.Purchase.Condition.Kind,
-                item.Purchase.Condition.Name,
+                item.Purchase.ConditionId,
                 item.Installment.Number,
                 item.Purchase.InstallmentCount,
                 item.Installment.Amount.Amount,
@@ -72,11 +79,15 @@ public sealed class GetInvoiceSummaryHandler
             .ToList();
 
         var defaultOpenMonth = activeCard is not null
-            ? BillingCycle.ForPurchase(today, activeCard.BillingRule).ClosingMonth
+            ? (groupByDueMonth
+                ? BillingCycle.ForPurchase(today, activeCard.BillingRule).DueMonth
+                : BillingCycle.ForPurchase(today, activeCard.BillingRule).ClosingMonth)
             : YearMonth.From(today);
 
         BillingCycle? cycle = activeCard is not null
-            ? BillingCycle.Closing(closingMonth, activeCard.BillingRule)
+            ? (groupByDueMonth
+                ? BillingCycle.DueIn(targetMonth, activeCard.BillingRule)
+                : BillingCycle.Closing(targetMonth, activeCard.BillingRule))
             : matchingInstallments.FirstOrDefault().Installment?.Cycle;
 
         InvoiceStatus? status = cycle is not null
@@ -86,8 +97,8 @@ public sealed class GetInvoiceSummaryHandler
         return new InvoiceSummaryDto(
             account.Id,
             activeCard is not null,
-            closingMonth.Year,
-            closingMonth.Month,
+            cycle?.ClosingMonth.Year ?? targetMonth.Year,
+            cycle?.ClosingMonth.Month ?? targetMonth.Month,
             defaultOpenMonth.Year,
             defaultOpenMonth.Month,
             cycle?.StartDate,
@@ -96,6 +107,7 @@ public sealed class GetInvoiceSummaryHandler
             cycle?.DueDate,
             calculatedAmount.Amount,
             status,
-            installmentDtos);
+            installmentDtos,
+            query.ConditionId);
     }
 }

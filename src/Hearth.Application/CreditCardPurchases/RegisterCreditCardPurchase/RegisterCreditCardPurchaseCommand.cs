@@ -1,5 +1,3 @@
-using Hearth.Domain.ValueObjects;
-
 namespace Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 
 public sealed record RegisterCreditCardPurchaseCommand(
@@ -9,7 +7,6 @@ public sealed record RegisterCreditCardPurchaseCommand(
     decimal Amount,
     int InstallmentCount,
     int InitialInstallment,
-    PurchaseConditionKind ConditionKind,
-    string? ConditionName,
+    Guid ConditionId,
     string Description,
     Guid CategoryId);

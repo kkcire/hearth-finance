@@ -7,4 +7,5 @@ public sealed record GetMonthlySurplusQuery(
     int Year,
     int Month,
     int PastMonths = MonthlySurplusCalculator.DefaultPastMonths,
-    int FutureMonths = MonthlySurplusCalculator.DefaultFutureMonths);
+    int FutureMonths = MonthlySurplusCalculator.DefaultFutureMonths,
+    Guid? ConditionId = null);

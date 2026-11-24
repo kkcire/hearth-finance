@@ -1,6 +1,5 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
-using Hearth.Application.CreditCardPurchases;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -41,25 +40,11 @@ public sealed class GetExpensesByCategoryHandler
         ArgumentNullException.ThrowIfNull(query);
 
         var month = YearMonth.Of(query.Year, query.Month);
-
-        IReadOnlyCollection<PurchaseCondition>? includedConditions = null;
-        if (query.IncludedConditions is not null)
-        {
-            var converted = new List<PurchaseCondition>(query.IncludedConditions.Count);
-            foreach (var filter in query.IncludedConditions)
-            {
-                if (filter is null)
-                {
-                    throw new ArgumentException(
-                        "The included conditions must not contain null entries.",
-                        nameof(query));
-                }
-
-                converted.Add(PurchaseConditionMapper.ToDomain(filter.Kind, filter.Name));
-            }
-
-            includedConditions = converted;
-        }
+        var filter = SpendingFilter.Create(
+            query.IncludeDirectExpenses,
+            query.IncludeFixedExpenses,
+            query.IncludeCardInstallments,
+            query.IncludedConditionIds);
 
         var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
@@ -76,10 +61,7 @@ public sealed class GetExpensesByCategoryHandler
             directExpenses,
             fixedExpenses,
             purchases,
-            query.IncludeDirectExpenses,
-            query.IncludeFixedExpenses,
-            query.IncludeCardInstallments,
-            includedConditions);
+            filter);
 
         return CategorySpendingDto.FromDomain(account.Id, spending, categoryNames);
     }

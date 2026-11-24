@@ -8,8 +8,7 @@ public sealed record InvoiceInstallmentDto(
     DateOnly PurchaseDate,
     string Description,
     Guid CategoryId,
-    PurchaseConditionKind ConditionKind,
-    string? ConditionName,
+    Guid ConditionId,
     int InstallmentNumber,
     int InstallmentCount,
     decimal Amount,
@@ -29,7 +28,8 @@ public sealed record InvoiceSummaryDto(
     DateOnly? DueDate,
     decimal CalculatedAmount,
     InvoiceStatus? Status,
-    IReadOnlyList<InvoiceInstallmentDto> Installments)
+    IReadOnlyList<InvoiceInstallmentDto> Installments,
+    Guid? ConditionId = null)
 {
     /// <summary>
     /// True only when the account has no active credit card AND no installments from

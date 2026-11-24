@@ -1,5 +1,6 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
+using Hearth.Application.PurchaseConditions;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -38,6 +39,7 @@ public sealed class GetProjectedResultHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        PurchaseConditionValidation.EnsureOptionalFilterNotEmpty(query.ConditionId, nameof(query));
 
         var month = YearMonth.Of(query.Year, query.Month);
 
@@ -54,7 +56,8 @@ public sealed class GetProjectedResultHandler
             incomes,
             directExpenses,
             fixedExpenses,
-            purchases);
+            purchases,
+            query.ConditionId);
 
         return ProjectedResultDto.FromDomain(account.Id, result);
     }

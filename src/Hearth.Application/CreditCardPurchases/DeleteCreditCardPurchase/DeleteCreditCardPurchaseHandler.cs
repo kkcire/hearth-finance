@@ -47,7 +47,7 @@ public sealed class DeleteCreditCardPurchaseHandler
         if (purchase.IsLockedAt(_clock.Today))
         {
             throw new DomainException(
-                "The purchase cannot be deleted after its first counting invoice has closed.");
+                "The purchase cannot be deleted after a linked invoice has been paid.");
         }
 
         await _purchases.DeleteAsync(purchase, cancellationToken);

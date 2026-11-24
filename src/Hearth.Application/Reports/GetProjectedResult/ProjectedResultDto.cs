@@ -10,7 +10,8 @@ public sealed record ProjectedResultDto(
     decimal CardInvoice,
     decimal DirectExpenses,
     decimal FixedExpenses,
-    decimal Result)
+    decimal Result,
+    Guid? ConditionId = null)
 {
     internal static ProjectedResultDto FromDomain(Guid accountId, ProjectedResult projected) =>
         new(
@@ -21,5 +22,6 @@ public sealed record ProjectedResultDto(
             projected.CardInvoice.Amount,
             projected.DirectExpenses.Amount,
             projected.FixedExpenses.Amount,
-            projected.Result.Amount);
+            projected.Result.Amount,
+            projected.ConditionId);
 }

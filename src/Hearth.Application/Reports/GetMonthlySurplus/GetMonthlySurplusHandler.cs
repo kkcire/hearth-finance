@@ -1,5 +1,6 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
+using Hearth.Application.PurchaseConditions;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
 
@@ -42,6 +43,7 @@ public sealed class GetMonthlySurplusHandler
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(query);
+        PurchaseConditionValidation.EnsureOptionalFilterNotEmpty(query.ConditionId, nameof(query));
 
         var selectedMonth = YearMonth.Of(query.Year, query.Month);
         var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
@@ -60,7 +62,8 @@ public sealed class GetMonthlySurplusHandler
             fixedExpenses,
             purchases,
             query.PastMonths,
-            query.FutureMonths);
+            query.FutureMonths,
+            query.ConditionId);
 
         return MonthlySurplusDto.FromDomain(account.Id, series);
     }

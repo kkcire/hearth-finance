@@ -17,13 +17,14 @@ public sealed record CreditCardDto(
     public static CreditCardDto FromEntity(
         CreditCard card,
         DateOnly today,
-        IEnumerable<CreditCardPurchase> purchases)
+        IEnumerable<CreditCardPurchase> purchases,
+        DateOnly? initialBalanceDate = null)
     {
         ArgumentNullException.ThrowIfNull(card);
         ArgumentNullException.ThrowIfNull(purchases);
 
-        var used = CreditCardLimitCalculator.CalculateUsedLimit(card.Id, today, purchases);
-        var available = CreditCardLimitCalculator.CalculateAvailableLimit(card, today, purchases);
+        var used = CreditCardLimitCalculator.CalculateUsedLimit(card.Id, today, purchases, initialBalanceDate);
+        var available = CreditCardLimitCalculator.CalculateAvailableLimit(card, today, purchases, initialBalanceDate);
 
         return new CreditCardDto(
             card.Id,

@@ -1,5 +1,4 @@
 using Hearth.Domain.Entities;
-using Hearth.Domain.ValueObjects;
 
 namespace Hearth.Application.CreditCardPurchases;
 
@@ -21,8 +20,7 @@ public sealed record CreditCardPurchaseDto(
     int InitialInstallment,
     int FirstActiveClosingYear,
     int FirstActiveClosingMonth,
-    PurchaseConditionKind ConditionKind,
-    string? ConditionName,
+    Guid ConditionId,
     string Description,
     Guid CategoryId,
     bool IsLocked,
@@ -42,8 +40,7 @@ public sealed record CreditCardPurchaseDto(
             purchase.InitialInstallment,
             firstActive.Year,
             firstActive.Month,
-            purchase.Condition.Kind,
-            purchase.Condition.Name,
+            purchase.ConditionId,
             purchase.Description,
             purchase.CategoryId,
             purchase.IsLockedAt(today),
@@ -56,29 +53,5 @@ public sealed record CreditCardPurchaseDto(
                     installment.Cycle.DueDate,
                     installment.IsPreviouslyPaid))
                 .ToList());
-    }
-}
-
-internal static class PurchaseConditionMapper
-{
-    public static PurchaseCondition ToDomain(PurchaseConditionKind kind, string? name) =>
-        kind switch
-        {
-            PurchaseConditionKind.Own => EnsureNoName(PurchaseCondition.Own, name),
-            PurchaseConditionKind.Others => EnsureNoName(PurchaseCondition.Others, name),
-            PurchaseConditionKind.Custom => PurchaseCondition.Custom(name!),
-            _ => throw new ArgumentOutOfRangeException(
-                nameof(kind), kind, "The purchase condition kind is not known."),
-        };
-
-    private static PurchaseCondition EnsureNoName(PurchaseCondition condition, string? name)
-    {
-        if (!string.IsNullOrWhiteSpace(name))
-        {
-            throw new ArgumentException(
-                "A condition name can only be provided when the kind is Custom.", nameof(name));
-        }
-
-        return condition;
     }
 }

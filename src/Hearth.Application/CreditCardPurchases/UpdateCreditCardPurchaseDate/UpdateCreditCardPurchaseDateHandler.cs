@@ -40,13 +40,8 @@ public sealed class UpdateCreditCardPurchaseDateHandler
         var purchase = await _purchases.GetByIdAsync(command.PurchaseId, cancellationToken)
                        ?? throw new NotFoundException(nameof(CreditCardPurchase), command.PurchaseId);
 
-        var account = await _accountAccess.EnsureCanAccessEntityAsync(
+        await _accountAccess.EnsureCanAccessEntityAsync(
             purchase.AccountId, nameof(CreditCardPurchase), purchase.Id, cancellationToken);
-
-        if (!purchase.IsLockedAt(_clock.Today))
-        {
-            purchase.EnsureFirstActiveDueDateIsOpen(command.NewDate, account, _clock.Today);
-        }
 
         purchase.UpdateDate(command.NewDate, _clock.Today);
 

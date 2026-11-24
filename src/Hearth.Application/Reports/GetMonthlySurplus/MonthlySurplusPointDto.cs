@@ -17,6 +17,12 @@ public sealed record MonthlySurplusPointDto(
     decimal ProjectedSurplus,
     decimal NetMonthlyVariation)
 {
+    /// <summary>
+    /// True on the current month, where <see cref="DirectExpenses"/> counts only future/scheduled
+    /// direct expenses (<c>Date &gt; today</c>) because earlier ones are already inside <see cref="StartingCashBalance"/>.
+    /// </summary>
+    public bool DirectExpensesAreFutureOnly => IsCurrentMonth;
+
     internal static MonthlySurplusPointDto FromDomain(MonthlySurplus point) =>
         new(
             point.Month.Year,

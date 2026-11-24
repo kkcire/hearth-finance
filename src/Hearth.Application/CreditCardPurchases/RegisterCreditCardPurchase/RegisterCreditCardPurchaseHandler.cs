@@ -2,6 +2,7 @@ using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
 using Hearth.Application.Categories;
 using Hearth.Application.Exceptions;
+using Hearth.Application.PurchaseConditions;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 
@@ -12,30 +13,30 @@ public sealed class RegisterCreditCardPurchaseHandler
     private readonly AccountAccessGuard _accountAccess;
     private readonly ICreditCardRepository _creditCards;
     private readonly ICategoryRepository _categories;
+    private readonly IPurchaseConditionRepository _conditions;
     private readonly ICreditCardPurchaseRepository _purchases;
-    private readonly IClock _clock;
     private readonly IUnitOfWork _unitOfWork;
 
     public RegisterCreditCardPurchaseHandler(
         AccountAccessGuard accountAccess,
         ICreditCardRepository creditCards,
         ICategoryRepository categories,
+        IPurchaseConditionRepository conditions,
         ICreditCardPurchaseRepository purchases,
-        IClock clock,
         IUnitOfWork unitOfWork)
     {
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(creditCards);
         ArgumentNullException.ThrowIfNull(categories);
+        ArgumentNullException.ThrowIfNull(conditions);
         ArgumentNullException.ThrowIfNull(purchases);
-        ArgumentNullException.ThrowIfNull(clock);
         ArgumentNullException.ThrowIfNull(unitOfWork);
 
         _accountAccess = accountAccess;
         _creditCards = creditCards;
         _categories = categories;
+        _conditions = conditions;
         _purchases = purchases;
-        _clock = clock;
         _unitOfWork = unitOfWork;
     }
 
@@ -46,7 +47,6 @@ public sealed class RegisterCreditCardPurchaseHandler
         ArgumentNullException.ThrowIfNull(command);
 
         var amount = Money.FromDecimal(command.Amount);
-        var condition = PurchaseConditionMapper.ToDomain(command.ConditionKind, command.ConditionName);
 
         var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
 
@@ -61,6 +61,9 @@ public sealed class RegisterCreditCardPurchaseHandler
         await CategoryValidation.EnsureUsableForUserAsync(
             _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
+        await PurchaseConditionValidation.EnsureUsableForUserAsync(
+            _conditions, account.OwnerUserId, command.ConditionId, cancellationToken);
+
         var purchase = CreditCardPurchase.Create(
             Guid.CreateVersion7(),
             account.Id,
@@ -70,11 +73,9 @@ public sealed class RegisterCreditCardPurchaseHandler
             command.InstallmentCount,
             command.InitialInstallment,
             card.BillingRule,
-            condition,
+            command.ConditionId,
             command.Description,
             command.CategoryId);
-
-        purchase.EnsureFirstActiveDueDateIsOpen(account, _clock.Today);
 
         await _purchases.AddAsync(purchase, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

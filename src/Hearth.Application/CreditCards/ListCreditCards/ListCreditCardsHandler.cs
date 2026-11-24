@@ -42,7 +42,7 @@ public sealed class ListCreditCardsHandler
             .Where(card => query.IncludeArchived || !card.IsArchived)
             .OrderBy(card => card.IsArchived)
             .ThenBy(card => card.Name ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .Select(card => CreditCardDto.FromEntity(card, today, purchases))
+            .Select(card => CreditCardDto.FromEntity(card, today, purchases, account.InitialBalanceDate))
             .ToList();
     }
 }

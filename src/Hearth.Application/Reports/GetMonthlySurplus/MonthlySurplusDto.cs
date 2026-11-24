@@ -7,7 +7,8 @@ public sealed record MonthlySurplusDto(
     DateOnly AsOfDate,
     MonthlySurplusPointDto SelectedMonth,
     IReadOnlyList<MonthlySurplusPointDto> Series,
-    decimal AverageMonthlyVariation)
+    decimal AverageMonthlyVariation,
+    Guid? ConditionId = null)
 {
     internal static MonthlySurplusDto FromDomain(Guid accountId, MonthlySurplusSeries series) =>
         new(
@@ -15,5 +16,6 @@ public sealed record MonthlySurplusDto(
             series.AsOfDate,
             MonthlySurplusPointDto.FromDomain(series.SelectedMonth),
             series.Points.Select(MonthlySurplusPointDto.FromDomain).ToList(),
-            series.AverageMonthlyVariation.Amount);
+            series.AverageMonthlyVariation.Amount,
+            series.ConditionId);
 }
