@@ -12,7 +12,6 @@ public sealed class CreditCardPurchase
     private CreditCardPurchase()
     {
         Rule = null!;
-        Condition = null!;
         Description = null!;
     }
 
@@ -25,7 +24,7 @@ public sealed class CreditCardPurchase
         int installmentCount,
         int initialInstallment,
         CardBillingRule rule,
-        PurchaseCondition condition,
+        Guid conditionId,
         string description,
         Guid categoryId)
     {
@@ -37,7 +36,7 @@ public sealed class CreditCardPurchase
         InstallmentCount = installmentCount;
         InitialInstallment = initialInstallment;
         Rule = rule;
-        Condition = condition;
+        ConditionId = conditionId;
         Description = description;
         CategoryId = categoryId;
     }
@@ -66,7 +65,7 @@ public sealed class CreditCardPurchase
 
     public CardBillingRule Rule { get; }
 
-    public PurchaseCondition Condition { get; private set; }
+    public Guid ConditionId { get; private set; }
 
     public string Description { get; private set; }
 
@@ -87,7 +86,7 @@ public sealed class CreditCardPurchase
         int installmentCount,
         int initialInstallment,
         CardBillingRule rule,
-        PurchaseCondition condition,
+        Guid conditionId,
         string description,
         Guid categoryId)
     {
@@ -95,7 +94,7 @@ public sealed class CreditCardPurchase
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         DomainValidation.EnsureNotEmpty(creditCardId, nameof(creditCardId), "credit card id");
         ArgumentNullException.ThrowIfNull(rule);
-        ArgumentNullException.ThrowIfNull(condition);
+        DomainValidation.EnsureNotEmpty(conditionId, nameof(conditionId), "purchase condition id");
 
         if (installmentCount < 1)
         {
@@ -125,7 +124,7 @@ public sealed class CreditCardPurchase
             installmentCount,
             initialInstallment,
             CardBillingRule.Of(rule.ClosingDay, rule.DueDay),
-            condition with { },
+            conditionId,
             validDescription,
             categoryId);
     }
@@ -161,47 +160,14 @@ public sealed class CreditCardPurchase
         GetInstallments().Where(installment => !installment.IsPreviouslyPaid);
 
     /// <summary>
-    /// True once the invoice of the first installment that still counts has closed.
-    /// From then on the amount and the date can no longer be changed.
+    /// True once at least one active installment belongs to a paid invoice
+    /// (<see cref="InvoiceStatus.Paid"/>, i.e., on or after <see cref="FirstActiveCycle"/>'s due date).
+    /// From then on the amount, date, and deletion are locked to protect settled cash history.
     /// </summary>
     public bool IsLockedAt(DateOnly today) =>
-        today >= FirstActiveCycle.ClosingDate;
+        today >= FirstActiveCycle.DueDate;
 
-    /// <summary>
-    /// Ensures the first active installment's due date is on or after both the account's
-    /// initial balance date and <paramref name="today"/>. Purchase dates before the initial
-    /// balance date are allowed as long as the first active due date is still open.
-    /// </summary>
-    /// <exception cref="DomainException">
-    /// The first active installment's due date is before the account's initial balance date or before <paramref name="today"/>.
-    /// </exception>
-    public void EnsureFirstActiveDueDateIsOpen(Account account, DateOnly today)
-    {
-        ArgumentNullException.ThrowIfNull(account);
-
-        EnsureDueDateIsOpen(FirstActiveCycle.DueDate, account, today);
-    }
-
-    /// <summary>
-    /// Validates that moving this purchase to <paramref name="purchaseDate"/> keeps the first
-    /// active installment's due date on or after both the account's initial balance date and <paramref name="today"/>.
-    /// </summary>
-    /// <exception cref="DomainException">
-    /// The resulting first active installment's due date is before the account's initial balance date or before <paramref name="today"/>.
-    /// </exception>
-    public void EnsureFirstActiveDueDateIsOpen(DateOnly purchaseDate, Account account, DateOnly today)
-    {
-        ArgumentNullException.ThrowIfNull(account);
-        EnsureConsistent(purchaseDate, Amount, InstallmentCount, Rule);
-
-        var dueDate = BillingCycle.ForPurchase(purchaseDate, Rule)
-            .AddCycles(InitialInstallment - 1)
-            .DueDate;
-
-        EnsureDueDateIsOpen(dueDate, account, today);
-    }
-
-    /// <exception cref="DomainException">The invoice has already closed or the amount cannot be split.</exception>
+    /// <exception cref="DomainException">A linked invoice has already been paid or the amount cannot be split.</exception>
     public void UpdateAmount(Money newAmount, DateOnly today)
     {
         EnsureEditable(today);
@@ -211,31 +177,31 @@ public sealed class CreditCardPurchase
     }
 
     /// <exception cref="DomainException">
-    /// The invoice has already closed, or the new date moves the first counting installment into an already closed cycle.
+    /// A linked invoice has already been paid, or the new date moves the first counting installment into an already paid invoice.
     /// </exception>
     public void UpdateDate(DateOnly newDate, DateOnly today)
     {
         EnsureEditable(today);
         EnsureConsistent(newDate, Amount, InstallmentCount, Rule);
 
-        var targetClosingDate = BillingCycle.ForPurchase(newDate, Rule)
+        var targetDueDate = BillingCycle.ForPurchase(newDate, Rule)
             .AddCycles(InitialInstallment - 1)
-            .ClosingDate;
+            .DueDate;
 
-        if (today >= targetClosingDate)
+        if (today >= targetDueDate)
         {
             throw new DomainException(
-                "The purchase date cannot be moved to a cycle whose invoice has already closed.");
+                "The purchase date cannot be moved to a cycle whose invoice has already been paid.");
         }
 
         Date = newDate;
     }
 
-    public void UpdateCondition(PurchaseCondition condition)
+    public void UpdateCondition(Guid conditionId)
     {
-        ArgumentNullException.ThrowIfNull(condition);
+        DomainValidation.EnsureNotEmpty(conditionId, nameof(conditionId), "purchase condition id");
 
-        Condition = condition;
+        ConditionId = conditionId;
     }
 
     public void UpdateDescription(string description)
@@ -256,22 +222,7 @@ public sealed class CreditCardPurchase
         if (IsLockedAt(today))
         {
             throw new DomainException(
-                "The amount and the date cannot be changed after the invoice has closed.");
-        }
-    }
-
-    private void EnsureDueDateIsOpen(DateOnly dueDate, Account account, DateOnly today)
-    {
-        if (!account.CanRegisterOn(dueDate))
-        {
-            throw new DomainException(
-                $"Installment {InitialInstallment}/{InstallmentCount} due date ({dueDate:yyyy-MM-dd}) cannot be before the initial balance date ({account.InitialBalanceDate:yyyy-MM-dd}).");
-        }
-
-        if (dueDate < today)
-        {
-            throw new DomainException(
-                $"Installment {InitialInstallment}/{InstallmentCount} due date ({dueDate:yyyy-MM-dd}) has already passed. Advance the initial installment to skip already-paid cycles.");
+                "The amount and the date cannot be changed after a linked invoice has been paid.");
         }
     }
 

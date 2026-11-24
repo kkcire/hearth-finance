@@ -25,7 +25,8 @@ public static class ProjectedResultCalculator
         IEnumerable<Income> incomes,
         IEnumerable<DirectExpense> directExpenses,
         IEnumerable<FixedExpense> fixedExpenses,
-        IEnumerable<CreditCardPurchase> purchases)
+        IEnumerable<CreditCardPurchase> purchases,
+        Guid? conditionId = null)
     {
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
         ArgumentNullException.ThrowIfNull(month);
@@ -33,6 +34,7 @@ public static class ProjectedResultCalculator
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
+        DomainValidation.EnsureOptionalNotEmpty(conditionId, nameof(conditionId), "condition id");
 
         var incomesTotal = Money.Sum(
             incomes
@@ -51,8 +53,8 @@ public static class ProjectedResultCalculator
                 .Where(amount => amount.HasValue)
                 .Select(amount => amount!.Value));
 
-        var invoice = InvoiceCalculator.Calculate(accountId, month, purchases);
+        var invoice = InvoiceCalculator.Calculate(accountId, month, purchases, conditionId);
 
-        return new ProjectedResult(month, incomesTotal, invoice, directExpensesTotal, fixedExpensesTotal);
+        return new ProjectedResult(month, incomesTotal, invoice, directExpensesTotal, fixedExpensesTotal, conditionId);
     }
 }

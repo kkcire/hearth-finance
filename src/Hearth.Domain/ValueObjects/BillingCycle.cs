@@ -109,6 +109,22 @@ public sealed record BillingCycle
     }
 
     /// <summary>
+    /// Returns the cycle whose <see cref="DueMonth"/> equals <paramref name="dueMonth"/>
+    /// under <paramref name="rule"/>.
+    /// </summary>
+    public static BillingCycle DueIn(YearMonth dueMonth, CardBillingRule rule)
+    {
+        ArgumentNullException.ThrowIfNull(dueMonth);
+        ArgumentNullException.ThrowIfNull(rule);
+
+        var closingMonth = rule.DueDay > rule.ClosingDay
+            ? dueMonth
+            : dueMonth.AddMonths(-1);
+
+        return Closing(closingMonth, rule);
+    }
+
+    /// <summary>
     /// Returns the cycle to which a purchase made on the given date belongs. A purchase made
     /// before the closing day goes to the cycle closing in the same month; from the closing
     /// day on, it goes to the cycle closing in the next month.

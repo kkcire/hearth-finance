@@ -90,6 +90,21 @@ public sealed class CreditCard
         return true;
     }
 
+    /// <summary>
+    /// Restores an archived credit card so it can be edited and receive new purchases again.
+    /// Idempotent.
+    /// </summary>
+    public bool Restore()
+    {
+        if (!IsArchived)
+        {
+            return false;
+        }
+
+        IsArchived = false;
+        return true;
+    }
+
     public void EnsureActive()
     {
         if (IsArchived)

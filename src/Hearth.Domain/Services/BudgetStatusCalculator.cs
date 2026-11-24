@@ -20,13 +20,13 @@ public static class BudgetStatusCalculator
         bool includeDirectExpenses = true,
         bool includeFixedExpenses = true,
         bool includeCardInstallments = true,
-        IReadOnlyCollection<PurchaseCondition>? includedConditions = null)
+        IReadOnlyCollection<Guid>? includedConditionIds = null)
     {
         var filter = SpendingFilter.Create(
             includeDirectExpenses,
             includeFixedExpenses,
             includeCardInstallments,
-            includedConditions);
+            includedConditionIds);
 
         return Calculate(accountId, month, budgets, directExpenses, fixedExpenses, purchases, filter);
     }

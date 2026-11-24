@@ -12,26 +12,51 @@ public static class InvoiceCalculator
     /// <summary>
     /// Sums the installments of the account's purchases that fall in the cycle closing in the given
     /// month. Installments before the initial one of a purchase in progress are considered paid and
-    /// never count. Direct expenses and fixed expenses are not part of the invoice, and the purchase
-    /// condition (own, others, custom) is only a label, so none of them changes the result.
+    /// never count. When <paramref name="conditionId"/> is provided, only purchases matching that
+    /// condition are included; when <see langword="null"/>, all conditions are summed.
     /// </summary>
     /// <returns>The calculated amount, or zero when no installment falls in the cycle.</returns>
     public static Money Calculate(
         Guid accountId,
         YearMonth closingMonth,
-        IEnumerable<CreditCardPurchase> purchases)
+        IEnumerable<CreditCardPurchase> purchases,
+        Guid? conditionId = null)
+    {
+        ArgumentNullException.ThrowIfNull(closingMonth);
+        return SumInstallments(accountId, purchases, conditionId, cycle => cycle.ClosingMonth == closingMonth);
+    }
+
+    /// <summary>
+    /// Sums the active installments of the account's purchases whose <see cref="BillingCycle.DueMonth"/>
+    /// falls in <paramref name="dueMonth"/>. When <paramref name="conditionId"/> is provided, only
+    /// purchases matching that condition are included.
+    /// </summary>
+    public static Money CalculateByDueMonth(
+        Guid accountId,
+        YearMonth dueMonth,
+        IEnumerable<CreditCardPurchase> purchases,
+        Guid? conditionId = null)
+    {
+        ArgumentNullException.ThrowIfNull(dueMonth);
+        return SumInstallments(accountId, purchases, conditionId, cycle => cycle.DueMonth == dueMonth);
+    }
+
+    private static Money SumInstallments(
+        Guid accountId,
+        IEnumerable<CreditCardPurchase> purchases,
+        Guid? conditionId,
+        Func<BillingCycle, bool> cyclePredicate)
     {
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
-        ArgumentNullException.ThrowIfNull(closingMonth);
         ArgumentNullException.ThrowIfNull(purchases);
+        DomainValidation.EnsureOptionalNotEmpty(conditionId, nameof(conditionId), "condition id");
 
-        // A cycle is identified by its closing month. Matching on the month alone, not on the whole
-        // cycle, keeps purchases created with a previous closing day on the invoice they were given.
         return Money.Sum(
             purchases
-                .Where(purchase => purchase.AccountId == accountId)
+                .Where(purchase => purchase.AccountId == accountId
+                                   && (!conditionId.HasValue || purchase.ConditionId == conditionId.Value))
                 .SelectMany(purchase => purchase.GetActiveInstallments())
-                .Where(installment => installment.Cycle.ClosingMonth == closingMonth)
+                .Where(installment => cyclePredicate(installment.Cycle))
                 .Select(installment => installment.Amount));
     }
 }

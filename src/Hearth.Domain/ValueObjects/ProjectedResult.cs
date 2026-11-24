@@ -11,16 +11,21 @@ public sealed record ProjectedResult
         Money incomes,
         Money cardInvoice,
         Money directExpenses,
-        Money fixedExpenses)
+        Money fixedExpenses,
+        Guid? conditionId = null)
     {
         Month = month;
         Incomes = incomes;
         CardInvoice = cardInvoice;
         DirectExpenses = directExpenses;
         FixedExpenses = fixedExpenses;
+        ConditionId = conditionId;
     }
 
     public YearMonth Month { get; }
+
+    /// <summary>Optional purchase condition filter applied to <see cref="CardInvoice"/> (<see langword="null"/> = all conditions).</summary>
+    public Guid? ConditionId { get; }
 
     /// <summary>Every income expected in the month (salary included), received or not.</summary>
     public Money Incomes { get; }

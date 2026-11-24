@@ -11,16 +11,26 @@ public sealed record MonthlySurplusSeries
         DateOnly asOfDate,
         MonthlySurplus selectedMonth,
         IReadOnlyList<MonthlySurplus> points,
-        Money averageMonthlyVariation)
+        Money averageMonthlyVariation,
+        Guid? conditionId = null)
     {
         AsOfDate = asOfDate;
         SelectedMonth = selectedMonth;
         Points = points;
         AverageMonthlyVariation = averageMonthlyVariation;
+        ConditionId = conditionId;
     }
 
     /// <summary>The reference date (<c>today</c>) used as the cash cutoff.</summary>
     public DateOnly AsOfDate { get; }
+
+    /// <summary>
+    /// Optional purchase condition filter applied exclusively to pending and future credit card
+    /// installments in the projection (<see langword="null"/> = all conditions). The account's real
+    /// cash balance (<see cref="MonthlySurplus.StartingCashBalance"/> on the current month and
+    /// historical closings) is never altered or masked by this filter.
+    /// </summary>
+    public Guid? ConditionId { get; }
 
     /// <summary>Detailed monthly surplus cascade for the requested month.</summary>
     public MonthlySurplus SelectedMonth { get; }
@@ -47,6 +57,7 @@ public sealed record MonthlySurplusSeries
         }
 
         return AsOfDate == other.AsOfDate
+               && ConditionId == other.ConditionId
                && SelectedMonth == other.SelectedMonth
                && AverageMonthlyVariation == other.AverageMonthlyVariation
                && Points.SequenceEqual(other.Points);
@@ -56,6 +67,7 @@ public sealed record MonthlySurplusSeries
     {
         var hash = new HashCode();
         hash.Add(AsOfDate);
+        hash.Add(ConditionId);
         hash.Add(SelectedMonth);
         hash.Add(AverageMonthlyVariation);
         foreach (var point in Points)

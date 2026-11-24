@@ -43,8 +43,9 @@ public sealed class Account
 
     /// <summary>
     /// The account creation date (reference date of the initial balance). Direct cash movements
-    /// cannot be registered before it; credit card purchases are validated by their first active
-    /// installment due date. Always immutable.
+    /// cannot be registered before it; credit card purchases can be registered freely for invoice
+    /// history while installments with due dates before it are ignored by cash, limit and surplus calculations.
+    /// Always immutable.
     /// </summary>
     public DateOnly InitialBalanceDate { get; }
 

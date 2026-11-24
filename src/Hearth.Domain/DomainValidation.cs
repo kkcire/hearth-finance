@@ -40,6 +40,14 @@ public static class DomainValidation
         }
     }
 
+    internal static void EnsureOptionalNotEmpty(Guid? id, string paramName, string label = "id")
+    {
+        if (id.HasValue)
+        {
+            EnsureNotEmpty(id.Value, paramName, label);
+        }
+    }
+
     internal static void EnsurePositiveAmount(Money amount, string paramName, string label = "amount")
     {
         if (amount <= Money.Zero)

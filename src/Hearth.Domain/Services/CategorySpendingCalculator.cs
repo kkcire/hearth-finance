@@ -18,13 +18,13 @@ public static class CategorySpendingCalculator
         bool includeDirectExpenses = true,
         bool includeFixedExpenses = true,
         bool includeCardInstallments = true,
-        IReadOnlyCollection<PurchaseCondition>? includedConditions = null)
+        IReadOnlyCollection<Guid>? includedConditionIds = null)
     {
         var filter = SpendingFilter.Create(
             includeDirectExpenses,
             includeFixedExpenses,
             includeCardInstallments,
-            includedConditions);
+            includedConditionIds);
 
         return Calculate(accountId, month, directExpenses, fixedExpenses, purchases, filter);
     }
@@ -103,7 +103,7 @@ public static class CategorySpendingCalculator
     {
         foreach (var purchase in purchases)
         {
-            if (purchase.AccountId != accountId || !filter.MatchesCondition(purchase.Condition))
+            if (purchase.AccountId != accountId || !filter.MatchesCondition(purchase.ConditionId))
             {
                 continue;
             }

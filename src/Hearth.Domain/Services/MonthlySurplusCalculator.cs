@@ -16,6 +16,9 @@ public static class MonthlySurplusCalculator
     /// <summary>
     /// Computes the monthly surplus cascade for <paramref name="selectedMonth"/> and the
     /// chronological evolution series anchored on <paramref name="today"/>.
+    /// When <paramref name="conditionId"/> is provided, only pending and future credit card
+    /// installments matching that condition are included in the projected invoice cascade;
+    /// the account's real cash balance (<see cref="RealBalanceCalculator"/>) is never masked.
     /// </summary>
     public static MonthlySurplusSeries CalculateSeries(
         Account account,
@@ -26,7 +29,8 @@ public static class MonthlySurplusCalculator
         IEnumerable<FixedExpense> fixedExpenses,
         IEnumerable<CreditCardPurchase> purchases,
         int pastMonths = DefaultPastMonths,
-        int futureMonths = DefaultFutureMonths)
+        int futureMonths = DefaultFutureMonths,
+        Guid? conditionId = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(selectedMonth);
@@ -34,6 +38,7 @@ public static class MonthlySurplusCalculator
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
+        DomainValidation.EnsureOptionalNotEmpty(conditionId, nameof(conditionId), "condition id");
 
         if (pastMonths < 0)
         {
@@ -47,7 +52,7 @@ public static class MonthlySurplusCalculator
                 nameof(futureMonths), futureMonths, "Future months cannot be negative.");
         }
 
-        var data = AccountCashData.FilterFor(account, incomes, directExpenses, fixedExpenses, purchases);
+        var data = AccountCashData.FilterFor(account, incomes, directExpenses, fixedExpenses, purchases, conditionId);
         var currentMonth = YearMonth.From(today);
         var initialMonth = YearMonth.From(account.InitialBalanceDate);
 
@@ -66,7 +71,7 @@ public static class MonthlySurplusCalculator
             data, selectedMonth, initialMonth, currentMonth, historicalPoints, currentPoint, futurePoints);
         var averageVariation = CalculateAverageVariation(seriesPoints);
 
-        return new MonthlySurplusSeries(today, selectedPoint, seriesPoints, averageVariation);
+        return new MonthlySurplusSeries(today, selectedPoint, seriesPoints, averageVariation, conditionId);
     }
 
     private static YearMonth DetermineWindowStart(YearMonth currentMonth, YearMonth initialMonth, int pastMonths)
@@ -261,7 +266,7 @@ public static class MonthlySurplusCalculator
                 .Select(income => income.Amount));
 
         var cardInvoiceDue = Money.Sum(
-            data.ActiveInstallments
+            data.FilteredActiveInstallments
                 .Where(installment => installment.Cycle.DueMonth == month
                                       && installment.Cycle.DueDate > cutoffDate
                                       && data.Account.CanRegisterOn(installment.Cycle.DueDate))
@@ -380,7 +385,8 @@ public static class MonthlySurplusCalculator
             IReadOnlyList<DirectExpense> directExpenses,
             IReadOnlyList<FixedExpense> fixedExpenses,
             IReadOnlyList<CreditCardPurchase> purchases,
-            IReadOnlyList<Installment> activeInstallments)
+            IReadOnlyList<Installment> activeInstallments,
+            IReadOnlyList<Installment> filteredActiveInstallments)
         {
             Account = account;
             Incomes = incomes;
@@ -388,6 +394,7 @@ public static class MonthlySurplusCalculator
             FixedExpenses = fixedExpenses;
             Purchases = purchases;
             ActiveInstallments = activeInstallments;
+            FilteredActiveInstallments = filteredActiveInstallments;
         }
 
         public Account Account { get; }
@@ -398,16 +405,22 @@ public static class MonthlySurplusCalculator
 
         public IReadOnlyList<FixedExpense> FixedExpenses { get; }
 
+        /// <summary>All account purchases (unfiltered), used exclusively for real cash balance integrity.</summary>
         public IReadOnlyList<CreditCardPurchase> Purchases { get; }
 
+        /// <summary>All active installments (unfiltered), used for realized historical cash closings.</summary>
         public IReadOnlyList<Installment> ActiveInstallments { get; }
+
+        /// <summary>Active installments filtered by optional condition, used for pending and future projections.</summary>
+        public IReadOnlyList<Installment> FilteredActiveInstallments { get; }
 
         public static AccountCashData FilterFor(
             Account account,
             IEnumerable<Income> incomes,
             IEnumerable<DirectExpense> directExpenses,
             IEnumerable<FixedExpense> fixedExpenses,
-            IEnumerable<CreditCardPurchase> purchases)
+            IEnumerable<CreditCardPurchase> purchases,
+            Guid? conditionId)
         {
             var accountIncomes = incomes.Where(income => income.AccountId == account.Id).ToList();
             var accountDirects = directExpenses.Where(expense => expense.AccountId == account.Id).ToList();
@@ -416,6 +429,12 @@ public static class MonthlySurplusCalculator
             var activeInstallments = accountPurchases
                 .SelectMany(purchase => purchase.GetActiveInstallments())
                 .ToList();
+            var filteredActiveInstallments = conditionId is { } targetConditionId
+                ? accountPurchases
+                    .Where(purchase => purchase.ConditionId == targetConditionId)
+                    .SelectMany(purchase => purchase.GetActiveInstallments())
+                    .ToList()
+                : activeInstallments;
 
             return new AccountCashData(
                 account,
@@ -423,7 +442,8 @@ public static class MonthlySurplusCalculator
                 accountDirects,
                 accountFixed,
                 accountPurchases,
-                activeInstallments);
+                activeInstallments,
+                filteredActiveInstallments);
         }
     }
 }
