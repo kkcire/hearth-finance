@@ -10,189 +10,207 @@
 @using Hearth.Application.DirectExpenses.UpdateDirectExpense
 @using Hearth.Web.Components.Shared
 
-<PageTitle>Gastos Diretos — Hearth</PageTitle>
+<PageTitle>Gastos Diretos — Hearth Finance</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
-    <MudText Typo="Typo.h4">Gastos Diretos</MudText>
+<div class="hearth-page">
+    <header class="hearth-page-header">
+        <div class="hearth-dash-title-group">
+            <h1 class="hearth-dash-title">Gastos diretos</h1>
+            <p class="hearth-dash-subtitle">
+                Saídas à vista em conta, Pix ou débito que impactam o caixa na data do lançamento.
+            </p>
+        </div>
 
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-        @if (!_showAllMonths)
+        <div class="hearth-page-header-actions">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="hearth-btn-clean"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="StartCreate"
+                       Disabled="_saving || ActiveCategories.Count == 0"
+                       data-testid="new-direct-expense-button">
+                Novo gasto
+            </MudButton>
+        </div>
+    </header>
+
+    <div class="hearth-command-bar">
+        <div class="hearth-command-controls">
+            @if (!_showAllMonths)
+            {
+                <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+            }
+
+            <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
+        </div>
+
+        @if (!_loading)
         {
-            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+            <div class="hearth-summary-metrics hearth-money">
+                <span class="hearth-summary-metric">@FilteredExpenses.Count lançamento(s)</span>
+                <span class="hearth-summary-metric" data-testid="direct-expenses-total">
+                    Total: <strong>@HearthFormat.Money(FilteredExpenses.Sum(item => item.Amount))</strong>
+                </span>
+            </div>
         }
+    </div>
 
-        <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
+    @if (_showForm)
+    {
+        <section class="hearth-form-panel" data-testid="direct-expense-form">
+            <h2 class="hearth-card-title">
+                @(_editingId.HasValue ? "Editar gasto direto" : "Novo gasto direto")
+            </h2>
 
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="StartCreate"
-                   Disabled="_saving || ActiveCategories.Count == 0"
-                   data-testid="new-direct-expense-button">
-            Novo gasto
-        </MudButton>
-    </MudStack>
-</MudStack>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_description"
+                                  Label="Descrição"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Counter="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="direct-description-input" />
+                </MudItem>
 
-@if (_showForm)
-{
-    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="direct-expense-form">
-        <MudText Typo="Typo.h6" GutterBottom="true">
-            @(_editingId.HasValue ? "Editar gasto direto" : "Novo gasto direto")
-        </MudText>
-
-        <MudGrid Spacing="3">
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_description"
-                              Label="Descrição"
-                              Variant="Variant.Outlined"
-                              Required="true"
-                              MaxLength="@DomainValidation.MaxDescriptionLength"
-                              Counter="@DomainValidation.MaxDescriptionLength"
-                              Immediate="true"
-                              Disabled="_saving"
-                              data-testid="direct-description-input" />
-            </MudItem>
-
-            <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?"
-                           @bind-Value="_categoryId"
-                           Label="Categoria"
-                           Variant="Variant.Outlined"
-                           Required="true"
-                           Disabled="_saving"
-                           data-testid="direct-category-select">
-                    @foreach (var category in AvailableCategoriesForForm)
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
-                            @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
-                        </MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-
-            <MudItem xs="12" sm="6">
-                <MudNumericField T="decimal"
-                                 @bind-Value="_amount"
-                                 Label="Valor"
-                                 Variant="Variant.Outlined"
-                                 Culture="@HearthFormat.PtBr"
-                                 Format="N2"
-                                 Adornment="Adornment.Start"
-                                 AdornmentText="R$"
-                                 HideSpinButtons="true"
-                                 Disabled="_saving"
-                                 data-testid="direct-amount-input" />
-            </MudItem>
-
-            <MudItem xs="12" sm="6">
-                <MudDatePicker @bind-Date="_date"
-                               Label="Data do gasto"
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?"
+                               @bind-Value="_categoryId"
+                               Label="Categoria"
                                Variant="Variant.Outlined"
-                               DateFormat="dd/MM/yyyy"
-                               Culture="@HearthFormat.PtBr"
-                               Editable="true"
+                               Required="true"
                                Disabled="_saving"
-                               data-testid="direct-date-input" />
-            </MudItem>
+                               data-testid="direct-category-select">
+                        @foreach (var category in AvailableCategoriesForForm)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
+                                @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
 
-            <MudItem xs="12">
-                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
-                    <MudButton Variant="Variant.Text" OnClick="CloseForm" Disabled="_saving">Cancelar</MudButton>
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               OnClick="SaveAsync"
-                               Disabled="_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0 || !_date.HasValue"
-                               data-testid="save-direct-expense">
-                        @(_saving ? "Salvando..." : "Salvar")
-                    </MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+                <MudItem xs="12" sm="6">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_amount"
+                                     Label="Valor"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     Disabled="_saving"
+                                     data-testid="direct-amount-input" />
+                </MudItem>
 
-@if (_loading)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else
-{
-    <MudPaper Elevation="2" Class="mb-3 pa-3">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center">
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                @FilteredExpenses.Count lançamento(s)
-            </MudText>
-            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;" data-testid="direct-expenses-total">
-                Total: @HearthFormat.Money(FilteredExpenses.Sum(item => item.Amount))
-            </MudText>
-        </MudStack>
-    </MudPaper>
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_date"
+                                   Label="Data do gasto"
+                                   Variant="Variant.Outlined"
+                                   DateFormat="dd/MM/yyyy"
+                                   Culture="@HearthFormat.PtBr"
+                                   Editable="true"
+                                   Disabled="_saving"
+                                   data-testid="direct-date-input" />
+                </MudItem>
 
-    <MudPaper Elevation="2">
-        <MudTable Items="FilteredExpenses" Hover="true" Dense="true" Elevation="0">
-            <HeaderContent>
-                <MudTh Style="width: 120px;">Data</MudTh>
-                <MudTh>Descrição</MudTh>
-                <MudTh>Categoria</MudTh>
-                <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
-                <MudTh Style="width: 190px; text-align: right;">Ações</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                <MudTd DataLabel="Data">@HearthFormat.Date(context.Date)</MudTd>
-                <MudTd DataLabel="Descrição">@context.Description</MudTd>
-                <MudTd DataLabel="Categoria">@GetCategoryName(context.CategoryId)</MudTd>
-                <MudTd DataLabel="Valor" Style="text-align: right; font-weight: 500;">
-                    @HearthFormat.Money(context.Amount)
-                </MudTd>
-                <MudTd DataLabel="Ações" Style="text-align: right;">
-                    @if (_confirmDeleteId == context.Id)
-                    {
-                        <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="1">
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Filled"
-                                       Color="Color.Error"
-                                       OnClick="() => DeleteAsync(context.Id)"
-                                       Disabled="_saving"
-                                       data-testid="@($"confirm-delete-direct-{context.Id}")">
-                                Confirmar
-                            </MudButton>
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Text"
-                                       OnClick="() => _confirmDeleteId = null"
-                                       Disabled="_saving">
-                                Cancelar
-                            </MudButton>
-                        </MudStack>
-                    }
-                    else
-                    {
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Size="Size.Small"
-                                           title="Editar"
-                                           OnClick="() => StartEdit(context)"
-                                           Disabled="_saving"
-                                           data-testid="@($"edit-direct-{context.Id}")" />
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Size="Size.Small"
+                <MudItem xs="12">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton Variant="Variant.Text" OnClick="CloseForm" Disabled="_saving">Cancelar</MudButton>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Class="hearth-btn-clean"
+                                   OnClick="SaveAsync"
+                                   Disabled="_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0 || !_date.HasValue"
+                                   data-testid="save-direct-expense">
+                            @(_saving ? "Salvando…" : "Salvar")
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
+
+    @if (_loading)
+    {
+        <div class="hearth-card hearth-skeleton-panel"></div>
+    }
+    else
+    {
+        <section class="hearth-table-shell" aria-label="Lista de gastos diretos">
+            <MudTable Items="FilteredExpenses" Hover="true" Dense="true" Elevation="0" Class="hearth-data-table">
+                <HeaderContent>
+                    <MudTh Style="width: 116px;">Data</MudTh>
+                    <MudTh>Descrição</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
+                    <MudTh Style="width: 140px; text-align: right;">Ações</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Data" Class="hearth-money hearth-cell-muted">@HearthFormat.Date(context.Date)</MudTd>
+                    <MudTd DataLabel="Descrição" Class="hearth-cell-title">@context.Description</MudTd>
+                    <MudTd DataLabel="Categoria" Class="hearth-cell-muted">@GetCategoryName(context.CategoryId)</MudTd>
+                    <MudTd DataLabel="Valor" Class="hearth-cell-amount">
+                        @HearthFormat.Money(context.Amount)
+                    </MudTd>
+                    <MudTd DataLabel="Ações" Style="text-align: right;">
+                        @if (_confirmDeleteId == context.Id)
+                        {
+                            <MudStack Row="true" Justify="Justify.FlexEnd" AlignItems="AlignItems.Center" Spacing="1">
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Filled"
                                            Color="Color.Error"
-                                           title="Excluir"
-                                           OnClick="() => _confirmDeleteId = context.Id"
+                                           OnClick="() => DeleteAsync(context.Id)"
                                            Disabled="_saving"
-                                           data-testid="@($"delete-direct-{context.Id}")" />
-                        </MudStack>
-                    }
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
-                    Nenhum gasto direto neste período.
-                </MudText>
-            </NoRecordsContent>
-        </MudTable>
-    </MudPaper>
-}
+                                           data-testid="@($"confirm-delete-direct-{context.Id}")">
+                                    Confirmar
+                                </MudButton>
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Text"
+                                           OnClick="() => _confirmDeleteId = null"
+                                           Disabled="_saving">
+                                    Cancelar
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <div class="hearth-row-actions">
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn"
+                                               title="Editar gasto"
+                                               aria-label="Editar gasto"
+                                               OnClick="() => StartEdit(context)"
+                                               Disabled="_saving"
+                                               data-testid="@($"edit-direct-{context.Id}")" />
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn is-danger"
+                                               title="Excluir gasto"
+                                               aria-label="Excluir gasto"
+                                               OnClick="() => _confirmDeleteId = context.Id"
+                                               Disabled="_saving"
+                                               data-testid="@($"delete-direct-{context.Id}")" />
+                            </div>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
+                        <p class="hearth-empty-title">Nenhum gasto direto neste período</p>
+                        <p class="hearth-empty-desc">
+                            Navegue para outro mês ou registre um novo lançamento acima.
+                        </p>
+                    </div>
+                </NoRecordsContent>
+            </MudTable>
+        </section>
+    }
+</div>
 
 @code
 {

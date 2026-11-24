@@ -15,366 +15,376 @@
 @using Hearth.Application.FixedExpenses.UpdateFixedExpenseDetails
 @using Hearth.Web.Components.Shared
 
-<PageTitle>Despesas Fixas — Hearth</PageTitle>
+<PageTitle>Despesas Fixas — Hearth Finance</PageTitle>
 
-<MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween" Class="mb-4" Wrap="Wrap.Wrap" Spacing="2">
-    <MudText Typo="Typo.h4">Despesas Fixas</MudText>
+<div class="hearth-page">
+    <header class="hearth-page-header">
+        <div class="hearth-dash-title-group">
+            <h1 class="hearth-dash-title">Despesas fixas</h1>
+            <p class="hearth-dash-subtitle">
+                Assinaturas e contas recorrentes com controle mensal de pagamento e vigência.
+            </p>
+        </div>
 
-    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2" Wrap="Wrap.Wrap">
-        <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
-        <MudSwitch T="bool" @bind-Value="_showInactiveInMonth" Color="Color.Primary" Label="Mostrar inativas no mês" />
-        <MudButton Variant="Variant.Filled"
-                   Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Add"
-                   OnClick="StartCreate"
-                   Disabled="_saving || ActiveCategories.Count == 0"
-                   data-testid="new-fixed-expense-button">
-            Nova despesa fixa
-        </MudButton>
-    </MudStack>
-</MudStack>
+        <div class="hearth-page-header-actions">
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="hearth-btn-clean"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="StartCreate"
+                       Disabled="_saving || ActiveCategories.Count == 0"
+                       data-testid="new-fixed-expense-button">
+                Nova despesa fixa
+            </MudButton>
+        </div>
+    </header>
 
-@if (_showCreateForm)
-{
-    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="create-fixed-form">
-        <MudText Typo="Typo.h6" GutterBottom="true">Nova despesa fixa</MudText>
-        <MudGrid Spacing="3">
-            <MudItem xs="12" sm="6">
-                <MudTextField @bind-Value="_description"
-                              Label="Descrição"
-                              Variant="Variant.Outlined"
-                              Required="true"
-                              MaxLength="@DomainValidation.MaxDescriptionLength"
-                              Counter="@DomainValidation.MaxDescriptionLength"
-                              Immediate="true"
-                              Disabled="_saving"
-                              data-testid="fixed-description-input" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudSelect T="Guid?"
-                           @bind-Value="_categoryId"
-                           Label="Categoria"
-                           Variant="Variant.Outlined"
-                           Required="true"
-                           Disabled="_saving"
-                           data-testid="fixed-category-select">
-                    @foreach (var category in ActiveCategories)
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">@category.Name</MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudNumericField T="decimal"
-                                 @bind-Value="_amount"
-                                 Label="Valor mensal"
-                                 Variant="Variant.Outlined"
-                                 Culture="@HearthFormat.PtBr"
-                                 Format="N2"
-                                 Adornment="Adornment.Start"
-                                 AdornmentText="R$"
-                                 HideSpinButtons="true"
-                                 Disabled="_saving"
-                                 data-testid="fixed-amount-input" />
-            </MudItem>
-            <MudItem xs="6" sm="2">
-                <MudNumericField T="int" @bind-Value="_startMonth" Label="Mês início" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
-            </MudItem>
-            <MudItem xs="6" sm="2">
-                <MudNumericField T="int" @bind-Value="_startYear" Label="Ano início" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
-            </MudItem>
-            <MudItem xs="12" sm="4" Class="d-flex align-center">
-                <MudSwitch T="bool" @bind-Value="_hasEndMonth" Color="Color.Primary" Label="Definir fim?" Disabled="_saving" />
-            </MudItem>
-            @if (_hasEndMonth)
-            {
-                <MudItem xs="6" sm="3">
-                    <MudNumericField T="int" @bind-Value="_endMonth" Label="Mês fim" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
+    <div class="hearth-command-bar">
+        <div class="hearth-command-controls">
+            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+            <MudSwitch T="bool" @bind-Value="_showInactiveInMonth" Color="Color.Primary" Label="Mostrar inativas no mês" />
+        </div>
+
+        @if (!_loading)
+        {
+            <div class="hearth-summary-metrics hearth-money">
+                <span class="hearth-summary-metric">Ativas: <strong>@ActiveInSelectedMonthCount</strong></span>
+                <span class="hearth-summary-metric">
+                    Total do mês: <strong>@HearthFormat.Money(TotalActiveInSelectedMonth)</strong>
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (_showCreateForm)
+    {
+        <section class="hearth-form-panel" data-testid="create-fixed-form">
+            <h2 class="hearth-card-title">Nova despesa fixa</h2>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_description"
+                                  Label="Descrição"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Counter="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="fixed-description-input" />
                 </MudItem>
-                <MudItem xs="6" sm="3">
-                    <MudNumericField T="int" @bind-Value="_endYear" Label="Ano fim" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid?"
+                               @bind-Value="_categoryId"
+                               Label="Categoria"
+                               Variant="Variant.Outlined"
+                               Required="true"
+                               Disabled="_saving"
+                               data-testid="fixed-category-select">
+                        @foreach (var category in ActiveCategories)
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">@category.Name</MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
-            }
-            <MudItem xs="12">
-                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
-                    <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
-                    <MudButton Variant="Variant.Filled"
-                               Color="Color.Primary"
-                               OnClick="CreateAsync"
-                               Disabled="_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0"
-                               data-testid="create-fixed-submit">
-                        @(_saving ? "Salvando..." : "Salvar")
-                    </MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_amount"
+                                     Label="Valor mensal"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     Disabled="_saving"
+                                     data-testid="fixed-amount-input" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" @bind-Value="_startMonth" Label="Mês início" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int" @bind-Value="_startYear" Label="Ano início" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex align-center">
+                    <MudSwitch T="bool" @bind-Value="_hasEndMonth" Color="Color.Primary" Label="Definir fim?" Disabled="_saving" />
+                </MudItem>
+                @if (_hasEndMonth)
+                {
+                    <MudItem xs="6" sm="3">
+                        <MudNumericField T="int" @bind-Value="_endMonth" Label="Mês fim" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
+                    </MudItem>
+                    <MudItem xs="6" sm="3">
+                        <MudNumericField T="int" @bind-Value="_endYear" Label="Ano fim" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
+                    </MudItem>
+                }
+                <MudItem xs="12">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Class="hearth-btn-clean"
+                                   OnClick="CreateAsync"
+                                   Disabled="_saving || string.IsNullOrWhiteSpace(_description) || !_categoryId.HasValue || _amount <= 0"
+                                   data-testid="create-fixed-submit">
+                            @(_saving ? "Salvando…" : "Salvar")
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
 
-@if (_editingDetails is not null)
-{
-    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="edit-fixed-details-panel">
-        <MudText Typo="Typo.h6" GutterBottom="true">Editar detalhes — @_editingDetails.Description</MudText>
-        <MudGrid Spacing="3" Class="align-center">
-            <MudItem xs="12" sm="5">
-                <MudTextField @bind-Value="_editDescription"
-                              Label="Descrição"
-                              Variant="Variant.Outlined"
-                              MaxLength="@DomainValidation.MaxDescriptionLength"
-                              Immediate="true"
-                              Disabled="_saving"
-                              data-testid="edit-fixed-description-input" />
-            </MudItem>
-            <MudItem xs="12" sm="4">
-                <MudSelect T="Guid?" @bind-Value="_editCategoryId" Label="Categoria" Variant="Variant.Outlined" Disabled="_saving">
-                    @foreach (var category in _allCategories.Where(c => !c.IsArchived || c.Id == _editingDetails.CategoryId))
-                    {
-                        <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
-                            @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
-                        </MudSelectItem>
-                    }
-                </MudSelect>
-            </MudItem>
-            <MudItem xs="12" sm="3">
-                <MudStack Row="true" Spacing="1">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveDetailsAsync" Disabled="_saving || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue" data-testid="save-fixed-details">
-                        Salvar
-                    </MudButton>
-                    <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+    @* Painel unificado de edição da despesa fixa (detalhes, reajuste de valor e encerramento) *@
+    @if (_editingExpense is not null)
+    {
+        <section class="hearth-form-panel" data-testid="edit-fixed-panel">
+            <div class="hearth-module-head">
+                <div>
+                    <h2 class="hearth-card-title">Editar despesa fixa — @_editingExpense.Description</h2>
+                    <p class="hearth-card-meta">Atualize descrição, categoria, reajuste de valor ou encerramento de vigência.</p>
+                </div>
+                <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Fechar</MudButton>
+            </div>
 
-@if (_changingAmount is not null)
-{
-    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="change-fixed-amount-panel">
-        <MudText Typo="Typo.h6" GutterBottom="true">Alterar valor — @_changingAmount.Description</MudText>
-        <MudAlert Severity="Severity.Info" Variant="Variant.Outlined" Dense="true" Class="mb-3">
-            A alteração passa a valer a partir do primeiro mês aberto (segundo o dia de fechamento do cartão).
-            Meses congelados nunca mudam e meses já pagos bloqueiam a alteração.
-        </MudAlert>
-        <MudGrid Spacing="3" Class="align-center">
-            <MudItem xs="12" sm="6">
-                <MudNumericField T="decimal"
-                                 @bind-Value="_newAmount"
-                                 Label="Novo valor mensal"
-                                 Variant="Variant.Outlined"
-                                 Culture="@HearthFormat.PtBr"
-                                 Format="N2"
-                                 Adornment="Adornment.Start"
-                                 AdornmentText="R$"
-                                 HideSpinButtons="true"
-                                 Disabled="_saving"
-                                 data-testid="change-fixed-amount-input" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Primary" OnClick="SaveAmountChangeAsync" Disabled="_saving || _newAmount <= 0" data-testid="save-fixed-amount">
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="12" sm="5">
+                    <MudTextField @bind-Value="_editDescription"
+                                  Label="Descrição"
+                                  Variant="Variant.Outlined"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="edit-fixed-description-input" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudSelect T="Guid?" @bind-Value="_editCategoryId" Label="Categoria" Variant="Variant.Outlined" Disabled="_saving">
+                        @foreach (var category in _allCategories.Where(c => !c.IsArchived || c.Id == _editingExpense.CategoryId))
+                        {
+                            <MudSelectItem T="Guid?" Value="@((Guid?)category.Id)">
+                                @(category.IsArchived ? $"{category.Name} (Arquivada)" : category.Name)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               Class="hearth-btn-clean"
+                               FullWidth="true"
+                               OnClick="SaveDetailsAsync"
+                               Disabled="_saving || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue"
+                               data-testid="save-fixed-details">
+                        Salvar detalhes
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            <div class="hearth-form-divider"></div>
+
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="12" sm="9">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_newAmount"
+                                     Label="Novo valor mensal"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     HelperText="Vale a partir do próximo mês em aberto; meses pagos ou congelados permanecem intactos."
+                                     Disabled="_saving"
+                                     data-testid="change-fixed-amount-input" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Default"
+                               Class="hearth-btn-clean"
+                               FullWidth="true"
+                               OnClick="SaveAmountChangeAsync"
+                               Disabled="_saving || _newAmount <= 0"
+                               data-testid="save-fixed-amount">
                         Atualizar valor
                     </MudButton>
-                    <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+                </MudItem>
+            </MudGrid>
 
-@if (_endingExpense is not null)
-{
-    <MudPaper Elevation="2" Class="pa-5 mb-4" data-testid="end-fixed-panel">
-        <MudText Typo="Typo.h6" GutterBottom="true">Encerrar despesa fixa — @_endingExpense.Description</MudText>
-        <MudGrid Spacing="3" Class="align-center">
-            <MudItem xs="6" sm="3">
-                <MudNumericField T="int" @bind-Value="_endLastMonth" Label="Último mês" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
-            </MudItem>
-            <MudItem xs="6" sm="3">
-                <MudNumericField T="int" @bind-Value="_endLastYear" Label="Último ano" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Warning" OnClick="SaveEndAsync" Disabled="_saving" data-testid="save-fixed-end">
-                        Confirmar encerramento
-                    </MudButton>
-                    <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+            <div class="hearth-form-divider"></div>
 
-@if (_payingExpense is not null)
-{
-    <MudPaper Elevation="2" Class="pa-4 mb-4" data-testid="pay-fixed-panel">
-        <MudText Typo="Typo.h6" GutterBottom="true">
-            Pagar "@_payingExpense.Description" referente a @HearthFormat.MonthYear(_selectedMonth)
-        </MudText>
-        <MudGrid Spacing="3" Class="align-center">
-            <MudItem xs="12" sm="6">
-                <MudDatePicker @bind-Date="_paidOn"
-                               Label="Data do pagamento"
-                               Variant="Variant.Outlined"
-                               DateFormat="dd/MM/yyyy"
-                               Culture="@HearthFormat.PtBr"
-                               Editable="true"
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="6" sm="4">
+                    <MudNumericField T="int" @bind-Value="_endLastMonth" Label="Último mês de vigência" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" data-testid="end-fixed-month-input" />
+                </MudItem>
+                <MudItem xs="6" sm="5">
+                    <MudNumericField T="int" @bind-Value="_endLastYear" Label="Último ano" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" data-testid="end-fixed-year-input" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudButton Variant="Variant.Outlined"
+                               Color="Color.Warning"
+                               Class="hearth-btn-clean"
+                               FullWidth="true"
+                               OnClick="SaveEndAsync"
                                Disabled="_saving"
-                               data-testid="fixed-paid-on-input" />
-            </MudItem>
-            <MudItem xs="12" sm="6">
-                <MudStack Row="true" Spacing="2">
-                    <MudButton Variant="Variant.Filled" Color="Color.Success" OnClick="ConfirmPaymentAsync" Disabled="_saving || !_paidOn.HasValue" data-testid="confirm-fixed-payment">
-                        Confirmar pagamento
+                               data-testid="save-fixed-end">
+                        Encerrar vigência
                     </MudButton>
-                    <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
-                </MudStack>
-            </MudItem>
-        </MudGrid>
-    </MudPaper>
-}
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
 
-@if (_loading)
-{
-    <MudProgressLinear Indeterminate="true" Color="Color.Primary" />
-}
-else
-{
-    <MudPaper Elevation="2" Class="mb-3 pa-3">
-        <MudStack Row="true" Justify="Justify.SpaceBetween" AlignItems="AlignItems.Center" Wrap="Wrap.Wrap" Spacing="2">
-            <MudText Typo="Typo.body2" Color="Color.Secondary">
-                Ativas em @HearthFormat.MonthYear(_selectedMonth): @ActiveInSelectedMonthCount
-            </MudText>
-            <MudText Typo="Typo.subtitle1" Style="font-weight: 600;">
-                Total do mês: @HearthFormat.Money(TotalActiveInSelectedMonth)
-            </MudText>
-        </MudStack>
-    </MudPaper>
+    @if (_payingExpense is not null)
+    {
+        <section class="hearth-form-panel" data-testid="pay-fixed-panel">
+            <h2 class="hearth-card-title">
+                Pagar "@_payingExpense.Description" — @HearthFormat.MonthYear(_selectedMonth)
+            </h2>
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="12" sm="6">
+                    <MudDatePicker @bind-Date="_paidOn"
+                                   Label="Data do pagamento"
+                                   Variant="Variant.Outlined"
+                                   DateFormat="dd/MM/yyyy"
+                                   Culture="@HearthFormat.PtBr"
+                                   Editable="true"
+                                   Disabled="_saving"
+                                   data-testid="fixed-paid-on-input" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudStack Row="true" Spacing="2">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   Class="hearth-btn-clean"
+                                   OnClick="ConfirmPaymentAsync"
+                                   Disabled="_saving || !_paidOn.HasValue"
+                                   data-testid="confirm-fixed-payment">
+                            Confirmar pagamento
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
 
-    <MudPaper Elevation="2">
-        <MudTable Items="VisibleExpenses" Hover="true" Dense="true" Elevation="0">
-            <HeaderContent>
-                <MudTh>Descrição</MudTh>
-                <MudTh>Categoria</MudTh>
-                <MudTh>Vigência</MudTh>
-                <MudTh Style="text-align: right;">Valor no mês</MudTh>
-                <MudTh>Pagamento (@HearthFormat.ShortMonthYear(_selectedMonth))</MudTh>
-                <MudTh Style="width: 260px; text-align: right;">Ações</MudTh>
-            </HeaderContent>
-            <RowTemplate>
-                @{
-                    var isActive = FixedExpenseViewHelper.IsActiveIn(context, _selectedMonth);
-                    var monthAmount = FixedExpenseViewHelper.GetAmountFor(context, _selectedMonth);
-                    var payment = FixedExpenseViewHelper.GetPaymentFor(context, _selectedMonth);
-                }
-                <MudTd DataLabel="Descrição">@context.Description</MudTd>
-                <MudTd DataLabel="Categoria">@GetCategoryName(context.CategoryId)</MudTd>
-                <MudTd DataLabel="Vigência">@FormatPeriod(context)</MudTd>
-                <MudTd DataLabel="Valor no mês" Style="text-align: right; font-weight: 500;">
-                    @(monthAmount.HasValue ? HearthFormat.Money(monthAmount.Value) : "Inativa no mês")
-                </MudTd>
-                <MudTd DataLabel="Pagamento">
-                    @if (!isActive)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Default" Variant="Variant.Outlined">
-                            Fora da vigência
-                        </MudChip>
+    @if (_loading)
+    {
+        <div class="hearth-card hearth-skeleton-panel"></div>
+    }
+    else
+    {
+        <section class="hearth-table-shell" aria-label="Lista de despesas fixas">
+            <MudTable Items="VisibleExpenses" Hover="true" Dense="true" Elevation="0" Class="hearth-data-table">
+                <HeaderContent>
+                    <MudTh>Descrição</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh>Vigência</MudTh>
+                    <MudTh Style="text-align: right;">Valor no mês</MudTh>
+                    <MudTh>Pagamento (@HearthFormat.ShortMonthYear(_selectedMonth))</MudTh>
+                    <MudTh Style="width: 156px; text-align: right;">Ações</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @{
+                        var isActive = FixedExpenseViewHelper.IsActiveIn(context, _selectedMonth);
+                        var monthAmount = FixedExpenseViewHelper.GetAmountFor(context, _selectedMonth);
+                        var payment = FixedExpenseViewHelper.GetPaymentFor(context, _selectedMonth);
                     }
-                    else if (payment is not null)
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Success" Variant="Variant.Outlined">
-                            Paga em @HearthFormat.Date(payment.PaidOn)
-                        </MudChip>
-                    }
-                    else
-                    {
-                        <MudChip T="string" Size="Size.Small" Color="Color.Warning" Variant="Variant.Outlined">
-                            Em aberto
-                        </MudChip>
-                    }
-                </MudTd>
-                <MudTd DataLabel="Ações" Style="text-align: right;">
-                    @if (_confirmDeleteId == context.Id)
-                    {
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Filled"
-                                       Color="Color.Error"
-                                       OnClick="() => DeleteAsync(context.Id)"
-                                       Disabled="_saving"
-                                       data-testid="@($"confirm-delete-fixed-{context.Id}")">
-                                Confirmar
-                            </MudButton>
-                            <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => _confirmDeleteId = null" Disabled="_saving">
-                                Cancelar
-                            </MudButton>
-                        </MudStack>
-                    }
-                    else
-                    {
-                        <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
-                            @if (isActive && payment is null)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
-                                               Size="Size.Small"
-                                               Color="Color.Success"
-                                               title="Marcar como paga neste mês"
-                                               OnClick="() => StartPay(context)"
-                                               Disabled="_saving"
-                                               data-testid="@($"pay-fixed-{context.Id}")" />
-                            }
-                            else if (isActive && payment is not null)
-                            {
-                                <MudIconButton Icon="@Icons.Material.Filled.Undo"
-                                               Size="Size.Small"
-                                               Color="Color.Warning"
-                                               title="Reverter pagamento deste mês"
-                                               OnClick="() => RevertPaymentAsync(context.Id)"
-                                               Disabled="_saving"
-                                               data-testid="@($"revert-fixed-{context.Id}")" />
-                            }
-
-                            <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                                           Size="Size.Small"
-                                           title="Editar detalhes"
-                                           OnClick="() => StartEditDetails(context)"
-                                           Disabled="_saving"
-                                           data-testid="@($"edit-fixed-{context.Id}")" />
-
-                            <MudIconButton Icon="@Icons.Material.Filled.AttachMoney"
-                                           Size="Size.Small"
-                                           Color="Color.Primary"
-                                           title="Alterar valor"
-                                           OnClick="() => StartChangeAmount(context)"
-                                           Disabled="_saving"
-                                           data-testid="@($"change-amount-fixed-{context.Id}")" />
-
-                            <MudIconButton Icon="@Icons.Material.Filled.EventBusy"
-                                           Size="Size.Small"
-                                           Color="Color.Warning"
-                                           title="Encerrar vigência"
-                                           OnClick="() => StartEnd(context)"
-                                           Disabled="_saving"
-                                           data-testid="@($"end-fixed-{context.Id}")" />
-
-                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
-                                           Size="Size.Small"
+                    <MudTd DataLabel="Descrição" Class="hearth-cell-title">@context.Description</MudTd>
+                    <MudTd DataLabel="Categoria" Class="hearth-cell-muted">@GetCategoryName(context.CategoryId)</MudTd>
+                    <MudTd DataLabel="Vigência" Class="hearth-money hearth-cell-muted">@FormatPeriod(context)</MudTd>
+                    <MudTd DataLabel="Valor no mês" Class="hearth-cell-amount">
+                        @(monthAmount.HasValue ? HearthFormat.Money(monthAmount.Value) : "Inativa")
+                    </MudTd>
+                    <MudTd DataLabel="Pagamento">
+                        @if (!isActive)
+                        {
+                            <span class="hearth-status-pill is-neutral">Fora da vigência</span>
+                        }
+                        else if (payment is not null)
+                        {
+                            <span class="hearth-status-pill is-positive hearth-money">Paga em @HearthFormat.Date(payment.PaidOn)</span>
+                        }
+                        else
+                        {
+                            <span class="hearth-status-pill is-warning">Em aberto</span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Ações" Style="text-align: right;">
+                        @if (_confirmDeleteId == context.Id)
+                        {
+                            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Filled"
                                            Color="Color.Error"
-                                           title="Excluir"
-                                           OnClick="() => _confirmDeleteId = context.Id"
+                                           OnClick="() => DeleteAsync(context.Id)"
                                            Disabled="_saving"
-                                           data-testid="@($"delete-fixed-{context.Id}")" />
-                        </MudStack>
-                    }
-                </MudTd>
-            </RowTemplate>
-            <NoRecordsContent>
-                <MudText Typo="Typo.body2" Color="Color.Secondary" Class="pa-4">
-                    Nenhuma despesa fixa encontrada para @HearthFormat.MonthYear(_selectedMonth).
-                </MudText>
-            </NoRecordsContent>
-        </MudTable>
-    </MudPaper>
-}
+                                           data-testid="@($"confirm-delete-fixed-{context.Id}")">
+                                    Confirmar
+                                </MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => _confirmDeleteId = null" Disabled="_saving">
+                                    Cancelar
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <div class="hearth-row-actions">
+                                @if (isActive && payment is null)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                                   Size="Size.Small"
+                                                   Class="hearth-action-btn is-positive"
+                                                   title="Marcar como paga neste mês"
+                                                   aria-label="Marcar como paga neste mês"
+                                                   OnClick="() => StartPay(context)"
+                                                   Disabled="_saving"
+                                                   data-testid="@($"pay-fixed-{context.Id}")" />
+                                }
+                                else if (isActive && payment is not null)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Undo"
+                                                   Size="Size.Small"
+                                                   Class="hearth-action-btn is-warning"
+                                                   title="Reverter pagamento deste mês"
+                                                   aria-label="Reverter pagamento deste mês"
+                                                   OnClick="() => RevertPaymentAsync(context.Id)"
+                                                   Disabled="_saving"
+                                                   data-testid="@($"revert-fixed-{context.Id}")" />
+                                }
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn"
+                                               title="Editar despesa fixa"
+                                               aria-label="Editar despesa fixa"
+                                               OnClick="() => StartEdit(context)"
+                                               Disabled="_saving"
+                                               data-testid="@($"edit-fixed-{context.Id}")" />
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn is-danger"
+                                               title="Excluir despesa fixa"
+                                               aria-label="Excluir despesa fixa"
+                                               OnClick="() => _confirmDeleteId = context.Id"
+                                               Disabled="_saving"
+                                               data-testid="@($"delete-fixed-{context.Id}")" />
+                            </div>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
+                        <p class="hearth-empty-title">Nenhuma despesa fixa em @HearthFormat.MonthYear(_selectedMonth)</p>
+                        <p class="hearth-empty-desc">
+                            Ative "Mostrar inativas no mês" ou cadastre uma nova assinatura acima.
+                        </p>
+                    </div>
+                </NoRecordsContent>
+            </MudTable>
+        </section>
+    }
+</div>
 
 @code
 {
@@ -397,14 +407,10 @@ else
     private int _endMonth;
     private int _endYear;
 
-    private FixedExpenseDto? _editingDetails;
+    private FixedExpenseDto? _editingExpense;
     private string _editDescription = string.Empty;
     private Guid? _editCategoryId;
-
-    private FixedExpenseDto? _changingAmount;
     private decimal _newAmount;
-
-    private FixedExpenseDto? _endingExpense;
     private int _endLastMonth;
     private int _endLastYear;
 
@@ -467,9 +473,7 @@ else
     private void CancelPanels()
     {
         _showCreateForm = false;
-        _editingDetails = null;
-        _changingAmount = null;
-        _endingExpense = null;
+        _editingExpense = null;
         _payingExpense = null;
         _confirmDeleteId = null;
     }
@@ -527,17 +531,20 @@ else
         }
     }
 
-    private void StartEditDetails(FixedExpenseDto expense)
+    private void StartEdit(FixedExpenseDto expense)
     {
         CancelPanels();
-        _editingDetails = expense;
+        _editingExpense = expense;
         _editDescription = expense.Description;
         _editCategoryId = expense.CategoryId;
+        _newAmount = FixedExpenseViewHelper.GetCurrentOrLatestAmount(expense, _selectedMonth);
+        _endLastMonth = expense.EndMonth ?? _selectedMonth.Month;
+        _endLastYear = expense.EndYear ?? _selectedMonth.Year;
     }
 
     private async Task SaveDetailsAsync()
     {
-        if (_saving || _editingDetails is null || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue)
+        if (_saving || _editingExpense is null || string.IsNullOrWhiteSpace(_editDescription) || !_editCategoryId.HasValue)
         {
             return;
         }
@@ -546,7 +553,7 @@ else
 
         try
         {
-            var id = _editingDetails.Id;
+            var id = _editingExpense.Id;
             var result = await Executor.ExecuteAsync<UpdateFixedExpenseDetailsHandler>(
                 (handler, ct) => handler.ExecuteAsync(
                     new UpdateFixedExpenseDetailsCommand(id, _editDescription.Trim(), _editCategoryId.Value), ct),
@@ -555,7 +562,7 @@ else
 
             if (result.IsSuccess)
             {
-                _editingDetails = null;
+                _editingExpense = null;
             }
 
             await LoadDataAsync(ComponentCancellationToken);
@@ -566,16 +573,9 @@ else
         }
     }
 
-    private void StartChangeAmount(FixedExpenseDto expense)
-    {
-        CancelPanels();
-        _changingAmount = expense;
-        _newAmount = FixedExpenseViewHelper.GetCurrentOrLatestAmount(expense, _selectedMonth);
-    }
-
     private async Task SaveAmountChangeAsync()
     {
-        if (_saving || _changingAmount is null || _newAmount <= 0)
+        if (_saving || _editingExpense is null || _newAmount <= 0)
         {
             return;
         }
@@ -584,14 +584,14 @@ else
 
         try
         {
-            var id = _changingAmount.Id;
+            var id = _editingExpense.Id;
             var result = await Executor.ExecuteAsync<ChangeFixedExpenseAmountHandler, ChangeFixedExpenseAmountResult>(
                 (handler, ct) => handler.ExecuteAsync(new ChangeFixedExpenseAmountCommand(id, _newAmount), ct),
                 cancellationToken: ComponentCancellationToken);
 
             if (result.IsSuccess && result.Value is not null)
             {
-                _changingAmount = null;
+                _editingExpense = null;
                 var effective = HearthFormat.MonthYear(result.Value.EffectiveFromYear, result.Value.EffectiveFromMonth);
                 Snackbar.Add($"Valor atualizado a partir de {effective}.", Severity.Success);
             }
@@ -604,17 +604,9 @@ else
         }
     }
 
-    private void StartEnd(FixedExpenseDto expense)
-    {
-        CancelPanels();
-        _endingExpense = expense;
-        _endLastMonth = expense.EndMonth ?? _selectedMonth.Month;
-        _endLastYear = expense.EndYear ?? _selectedMonth.Year;
-    }
-
     private async Task SaveEndAsync()
     {
-        if (_saving || _endingExpense is null)
+        if (_saving || _editingExpense is null)
         {
             return;
         }
@@ -623,7 +615,7 @@ else
 
         try
         {
-            var id = _endingExpense.Id;
+            var id = _editingExpense.Id;
             var result = await Executor.ExecuteAsync<EndFixedExpenseHandler>(
                 (handler, ct) => handler.ExecuteAsync(new EndFixedExpenseCommand(id, _endLastYear, _endLastMonth), ct),
                 successMessage: "Vigência da despesa fixa atualizada.",
@@ -631,7 +623,7 @@ else
 
             if (result.IsSuccess)
             {
-                _endingExpense = null;
+                _editingExpense = null;
             }
 
             await LoadDataAsync(ComponentCancellationToken);

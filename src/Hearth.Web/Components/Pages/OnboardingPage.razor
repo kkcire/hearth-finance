@@ -7,85 +7,84 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @using Hearth.Application.Accounts.CreateAccount
 
-<PageTitle>Configuração inicial — Hearth</PageTitle>
+<PageTitle>Nova conta — Hearth Finance</PageTitle>
 
-<MudGrid Justify="Justify.Center">
-    <MudItem xs="12" sm="10" md="7" lg="6">
-        <MudPaper Elevation="2" Class="pa-6">
-            <MudText Typo="Typo.h4" GutterBottom="true" data-testid="onboarding-greeting">
+<div class="hearth-onboarding-shell">
+    <section class="hearth-form-panel" aria-labelledby="heading-onboarding">
+        <div>
+            <h1 id="heading-onboarding" class="hearth-dash-title" data-testid="onboarding-greeting">
                 @(string.IsNullOrWhiteSpace(_userName) ? "Bem-vindo ao Hearth" : $"Olá, {_userName}!")
-            </MudText>
-            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-4">
-                Crie sua primeira conta financeira para começar. As 8 categorias padrão
-                (Transporte, Alimentação, Saúde, Educação, Entretenimento, Serviços, Compras e Pessoal)
-                serão criadas automaticamente.
-            </MudText>
+            </h1>
+            <p class="hearth-dash-subtitle">
+                Crie sua conta financeira para começar. As categorias padrão são criadas automaticamente.
+            </p>
+        </div>
 
-            <MudForm @ref="_form" @onsubmit="SubmitAsync">
-                <MudStack Spacing="4">
-                    <MudTextField @bind-Value="_name"
-                                  Label="Nome da conta"
-                                  Variant="Variant.Outlined"
-                                  Required="true"
-                                  RequiredError="Informe o nome da conta."
-                                  MaxLength="@DomainValidation.MaxNameLength"
-                                  Counter="@DomainValidation.MaxNameLength"
-                                  Immediate="true"
-                                  Disabled="_saving"
-                                  data-testid="account-name-input" />
+        <MudForm @ref="_form" @onsubmit="SubmitAsync">
+            <MudStack Spacing="4" Class="mt-2">
+                <MudTextField @bind-Value="_name"
+                              Label="Nome da conta"
+                              Variant="Variant.Outlined"
+                              Required="true"
+                              RequiredError="Informe o nome da conta."
+                              MaxLength="@DomainValidation.MaxNameLength"
+                              Counter="@DomainValidation.MaxNameLength"
+                              Immediate="true"
+                              Disabled="_saving"
+                              data-testid="account-name-input" />
 
-                    <MudNumericField T="decimal"
-                                     @bind-Value="_initialBalance"
-                                     Label="Saldo inicial"
-                                     Variant="Variant.Outlined"
-                                     Culture="@HearthFormat.PtBr"
-                                     Format="N2"
-                                     Adornment="Adornment.Start"
-                                     AdornmentText="R$"
-                                     HideSpinButtons="true"
-                                     HelperText="Pode ser zero ou negativo."
-                                     Disabled="_saving"
-                                     data-testid="initial-balance-input" />
+                <MudNumericField T="decimal"
+                                 @bind-Value="_initialBalance"
+                                 Label="Saldo inicial"
+                                 Variant="Variant.Outlined"
+                                 Culture="@HearthFormat.PtBr"
+                                 Format="N2"
+                                 Adornment="Adornment.Start"
+                                 AdornmentText="R$"
+                                 HideSpinButtons="true"
+                                 HelperText="Pode ser zero ou negativo."
+                                 Disabled="_saving"
+                                 data-testid="initial-balance-input" />
 
-                    @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                @if (!string.IsNullOrWhiteSpace(_errorMessage))
+                {
+                    <div class="hearth-inline-alert" role="alert" data-testid="onboarding-error">
+                        @_errorMessage
+                    </div>
+                }
+
+                <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                    @if (AccountContext.HasAccounts)
                     {
-                        <MudAlert Severity="Severity.Warning" data-testid="onboarding-error">
-                            @_errorMessage
-                        </MudAlert>
+                        <MudButton Variant="Variant.Text"
+                                   Color="Color.Default"
+                                   Href="/"
+                                   Disabled="_saving">
+                            Cancelar
+                        </MudButton>
                     }
 
-                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
-                        @if (AccountContext.HasAccounts)
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Class="hearth-btn-clean"
+                               OnClick="SubmitAsync"
+                               Disabled="_saving"
+                               data-testid="create-account-submit">
+                        @if (_saving)
                         {
-                            <MudButton Variant="Variant.Text"
-                                       Color="Color.Default"
-                                       Href="/"
-                                       Disabled="_saving">
-                                Cancelar
-                            </MudButton>
+                            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                            <span>Criando…</span>
                         }
-
-                        <MudButton Variant="Variant.Filled"
-                                   Color="Color.Primary"
-                                   OnClick="SubmitAsync"
-                                   Disabled="_saving"
-                                   data-testid="create-account-submit">
-                            @if (_saving)
-                            {
-                                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
-                                <span>Criando...</span>
-                            }
-                            else
-                            {
-                                <span>Criar conta</span>
-                            }
-                        </MudButton>
-                    </MudStack>
+                        else
+                        {
+                            <span>Criar conta</span>
+                        }
+                    </MudButton>
                 </MudStack>
-            </MudForm>
-        </MudPaper>
-    </MudItem>
-</MudGrid>
+            </MudStack>
+        </MudForm>
+    </section>
+</div>
 
 @code
 {
