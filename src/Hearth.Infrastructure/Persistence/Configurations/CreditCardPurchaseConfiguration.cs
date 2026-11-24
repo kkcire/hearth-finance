@@ -30,6 +30,10 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
             .HasColumnName("category_id")
             .IsRequired();
 
+        builder.Property(purchase => purchase.ConditionId)
+            .HasColumnName("condition_id")
+            .IsRequired();
+
         builder.Property(purchase => purchase.Date)
             .HasColumnName("date")
             .IsRequired();
@@ -65,19 +69,6 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
 
         builder.Navigation(purchase => purchase.Rule).IsRequired();
 
-        builder.OwnsOne(purchase => purchase.Condition, condition =>
-        {
-            condition.Property(c => c.Kind)
-                .HasColumnName("condition_kind")
-                .IsRequired();
-
-            condition.Property(c => c.Name)
-                .HasColumnName("condition_name")
-                .HasMaxLength(DomainValidation.MaxNameLength);
-        });
-
-        builder.Navigation(purchase => purchase.Condition).IsRequired();
-
         builder.Ignore(purchase => purchase.FirstCycle);
         builder.Ignore(purchase => purchase.FirstActiveCycle);
 
@@ -99,6 +90,12 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
             .HasConstraintName("fk_credit_card_purchases_categories_category_id")
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<PurchaseCondition>()
+            .WithMany()
+            .HasForeignKey(purchase => purchase.ConditionId)
+            .HasConstraintName("fk_credit_card_purchases_purchase_conditions_condition_id")
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(purchase => new { purchase.AccountId, purchase.Date })
             .HasDatabaseName("ix_credit_card_purchases_account_id_date");
 
@@ -107,5 +104,8 @@ internal sealed class CreditCardPurchaseConfiguration : IEntityTypeConfiguration
 
         builder.HasIndex(purchase => purchase.CategoryId)
             .HasDatabaseName("ix_credit_card_purchases_category_id");
+
+        builder.HasIndex(purchase => purchase.ConditionId)
+            .HasDatabaseName("ix_credit_card_purchases_condition_id");
     }
 }

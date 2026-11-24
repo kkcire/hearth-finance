@@ -18,6 +18,8 @@ public sealed class HearthDbContext : DbContext
 
     public DbSet<Category> Categories => Set<Category>();
 
+    public DbSet<PurchaseCondition> PurchaseConditions => Set<PurchaseCondition>();
+
     public DbSet<CategoryBudget> CategoryBudgets => Set<CategoryBudget>();
 
     public DbSet<DirectExpense> DirectExpenses => Set<DirectExpense>();

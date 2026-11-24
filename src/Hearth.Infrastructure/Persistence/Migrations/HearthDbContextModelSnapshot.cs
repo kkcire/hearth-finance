@@ -244,6 +244,10 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("category_id");
 
+                    b.Property<Guid>("ConditionId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("condition_id");
+
                     b.Property<Guid>("CreditCardId")
                         .HasColumnType("uuid")
                         .HasColumnName("credit_card_id");
@@ -271,6 +275,9 @@ namespace Hearth.Infrastructure.Persistence.Migrations
 
                     b.HasIndex("CategoryId")
                         .HasDatabaseName("ix_credit_card_purchases_category_id");
+
+                    b.HasIndex("ConditionId")
+                        .HasDatabaseName("ix_credit_card_purchases_condition_id");
 
                     b.HasIndex("CreditCardId")
                         .HasDatabaseName("ix_credit_card_purchases_credit_card_id");
@@ -398,6 +405,66 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasDatabaseName("ix_incomes_account_id_expected_date");
 
                     b.ToTable("incomes", (string)null);
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.PurchaseCondition", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<bool>("IsArchived")
+                        .HasColumnType("boolean")
+                        .HasColumnName("is_archived");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("NormalizedName")
+                        .ValueGeneratedOnAddOrUpdate()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasColumnName("normalized_name")
+                        .HasComputedColumnSql("lower(name)", true);
+
+                    b.Property<Guid?>("OwnerUserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("owner_user_id");
+
+                    b.HasKey("Id")
+                        .HasName("pk_purchase_conditions");
+
+                    b.HasIndex("NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_purchase_conditions_system_normalized_name")
+                        .HasFilter("owner_user_id IS NULL");
+
+                    b.HasIndex("OwnerUserId")
+                        .HasDatabaseName("ix_purchase_conditions_owner_user_id");
+
+                    b.HasIndex("OwnerUserId", "NormalizedName")
+                        .IsUnique()
+                        .HasDatabaseName("ux_purchase_conditions_owner_normalized_name")
+                        .HasFilter("owner_user_id IS NOT NULL");
+
+                    b.ToTable("purchase_conditions", (string)null);
+
+                    b.HasData(
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000201"),
+                            IsArchived = false,
+                            Name = "Própria"
+                        },
+                        new
+                        {
+                            Id = new Guid("01900000-0000-7000-8000-000000000202"),
+                            IsArchived = false,
+                            Name = "Outros"
+                        });
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.User", b =>
@@ -551,6 +618,13 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasConstraintName("fk_credit_card_purchases_categories_category_id");
 
+                    b.HasOne("Hearth.Domain.Entities.PurchaseCondition", null)
+                        .WithMany()
+                        .HasForeignKey("ConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_credit_card_purchases_purchase_conditions_condition_id");
+
                     b.HasOne("Hearth.Domain.Entities.CreditCard", null)
                         .WithMany()
                         .HasForeignKey("CreditCardId")
@@ -578,31 +652,6 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                             b1.WithOwner()
                                 .HasForeignKey("CreditCardPurchaseId");
                         });
-
-                    b.OwnsOne("Hearth.Domain.ValueObjects.PurchaseCondition", "Condition", b1 =>
-                        {
-                            b1.Property<Guid>("CreditCardPurchaseId")
-                                .HasColumnType("uuid");
-
-                            b1.Property<int>("Kind")
-                                .HasColumnType("integer")
-                                .HasColumnName("condition_kind");
-
-                            b1.Property<string>("Name")
-                                .HasMaxLength(100)
-                                .HasColumnType("character varying(100)")
-                                .HasColumnName("condition_name");
-
-                            b1.HasKey("CreditCardPurchaseId");
-
-                            b1.ToTable("credit_card_purchases");
-
-                            b1.WithOwner()
-                                .HasForeignKey("CreditCardPurchaseId");
-                        });
-
-                    b.Navigation("Condition")
-                        .IsRequired();
 
                     b.Navigation("Rule")
                         .IsRequired();
@@ -703,6 +752,15 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_incomes_accounts_account_id");
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.PurchaseCondition", b =>
+                {
+                    b.HasOne("Hearth.Domain.Entities.User", null)
+                        .WithMany()
+                        .HasForeignKey("OwnerUserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_purchase_conditions_users_owner_user_id");
                 });
 #pragma warning restore 612, 618
         }
