@@ -35,15 +35,6 @@ public static class HearthFormat
     public static string Percentage(decimal value) =>
         $"{value.ToString("N1", PtBr)}%";
 
-    public static string ConditionLabel(PurchaseConditionKind kind, string? customName = null) =>
-        kind switch
-        {
-            PurchaseConditionKind.Own => "Própria",
-            PurchaseConditionKind.Others => "Outros",
-            PurchaseConditionKind.Custom => string.IsNullOrWhiteSpace(customName) ? "Personalizado" : customName,
-            _ => kind.ToString(),
-        };
-
     public static DateTime ToDateTime(DateOnly date) =>
         date.ToDateTime(TimeOnly.MinValue);
 
