@@ -76,7 +76,7 @@ public class GetExpensesByCategoryHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Restaurante",
             SystemCategories.FoodId);
 
@@ -89,7 +89,7 @@ public class GetExpensesByCategoryHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Others,
+            Guid.NewGuid(),
             "Compra de terceiro",
             SystemCategories.ShoppingId);
 
@@ -149,6 +149,8 @@ public class GetExpensesByCategoryHandlerTests
     {
         var account = await SeedAccountAsync();
         var cardId = Guid.NewGuid();
+        var tripConditionId = Guid.NewGuid();
+        var othersConditionId = Guid.NewGuid();
 
         var direct = DirectExpense.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(50.00m), "Pix", SystemCategories.FoodId);
@@ -164,7 +166,7 @@ public class GetExpensesByCategoryHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Propria",
             SystemCategories.FoodId);
         var trip = CreditCardPurchase.Create(
@@ -176,7 +178,7 @@ public class GetExpensesByCategoryHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Custom("Viagem"),
+            tripConditionId,
             "Hotel",
             SystemCategories.EntertainmentId);
         var others = CreditCardPurchase.Create(
@@ -188,7 +190,7 @@ public class GetExpensesByCategoryHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Others,
+            othersConditionId,
             "Terceiro",
             SystemCategories.ShoppingId);
 
@@ -205,10 +207,10 @@ public class GetExpensesByCategoryHandlerTests
             IncludeDirectExpenses: false,
             IncludeFixedExpenses: false,
             IncludeCardInstallments: true,
-            IncludedConditions: new[]
+            IncludedConditionIds: new[]
             {
-                new PurchaseConditionFilter(PurchaseConditionKind.Own),
-                new PurchaseConditionFilter(PurchaseConditionKind.Custom, "Viagem"),
+                SystemPurchaseConditions.OwnId,
+                tripConditionId,
             }));
 
         Assert.Equal(0.00m, dto.DirectExpenses);
@@ -221,7 +223,7 @@ public class GetExpensesByCategoryHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_InvalidConditionFilter_Throws()
+    public async Task ExecuteAsync_EmptyConditionIdFilter_Throws()
     {
         var account = await SeedAccountAsync();
 
@@ -230,27 +232,7 @@ public class GetExpensesByCategoryHandlerTests
                 account.Id,
                 2026,
                 11,
-                IncludedConditions: new[]
-                {
-                    new PurchaseConditionFilter(PurchaseConditionKind.Own, "ShouldNotHaveName"),
-                })));
-
-        await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
-            new GetExpensesByCategoryQuery(
-                account.Id,
-                2026,
-                11,
-                IncludedConditions: new[]
-                {
-                    new PurchaseConditionFilter(PurchaseConditionKind.Custom, "   "),
-                })));
-
-        await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
-            new GetExpensesByCategoryQuery(
-                account.Id,
-                2026,
-                11,
-                IncludedConditions: new PurchaseConditionFilter[] { null! })));
+                IncludedConditionIds: new[] { Guid.Empty })));
     }
 
     [Fact]

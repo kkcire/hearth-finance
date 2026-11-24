@@ -61,7 +61,7 @@ public class GetMonthlySurplusHandlerTests
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(100.00m), "Mercado", SystemCategories.FoodId);
         var cardPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 11, 5), Money.FromDecimal(400.00m),
-            1, 1, CardBillingRule.Of(3, 12), PurchaseCondition.Own, "Fatura Dez", SystemCategories.ShoppingId);
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OwnId, "Fatura Dez", SystemCategories.ShoppingId);
 
         await _incomes.AddAsync(novSalary);
         await _fixedExpenses.AddAsync(rent);
@@ -80,6 +80,9 @@ public class GetMonthlySurplusHandlerTests
         Assert.Equal(11, dto.SelectedMonth.Month);
         Assert.True(dto.SelectedMonth.IsCurrentMonth);
         Assert.False(dto.SelectedMonth.IsHistorical);
+        Assert.True(dto.SelectedMonth.DirectExpensesAreFutureOnly);
+        Assert.False(dto.Series[0].DirectExpensesAreFutureOnly);
+        Assert.False(dto.Series[2].DirectExpensesAreFutureOnly);
         Assert.Equal(2000.00m, dto.SelectedMonth.StartingCashBalance);
         Assert.Equal(3000.00m, dto.SelectedMonth.ExpectedIncomes);
         Assert.Equal(5000.00m, dto.SelectedMonth.TotalAvailable);
@@ -102,6 +105,40 @@ public class GetMonthlySurplusHandlerTests
 
         // Average across Oct (0), Nov (+1700), Dec (-1600) = 100 / 3 = 33.33
         Assert.Equal(33.33m, dto.AverageMonthlyVariation);
+        Assert.Null(dto.ConditionId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithConditionId_KeepsStartingCashIntactAndFiltersCardInvoiceDue()
+    {
+        var account = await SeedAccountAsync(2000.00m);
+        var othersDueBeforeToday = CreditCardPurchase.Create(
+            Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 10, 10), Money.FromDecimal(300.00m),
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OthersId, "Fatura Nov Outros", SystemCategories.ShoppingId);
+        var ownDueDec = CreditCardPurchase.Create(
+            Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 11, 5), Money.FromDecimal(400.00m),
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OwnId, "Fatura Dez Própria", SystemCategories.ShoppingId);
+        var othersDueDec = CreditCardPurchase.Create(
+            Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 11, 6), Money.FromDecimal(600.00m),
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OthersId, "Fatura Dez Outros", SystemCategories.ShoppingId);
+
+        await _purchases.AddAsync(othersDueBeforeToday);
+        await _purchases.AddAsync(ownDueDec);
+        await _purchases.AddAsync(othersDueDec);
+
+        var filtered = await _handler.ExecuteAsync(new GetMonthlySurplusQuery(
+            account.Id, 2026, 12, PastMonths: 0, FutureMonths: 1, ConditionId: SystemPurchaseConditions.OwnId));
+
+        Assert.Equal(SystemPurchaseConditions.OwnId, filtered.ConditionId);
+        // Nov RealBalance = 2000 - 300 (already due Nov 12 <= Nov 20) = 1700 (NEVER masked!)
+        Assert.Equal(1700.00m, filtered.Series[0].StartingCashBalance);
+        Assert.Equal(1700.00m, filtered.SelectedMonth.StartingCashBalance);
+        // Dec CardInvoiceDue counts ONLY Own (400), NOT Others (600)
+        Assert.Equal(400.00m, filtered.SelectedMonth.CardInvoiceDue);
+        Assert.Equal(1300.00m, filtered.SelectedMonth.ProjectedSurplus);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
+            new GetMonthlySurplusQuery(account.Id, 2026, 12, ConditionId: Guid.Empty)));
     }
 
     [Fact]

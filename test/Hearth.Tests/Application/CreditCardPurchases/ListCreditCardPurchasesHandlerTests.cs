@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.ListCreditCardPurchases;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -45,7 +46,7 @@ public class ListCreditCardPurchasesHandlerTests
         var cardId = Guid.NewGuid();
         var otherCardId = Guid.NewGuid();
 
-        // Bought 01/10 -> closes on 03/10 -> locked on 20/10.
+        // Bought 01/10 -> closes on 03/10, paid on 12/10 -> locked on 20/10.
         var locked = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
@@ -55,11 +56,11 @@ public class ListCreditCardPurchasesHandlerTests
             2,
             1,
             Rule3,
-            PurchaseCondition.Own,
-            "Fechada",
+            SystemPurchaseConditions.OwnId,
+            "Paga",
             Guid.NewGuid());
 
-        // Bought 10/10 -> closes on 03/11 -> open on 20/10.
+        // Bought 10/10 -> closes on 03/11, due on 12/11 -> unlocked on 20/10 (and even on 05/11 while Closed).
         var open = CreditCardPurchase.Create(
             Guid.NewGuid(),
             account.Id,
@@ -69,7 +70,7 @@ public class ListCreditCardPurchasesHandlerTests
             3,
             1,
             Rule3,
-            PurchaseCondition.Others,
+            Guid.NewGuid(),
             "Aberta",
             Guid.NewGuid());
 
@@ -82,7 +83,7 @@ public class ListCreditCardPurchasesHandlerTests
             1,
             1,
             Rule3,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Outro",
             Guid.NewGuid());
 
@@ -104,6 +105,14 @@ public class ListCreditCardPurchasesHandlerTests
 
         Assert.Equal(locked.Id, result[1].Id);
         Assert.True(result[1].IsLocked);
+
+        var ownOnly = await _handler.ExecuteAsync(
+            new ListCreditCardPurchasesQuery(account.Id, SystemPurchaseConditions.OwnId));
+        Assert.Single(ownOnly);
+        Assert.Equal(locked.Id, ownOnly[0].Id);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
+            new ListCreditCardPurchasesQuery(account.Id, Guid.Empty)));
     }
 
     [Fact]

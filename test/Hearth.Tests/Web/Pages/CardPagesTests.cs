@@ -1,11 +1,15 @@
 using Bunit;
 using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
+using Hearth.Application.CreditCards.ArchiveCreditCard;
+using Hearth.Application.Invoices.GetInvoiceSummary;
+using Hearth.Application.PurchaseConditions;
+using Hearth.Application.PurchaseConditions.CreatePurchaseCondition;
 using Hearth.Domain;
-using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 using Microsoft.AspNetCore.Components;
 using Microsoft.Extensions.DependencyInjection;
 using MudBlazor;
+using MudBlazor.Extensions;
 
 namespace Hearth.Tests.Web.Pages;
 
@@ -64,8 +68,7 @@ public sealed class CardPagesTests : WebTestBase
                     500m,
                     1,
                     1,
-                    PurchaseConditionKind.Own,
-                    null,
+                    SystemPurchaseConditions.OwnId,
                     "Fone Bluetooth",
                     SystemCategories.ShoppingId),
                 ct),
@@ -79,8 +82,9 @@ public sealed class CardPagesTests : WebTestBase
         await cut.Find("[data-testid='confirm-archive-card-button']").ClickAsync();
 
         Assert.NotEmpty(cut.FindAll("[data-testid='no-active-card-panel']"));
+        Assert.NotEmpty(cut.FindAll("[data-testid='archived-cards-section']"));
         await cut.Find("[data-testid='card-tab-purchases']").ClickAsync();
-        Assert.Contains("Fone Bluetooth", cut.Find("tbody").TextContent);
+        Assert.Contains("Fone Bluetooth", cut.Find("[data-testid='card-purchases-panel'] tbody").TextContent);
     }
 
     [Fact]
@@ -99,8 +103,7 @@ public sealed class CardPagesTests : WebTestBase
                     1000m,
                     1,
                     1,
-                    PurchaseConditionKind.Own,
-                    null,
+                    SystemPurchaseConditions.OwnId,
                     "Notebook",
                     SystemCategories.ShoppingId),
                 ct),
@@ -159,7 +162,11 @@ public sealed class CardPagesTests : WebTestBase
         var cardId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12);
         var categoryId = SystemCategories.HealthId;
 
-        // Locked purchase (registered on Nov 1 before Nov 12 due date; on Nov 20 installment 2 closed Nov 3 -> IsLocked == true)
+        var momCondition = await Executor.ExecuteAsync<CreatePurchaseConditionHandler, PurchaseConditionDto>(
+            (handler, ct) => handler.ExecuteAsync(new CreatePurchaseConditionCommand("Mãe"), ct),
+            showErrorSnackbar: false);
+
+        // Locked purchase (installment 2 due Nov 12; today is Nov 20 -> Paid -> IsLocked == true)
         Clock.Today = new DateOnly(2026, 11, 1);
         var lockedResult = await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
@@ -170,15 +177,14 @@ public sealed class CardPagesTests : WebTestBase
                     300m,
                     3,
                     2,
-                    PurchaseConditionKind.Custom,
-                    "Mãe",
+                    momCondition.Value!.Id,
                     "Farmácia Mãe",
                     categoryId),
                 ct),
             showErrorSnackbar: false);
         Clock.Today = new DateOnly(2026, 11, 20);
 
-        // Open purchase (Nov 10 -> closes Dec 3, today is Nov 20)
+        // Open purchase (Nov 10 -> closes Dec 3, due Dec 12; today is Nov 20 -> unlocked)
         var openResult = await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
             (handler, ct) => handler.ExecuteAsync(
                 new RegisterCreditCardPurchaseCommand(
@@ -188,8 +194,7 @@ public sealed class CardPagesTests : WebTestBase
                     150m,
                     1,
                     1,
-                    PurchaseConditionKind.Own,
-                    null,
+                    SystemPurchaseConditions.OwnId,
                     "Livros",
                     categoryId),
                 ct),
@@ -207,18 +212,181 @@ public sealed class CardPagesTests : WebTestBase
         Assert.Contains("Farmácia Mãe", body);
         Assert.DoesNotContain("Livros", body);
 
-        // Locked purchase disables amount & date edit, keeps details edit enabled
-        Assert.True(cut.Find($"[data-testid='edit-amount-purchase-{lockedResult.Value}']").HasAttribute("disabled"));
-        Assert.True(cut.Find($"[data-testid='edit-date-purchase-{lockedResult.Value}']").HasAttribute("disabled"));
-        Assert.False(cut.Find($"[data-testid='edit-details-purchase-{lockedResult.Value}']").HasAttribute("disabled"));
+        // Redundant quick-edit amount/date buttons are removed from row actions; only expand, single Edit (pencil) and Delete exist
+        Assert.Empty(cut.FindAll($"[data-testid='edit-amount-purchase-{lockedResult.Value}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='edit-date-purchase-{lockedResult.Value}']"));
+
+        var lockedEditBtn = cut.Find($"[data-testid='edit-purchase-{lockedResult.Value}']");
+        var deleteBtn = cut.Find($"[data-testid='delete-purchase-{lockedResult.Value}']");
+        Assert.False(lockedEditBtn.HasAttribute("disabled"));
+        Assert.True(deleteBtn.HasAttribute("disabled"));
+        Assert.Contains("fatura já paga", deleteBtn.GetAttribute("title"));
+        Assert.Contains("Fatura paga", cut.Find($"[data-testid='purchase-status-{lockedResult.Value}']").TextContent);
+
+        // Opening unified Edit panel on locked purchase keeps description/category/condition editable while locking amount & date
+        await lockedEditBtn.ClickAsync();
+        Assert.NotEmpty(cut.FindAll("[data-testid='edit-purchase-locked-notice']"));
+        Assert.False(cut.Find("[data-testid='edit-purchase-description-input']").HasAttribute("disabled"));
+        Assert.True(cut.Find("[data-testid='edit-purchase-amount-input']").HasAttribute("disabled"));
+        Assert.True(cut.Find("input[data-testid='edit-purchase-date-input']").HasAttribute("disabled"));
 
         // Expand installments shows "Já paga" for installment 1/3
         await cut.Find($"[data-testid='expand-purchase-{lockedResult.Value}']").ClickAsync();
         Assert.Contains("Já paga", cut.Markup);
 
-        // Open purchase keeps amount & date edit enabled
+        // Open purchase keeps unified edit (including amount & date) and delete enabled, and saves changes via the single Edit flow
         await cut.Find("[data-testid='filter-condition-all']").ClickAsync();
-        Assert.False(cut.Find($"[data-testid='edit-amount-purchase-{openResult.Value}']").HasAttribute("disabled"));
+        Assert.False(cut.Find($"[data-testid='delete-purchase-{openResult.Value}']").HasAttribute("disabled"));
+        await cut.Find($"[data-testid='edit-purchase-{openResult.Value}']").ClickAsync();
+        Assert.Empty(cut.FindAll("[data-testid='edit-purchase-locked-notice']"));
+        Assert.False(cut.Find("[data-testid='edit-purchase-amount-input']").HasAttribute("disabled"));
+        Assert.False(cut.Find("input[data-testid='edit-purchase-date-input']").HasAttribute("disabled"));
+
+        cut.Find("[data-testid='edit-purchase-description-input']").Input("Livros Técnicos");
+        cut.Find("[data-testid='edit-purchase-amount-input']").Input("220");
+        await cut.Find("[data-testid='save-purchase-edit']").ClickAsync();
+
+        var updatedTable = cut.Find("[data-testid='card-purchases-panel'] tbody").TextContent;
+        Assert.Contains("Livros Técnicos", updatedTable);
+        Assert.Contains("220,00", updatedTable);
+    }
+
+    [Fact]
+    public async Task CardPage_ClosedButUnpaidInvoicePurchase_RemainsEditableAndDeletableUntilDueDate()
+    {
+        // Rule (3, 12): purchase on Oct 10 closes Nov 3 and is due Nov 12. On Nov 10 it is Closed but NOT paid!
+        Clock.Today = new DateOnly(2026, 11, 10);
+        var accountId = await SeedAccountAsync();
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12);
+
+        var purchaseResult = await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(
+                new RegisterCreditCardPurchaseCommand(
+                    accountId,
+                    cardId,
+                    new DateOnly(2026, 10, 10),
+                    200m,
+                    1,
+                    1,
+                    SystemPurchaseConditions.OwnId,
+                    "Compra Fechada Não Paga",
+                    SystemCategories.ShoppingId),
+                ct),
+            showErrorSnackbar: false);
+
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/cartao?aba=compras");
+
+        Render<MudPopoverProvider>();
+        var cut = Render<CardPage>();
+
+        Assert.False(cut.Find($"[data-testid='delete-purchase-{purchaseResult.Value}']").HasAttribute("disabled"));
+        await cut.Find($"[data-testid='edit-purchase-{purchaseResult.Value}']").ClickAsync();
+        Assert.Empty(cut.FindAll("[data-testid='edit-purchase-locked-notice']"));
+        Assert.False(cut.Find("[data-testid='edit-purchase-amount-input']").HasAttribute("disabled"));
+        Assert.False(cut.Find("input[data-testid='edit-purchase-date-input']").HasAttribute("disabled"));
+    }
+
+    [Fact]
+    public async Task CardPage_ArchivedCards_ExcludedFromPurchaseSelector_CanBeReactivatedAndSafelyDeleted()
+    {
+        var accountId = await SeedAccountAsync();
+        var archivedWithHistoryId = await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12, name: "Cartão Histórico", limit: 4000m);
+
+        await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(
+                new RegisterCreditCardPurchaseCommand(
+                    accountId,
+                    archivedWithHistoryId,
+                    new DateOnly(2026, 11, 10),
+                    300m,
+                    1,
+                    1,
+                    SystemPurchaseConditions.OwnId,
+                    "Compra Histórica",
+                    SystemCategories.ShoppingId),
+                ct),
+            showErrorSnackbar: false);
+
+        await Executor.ExecuteAsync<ArchiveCreditCardHandler, bool>(
+            (handler, ct) => handler.ExecuteAsync(new ArchiveCreditCardCommand(archivedWithHistoryId), ct),
+            showErrorSnackbar: false);
+
+        var activeCardId = await SeedCreditCardAsync(accountId, closingDay: 10, dueDay: 20, name: "Cartão Ativo Atual", limit: 6000m);
+
+        Render<MudPopoverProvider>();
+        var cut = Render<CardPage>();
+
+        // 1. Archived card section sits discreetly collapsed when an active card exists; expanding reveals history block & disabled restore
+        var archivedToggle = cut.Find("[data-testid='archived-cards-toggle']");
+        Assert.Equal("false", archivedToggle.GetAttribute("aria-expanded"));
+        await archivedToggle.ClickAsync();
+
+        var archivedSection = cut.Find("[data-testid='archived-cards-section']");
+        Assert.Contains("Cartão Histórico", archivedSection.TextContent);
+        Assert.NotEmpty(cut.FindAll($"[data-testid='archived-card-delete-blocked-{archivedWithHistoryId}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='delete-archived-card-{archivedWithHistoryId}']"));
+        Assert.True(cut.Find($"[data-testid='restore-card-{archivedWithHistoryId}']").HasAttribute("disabled"));
+
+        // 2. Opening New Purchase form shows ONLY active card in card selector (archived card excluded)
+        await cut.Find("[data-testid='new-purchase-button']").ClickAsync();
+        var cardSelect = cut.FindComponents<MudSelect<Guid>>().Single(s => s.Instance.Label == "Cartão");
+        Assert.Equal(activeCardId, cardSelect.Instance.GetState(x => x.Value));
+        var cardItems = cardSelect.FindComponents<MudSelectItem<Guid>>();
+        Assert.Single(cardItems);
+        Assert.Equal(activeCardId, cardItems[0].Instance.Value);
+
+        // 3. Archive active unused card -> delete archived unused card -> Restore button on archived card with history becomes enabled -> Reactivate!
+        await cut.Find("[data-testid='archive-card-button']").ClickAsync();
+        await cut.Find("[data-testid='confirm-archive-card-button']").ClickAsync();
+
+        await cut.Find($"[data-testid='delete-archived-card-{activeCardId}']").ClickAsync();
+        await cut.Find($"[data-testid='confirm-delete-archived-card-{activeCardId}']").ClickAsync();
+        Assert.Empty(cut.FindAll($"[data-testid='restore-card-{activeCardId}']"));
+
+        var restoreBtn = cut.Find($"[data-testid='restore-card-{archivedWithHistoryId}']");
+        Assert.False(restoreBtn.HasAttribute("disabled"));
+        await restoreBtn.ClickAsync();
+
+        Assert.Contains("Cartão Histórico", cut.Find("[data-testid='active-card-name']").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='archived-cards-section']"));
+    }
+
+    [Fact]
+    public async Task CardPage_CrossMonthRule_AlignsInvoicesByDueDateIdenticallyToDashboard()
+    {
+        // Rule (25, 5), today Nov 20: purchase on Nov 10 closes Nov 25 and is due Dec 5 -> DueMonth = Dec 2026
+        Clock.Today = new DateOnly(2026, 11, 20);
+        var accountId = await SeedAccountAsync();
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 25, dueDay: 5, name: "Cartão 25/5", limit: 5000m);
+
+        await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(
+                new RegisterCreditCardPurchaseCommand(
+                    accountId,
+                    cardId,
+                    new DateOnly(2026, 11, 10),
+                    750m,
+                    1,
+                    1,
+                    SystemPurchaseConditions.OwnId,
+                    "Passagem",
+                    SystemCategories.TransportId),
+                ct),
+            showErrorSnackbar: false);
+
+        Render<MudPopoverProvider>();
+        var cut = Render<CardPage>();
+
+        // Default open invoice on /cartao must be Dec 2026 (DueMonth), matching Dashboard's DueMonth summary
+        Assert.Contains("Dezembro de 2026", cut.Find("[data-testid='month-label']").TextContent);
+        Assert.Contains("750,00", cut.Find("[data-testid='invoice-calculated-amount']").TextContent);
+
+        var dashboardInvoice = await Executor.ExecuteAsync<GetInvoiceSummaryHandler, InvoiceSummaryDto>(
+            (handler, ct) => handler.ExecuteAsync(
+                new GetInvoiceSummaryQuery(accountId, 2026, 12, MonthBasis: InvoiceMonthBasis.DueMonth), ct),
+            showErrorSnackbar: false);
+        Assert.Equal(750m, dashboardInvoice.Value!.CalculatedAmount);
     }
 
     [Fact]
@@ -239,8 +407,7 @@ public sealed class CardPagesTests : WebTestBase
                     1000m,
                     1,
                     1,
-                    PurchaseConditionKind.Own,
-                    null,
+                    SystemPurchaseConditions.OwnId,
                     "Notebook",
                     categoryId),
                 ct),
@@ -310,5 +477,57 @@ public sealed class CardPagesTests : WebTestBase
         var saved = Assert.Single(await CreditCardPurchases.GetByAccountAsync(accountId));
         Assert.Equal(new DateOnly(2026, 11, 8), saved.Date);
         Assert.Equal(new DateOnly(2026, 12, 5), saved.FirstActiveCycle.DueDate);
+    }
+
+    [Fact]
+    public async Task CardPage_AllowsCreatingNewConditionInlineAndReusingItInFuturePurchases()
+    {
+        var accountId = await SeedAccountAsync();
+        await SeedCreditCardAsync(accountId, closingDay: 3, dueDay: 12, name: "Nubank", limit: 5000m);
+
+        Render<MudPopoverProvider>();
+        var cut = Render<CardPage>();
+
+        // 1. Open New Purchase form -> "Própria" is selected by default and "Outros" is available as global default
+        await cut.Find("[data-testid='new-purchase-button']").ClickAsync();
+        var conditionSelect = cut.FindComponents<MudSelect<Guid>>().Single(s => s.Instance.Label == "Condição");
+        Assert.Equal(SystemPurchaseConditions.OwnId, conditionSelect.Instance.GetState(x => x.Value));
+        var initialConditions = await PurchaseConditions.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
+        Assert.Contains(initialConditions, c => c.Id == SystemPurchaseConditions.OthersId && c.Name == "Outros");
+
+        // 2. Select "+ Nova condição" (Guid.Empty), enter "Viagem", save inline
+        await cut.InvokeAsync(() => conditionSelect.Instance.ValueChanged.InvokeAsync(Guid.Empty));
+        cut.Find("[data-testid='purchase-condition-name-input']").Input("Viagem");
+        await cut.Find("[data-testid='save-new-condition-button']").ClickAsync();
+
+        var savedConditions = await PurchaseConditions.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
+        var viagem = Assert.Single(savedConditions, c => c.Name == "Viagem");
+        Assert.Equal(viagem.Id, conditionSelect.Instance.GetState(x => x.Value));
+
+        // 3. Submit first purchase using the newly created condition
+        cut.Find("[data-testid='purchase-description-input']").Input("Hotel");
+        cut.Find("[data-testid='purchase-amount-input']").Input("500");
+        await cut.Find("[data-testid='create-purchase-submit']").ClickAsync();
+
+        Assert.Contains("Hotel", cut.Find("tbody").TextContent);
+        Assert.Contains("Viagem", cut.Find("tbody").TextContent);
+
+        // 4. Open New Purchase form again -> "Viagem" is already available for reuse without re-creating
+        await cut.Find("[data-testid='new-purchase-button']").ClickAsync();
+        var secondConditionSelect = cut.FindComponents<MudSelect<Guid>>().Single(s => s.Instance.Label == "Condição");
+        Assert.Equal(SystemPurchaseConditions.OwnId, secondConditionSelect.Instance.GetState(x => x.Value));
+
+        await cut.InvokeAsync(() => secondConditionSelect.Instance.ValueChanged.InvokeAsync(viagem.Id));
+        cut.Find("[data-testid='purchase-description-input']").Input("Passagem");
+        cut.Find("[data-testid='purchase-amount-input']").Input("800");
+        await cut.Find("[data-testid='create-purchase-submit']").ClickAsync();
+
+        var purchases = await CreditCardPurchases.GetByAccountAsync(accountId);
+        Assert.Equal(2, purchases.Count);
+        Assert.All(purchases, p => Assert.Equal(viagem.Id, p.ConditionId));
+
+        // Still only one "Viagem" condition in repository
+        var allConditionsAfter = await PurchaseConditions.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
+        Assert.Single(allConditionsAfter, c => c.Name == "Viagem");
     }
 }

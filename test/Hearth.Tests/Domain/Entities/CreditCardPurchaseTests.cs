@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -12,6 +13,8 @@ public class CreditCardPurchaseTests
 
     private static readonly Guid DefaultCardId = Guid.NewGuid();
     private static readonly Guid DefaultCategoryId = Guid.NewGuid();
+    private static readonly Guid OthersConditionId = Guid.NewGuid();
+    private static readonly Guid AnaConditionId = Guid.NewGuid();
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
@@ -21,7 +24,7 @@ public class CreditCardPurchaseTests
     int count = 3,
     int initial = 1,
     CardBillingRule? rule = null,
-    PurchaseCondition? condition = null,
+    Guid? conditionId = null,
     string description = "Notebook",
     Guid? categoryId = null,
     Guid? accountId = null,
@@ -35,7 +38,7 @@ public class CreditCardPurchaseTests
         count,
         initial,
         rule ?? Rule3,
-        condition ?? PurchaseCondition.Own,
+        conditionId ?? SystemPurchaseConditions.OwnId,
         description,
         categoryId ?? DefaultCategoryId);
 
@@ -58,7 +61,7 @@ public class CreditCardPurchaseTests
             5,
             2,
             Rule3,
-            PurchaseCondition.Others,
+            OthersConditionId,
             "  Tênis  ",
             categoryId);
 
@@ -70,7 +73,7 @@ public class CreditCardPurchaseTests
         Assert.Equal(5, purchase.InstallmentCount);
         Assert.Equal(2, purchase.InitialInstallment);
         Assert.Equal(Rule3, purchase.Rule);
-        Assert.Equal(PurchaseCondition.Others, purchase.Condition);
+        Assert.Equal(OthersConditionId, purchase.ConditionId);
         Assert.Equal("Tênis", purchase.Description);
         Assert.Equal(categoryId, purchase.CategoryId);
     }
@@ -80,7 +83,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
             Guid.Empty, Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, Rule3,
-            PurchaseCondition.Own, "x", DefaultCategoryId));
+            SystemPurchaseConditions.OwnId, "x", DefaultCategoryId));
     }
 
     [Fact]
@@ -88,7 +91,7 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), Guid.Empty, DefaultDate, M(100m), 3, 1, Rule3,
-            PurchaseCondition.Own, "x", DefaultCategoryId));
+            SystemPurchaseConditions.OwnId, "x", DefaultCategoryId));
     }
 
     [Fact]
@@ -96,15 +99,15 @@ public class CreditCardPurchaseTests
     {
         Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, null!,
-            PurchaseCondition.Own, "x", DefaultCategoryId));
+            SystemPurchaseConditions.OwnId, "x", DefaultCategoryId));
     }
 
     [Fact]
-    public void Create_NullCondition_Throws()
+    public void Create_EmptyConditionId_Throws()
     {
-        Assert.Throws<ArgumentNullException>(() => CreditCardPurchase.Create(
+        Assert.Throws<ArgumentException>(() => CreditCardPurchase.Create(
             Guid.NewGuid(), Guid.NewGuid(), DefaultCardId, DefaultDate, M(100m), 3, 1, Rule3,
-            null!, "x", DefaultCategoryId));
+            Guid.Empty, "x", DefaultCategoryId));
     }
 
     [Theory]
@@ -314,9 +317,9 @@ public class CreditCardPurchaseTests
     [Fact]
     public void GetInstallments_ConditionDoesNotChangeTheCalculation()
     {
-        var own = NewPurchase(condition: PurchaseCondition.Own).GetInstallments();
-        var others = NewPurchase(condition: PurchaseCondition.Others).GetInstallments();
-        var custom = NewPurchase(condition: PurchaseCondition.Custom("Ana")).GetInstallments();
+        var own = NewPurchase(conditionId: SystemPurchaseConditions.OwnId).GetInstallments();
+        var others = NewPurchase(conditionId: OthersConditionId).GetInstallments();
+        var custom = NewPurchase(conditionId: AnaConditionId).GetInstallments();
 
         Assert.Equal(own, others);
         Assert.Equal(own, custom);
@@ -335,50 +338,76 @@ public class CreditCardPurchaseTests
     [Theory]
     [InlineData(2025, 1, 1, false)]
     [InlineData(2026, 10, 10, false)]
-    [InlineData(2026, 11, 2, false)]
-    [InlineData(2026, 11, 3, true)]
-    [InlineData(2026, 12, 1, true)]
-    public void IsLockedAt_PurchaseOnTheDefaultDate_LocksOnTheClosingDateOfTheFirstInvoice(
+    [InlineData(2026, 11, 2, false)]  // Open
+    [InlineData(2026, 11, 3, false)]  // Closed, not yet paid
+    [InlineData(2026, 11, 11, false)] // Day before due date (Closed, still unpaid)
+    [InlineData(2026, 11, 12, true)]  // Paid on due date
+    [InlineData(2026, 12, 1, true)]   // Paid
+    public void IsLockedAt_PurchaseOnTheDefaultDate_LocksOnTheDueDateOfTheFirstInvoice(
         int year, int month, int day, bool expected)
     {
-        // First invoice closes on 03/11/2026.
-        var purchase = NewPurchase();
+        // Rule (3, 12): first invoice closes on 03/11/2026 and is due (paid) on 12/11/2026.
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
         Assert.Equal(expected, purchase.IsLockedAt(new DateOnly(year, month, day)));
     }
 
     [Theory]
-    [InlineData(2026, 10, 2, false)]
-    [InlineData(2026, 10, 3, true)]
-    public void IsLockedAt_PurchaseBeforeTheClosingDay_LocksOnTheSameMonthClosingDate(
+    [InlineData(2026, 10, 2, false)]  // Open
+    [InlineData(2026, 10, 3, false)]  // Closed (due 12/10)
+    [InlineData(2026, 10, 11, false)] // Closed, day before due
+    [InlineData(2026, 10, 12, true)]  // Paid on due date
+    public void IsLockedAt_PurchaseBeforeTheClosingDay_LocksOnTheSameMonthDueDate(
         int year, int month, int day, bool expected)
     {
-        var purchase = NewPurchase(date: new DateOnly(2026, 10, 2));
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 2), rule: CardBillingRule.Of(3, 12));
 
         Assert.Equal(expected, purchase.IsLockedAt(new DateOnly(year, month, day)));
     }
 
     [Theory]
     [InlineData(2026, 10, 20, false)]
-    [InlineData(2026, 11, 2, false)]
-    [InlineData(2026, 11, 3, true)]
+    [InlineData(2026, 11, 3, false)]  // Closed, not yet paid
+    [InlineData(2026, 11, 11, false)] // Day before due date
+    [InlineData(2026, 11, 12, true)]  // Installment 4 due date -> paid
     public void IsLockedAt_PurchaseInProgress_UsesTheFirstInstallmentThatStillCounts(
         int year, int month, int day, bool expected)
     {
-        // Installments 1 to 3 closed long ago, but the first one that counts (4) closes on 03/11/2026.
-        var purchase = NewPurchase(date: new DateOnly(2026, 7, 10), amount: 600.00m, count: 6, initial: 4);
+        // Installments 1 to 3 are previously paid; installment 4 closes on 03/11/2026 and is due on 12/11/2026.
+        var purchase = NewPurchase(
+            date: new DateOnly(2026, 7, 10),
+            amount: 600.00m,
+            count: 6,
+            initial: 4,
+            rule: CardBillingRule.Of(3, 12));
 
         Assert.Equal(expected, purchase.IsLockedAt(new DateOnly(year, month, day)));
+    }
+
+    [Fact]
+    public void IsLockedAt_PartiallyPaidMultiInstallmentPurchase_IsLockedOnceFirstInstallmentIsPaid()
+    {
+        // 3x purchase: installment 1 due 12/11/2026, installment 2 due 12/12/2026, installment 3 due 12/01/2027.
+        var purchase = NewPurchase(
+            date: new DateOnly(2026, 10, 10),
+            amount: 300.00m,
+            count: 3,
+            initial: 1,
+            rule: CardBillingRule.Of(3, 12));
+
+        // On 2026-11-20: installment 1 is paid while installments 2 and 3 are still open -> must be locked.
+        Assert.True(purchase.IsLockedAt(new DateOnly(2026, 11, 20)));
     }
 
     // ---------- UpdateAmount ----------
 
     [Fact]
-    public void UpdateAmount_BeforeTheClosing_ChangesTheAmountAndTheInstallments()
+    public void UpdateAmount_BeforeDueDateIncludingWhileClosed_ChangesTheAmountAndTheInstallments()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
-        purchase.UpdateAmount(M(250.00m), new DateOnly(2026, 10, 20));
+        // On 2026-11-05 the invoice is Closed (closed 03/11) but NOT yet Paid (due 12/11).
+        purchase.UpdateAmount(M(250.00m), new DateOnly(2026, 11, 5));
 
         Assert.Equal(M(250.00m), purchase.Amount);
         Assert.Equal(
@@ -387,12 +416,12 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
-    public void UpdateAmount_AfterTheClosing_ThrowsAndKeepsTheAmount()
+    public void UpdateAmount_OnOrAfterDueDate_ThrowsAndKeepsTheAmount()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
-            () => purchase.UpdateAmount(M(250.00m), new DateOnly(2026, 11, 3)));
+            () => purchase.UpdateAmount(M(250.00m), new DateOnly(2026, 11, 12)));
 
         Assert.Equal(M(100.00m), purchase.Amount);
     }
@@ -402,7 +431,7 @@ public class CreditCardPurchaseTests
     [InlineData(-10)]
     public void UpdateAmount_ZeroOrNegative_ThrowsAndKeepsTheAmount(double raw)
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<ArgumentOutOfRangeException>(
             () => purchase.UpdateAmount(M((decimal)raw), new DateOnly(2026, 10, 20)));
@@ -413,7 +442,7 @@ public class CreditCardPurchaseTests
     [Fact]
     public void UpdateAmount_TooSmallToSplit_ThrowsAndKeepsTheAmount()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
             () => purchase.UpdateAmount(M(0.02m), new DateOnly(2026, 10, 20)));
@@ -424,33 +453,34 @@ public class CreditCardPurchaseTests
     // ---------- UpdateDate ----------
 
     [Fact]
-    public void UpdateDate_BeforeTheClosing_ChangesTheDateAndTheFirstCycle()
+    public void UpdateDate_BeforeDueDateIncludingWhileClosed_ChangesTheDateAndTheFirstCycle()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
-        purchase.UpdateDate(new DateOnly(2026, 11, 5), new DateOnly(2026, 10, 20));
+        // On 2026-11-05 invoice is Closed (closed 03/11) but not yet Paid (due 12/11).
+        purchase.UpdateDate(new DateOnly(2026, 11, 5), new DateOnly(2026, 11, 5));
 
         Assert.Equal(new DateOnly(2026, 11, 5), purchase.Date);
         Assert.Equal(YearMonth.Of(2026, 12), purchase.FirstCycle.ClosingMonth);
     }
 
     [Fact]
-    public void UpdateDate_AfterTheClosing_ThrowsAndKeepsTheDate()
+    public void UpdateDate_OnOrAfterDueDate_ThrowsAndKeepsTheDate()
     {
-        var purchase = NewPurchase();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
-            () => purchase.UpdateDate(new DateOnly(2026, 11, 5), new DateOnly(2026, 11, 3)));
+            () => purchase.UpdateDate(new DateOnly(2026, 11, 5), new DateOnly(2026, 11, 12)));
 
         Assert.Equal(DefaultDate, purchase.Date);
     }
 
     [Fact]
-    public void UpdateDate_MovingIntoAlreadyClosedCycle_ThrowsAndKeepsTheDate()
+    public void UpdateDate_MovingIntoAlreadyPaidInvoice_ThrowsAndKeepsTheDate()
     {
-        // Today is 20/10/2026, closing day 3 -> October cycle already closed on 03/10/2026.
-        // Moving from 10/10/2026 (Nov cycle, open) to 02/10/2026 (Oct cycle, closed) must fail.
-        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+        // Today is 20/10/2026, rule (3, 12) -> October invoice was paid on 12/10/2026.
+        // Moving from 10/10/2026 (Nov invoice, due 12/11) to 02/10/2026 (Oct invoice, paid 12/10) must fail.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10), rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
             () => purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 20)));
@@ -459,11 +489,16 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
-    public void UpdateDate_PurchaseInProgress_MovingFirstCountingCycleIntoClosedCycle_ThrowsAndKeepsTheDate()
+    public void UpdateDate_PurchaseInProgress_MovingFirstCountingCycleIntoPaidInvoice_ThrowsAndKeepsTheDate()
     {
-        // Purchase on 10/07/2026, 6x, initial 4 -> installment 4 closes on 03/11/2026 (open on 20/10/2026).
-        // Moving to 10/06/2026 shifts installment 4 to close on 03/10/2026 (already closed on 20/10/2026).
-        var purchase = NewPurchase(date: new DateOnly(2026, 7, 10), amount: 600.00m, count: 6, initial: 4);
+        // Purchase on 10/07/2026, 6x, initial 4, rule (3, 12) -> installment 4 due 12/11/2026 (unpaid on 20/10/2026).
+        // Moving to 10/06/2026 shifts installment 4 to due 12/10/2026 (already paid on 20/10/2026).
+        var purchase = NewPurchase(
+            date: new DateOnly(2026, 7, 10),
+            amount: 600.00m,
+            count: 6,
+            initial: 4,
+            rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
             () => purchase.UpdateDate(new DateOnly(2026, 6, 10), new DateOnly(2026, 10, 20)));
@@ -472,25 +507,25 @@ public class CreditCardPurchaseTests
     }
 
     [Fact]
-    public void UpdateDate_MovingEarlierWithinOpenCycle_IsAccepted()
+    public void UpdateDate_MovingEarlierIntoClosedButUnpaidInvoice_IsAccepted()
     {
-        // Today is 20/10/2026, closing day 3 -> 03/10/2026 goes to Nov cycle (closes 03/11/2026, still open).
-        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+        // Today is 10/10/2026, rule (3, 12) -> October invoice closed 03/10 but is NOT paid until 12/10.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10), rule: CardBillingRule.Of(3, 12));
 
-        purchase.UpdateDate(new DateOnly(2026, 10, 3), new DateOnly(2026, 10, 20));
+        purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 10));
 
-        Assert.Equal(new DateOnly(2026, 10, 3), purchase.Date);
-        Assert.Equal(YearMonth.Of(2026, 11), purchase.FirstCycle.ClosingMonth);
+        Assert.Equal(new DateOnly(2026, 10, 2), purchase.Date);
+        Assert.Equal(YearMonth.Of(2026, 10), purchase.FirstCycle.ClosingMonth);
     }
 
     [Fact]
-    public void UpdateDate_MovingIntoCycleClosingExactlyOnToday_ThrowsAndKeepsTheDate()
+    public void UpdateDate_MovingIntoCycleDueExactlyOnToday_ThrowsAndKeepsTheDate()
     {
-        // Today is 03/10/2026 (exact closing date of October cycle): moving to 02/10/2026 must fail.
-        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10));
+        // Today is 12/10/2026 (exact due date of October invoice): moving to 02/10/2026 must fail.
+        var purchase = NewPurchase(date: new DateOnly(2026, 10, 10), rule: CardBillingRule.Of(3, 12));
 
         Assert.Throws<DomainException>(
-            () => purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 3)));
+            () => purchase.UpdateDate(new DateOnly(2026, 10, 2), new DateOnly(2026, 10, 12)));
 
         Assert.Equal(new DateOnly(2026, 10, 10), purchase.Date);
     }
@@ -505,62 +540,6 @@ public class CreditCardPurchaseTests
             () => purchase.UpdateDate(new DateOnly(9999, 11, 1), new DateOnly(2026, 10, 20)));
 
         Assert.Equal(DefaultDate, purchase.Date);
-    }
-
-    // ---------- EnsureFirstActiveDueDateIsOpen ----------
-
-    [Fact]
-    public void EnsureFirstActiveDueDateIsOpen_AllowsPurchaseBeforeInitialBalanceDateWhenDueDateIsOpen()
-    {
-        // Real-world scenario: account created on 23/11, purchase made on 08/11 on card (25, 5) -> due 05/12.
-        var initialDate = new DateOnly(2026, 11, 23);
-        var today = new DateOnly(2026, 11, 23);
-        var account = Account.Create(
-            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(1000m), initialDate, isInitialBalanceConfirmed: true);
-
-        var purchase = NewPurchase(
-            date: new DateOnly(2026, 11, 8),
-            count: 1,
-            initial: 1,
-            rule: CardBillingRule.Of(25, 5),
-            accountId: account.Id);
-
-        Assert.Equal(new DateOnly(2026, 12, 5), purchase.FirstActiveCycle.DueDate);
-        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(account, today)));
-        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(new DateOnly(2026, 11, 1), account, today)));
-    }
-
-    [Fact]
-    public void EnsureFirstActiveDueDateIsOpen_RespectsExactLowerBoundsAndRejectsBeforeInitialDateOrBeforeToday()
-    {
-        // Card (25, 5): purchase 08/10 -> closes 25/10, due 05/11.
-        var rule = CardBillingRule.Of(25, 5);
-        var purchase = NewPurchase(date: new DateOnly(2026, 10, 8), count: 3, initial: 1, rule: rule);
-        Assert.Equal(new DateOnly(2026, 11, 5), purchase.FirstActiveCycle.DueDate);
-
-        // Exact boundary: DueDate == InitialBalanceDate == today -> allowed
-        var exactAccount = Account.Create(
-            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 5), isInitialBalanceConfirmed: true);
-        Assert.Null(Record.Exception(() => purchase.EnsureFirstActiveDueDateIsOpen(exactAccount, new DateOnly(2026, 11, 5))));
-
-        // DueDate < InitialBalanceDate (even when DueDate >= today) -> rejected
-        var laterInitialAccount = Account.Create(
-            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 6), isInitialBalanceConfirmed: true);
-        Assert.Throws<DomainException>(() => purchase.EnsureFirstActiveDueDateIsOpen(laterInitialAccount, new DateOnly(2026, 11, 1)));
-
-        // DueDate < today (even when DueDate >= InitialBalanceDate) -> rejected
-        Assert.Throws<DomainException>(() => purchase.EnsureFirstActiveDueDateIsOpen(exactAccount, new DateOnly(2026, 11, 6)));
-
-        // Advancing InitialInstallment to 2 moves FirstActiveCycle.DueDate to 05/12 -> allowed on 23/11!
-        var inProgress = NewPurchase(date: new DateOnly(2026, 10, 8), count: 3, initial: 2, rule: rule);
-        var nov23Account = Account.Create(
-            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(0m), new DateOnly(2026, 11, 23), isInitialBalanceConfirmed: true);
-        Assert.Equal(new DateOnly(2026, 12, 5), inProgress.FirstActiveCycle.DueDate);
-        Assert.Null(Record.Exception(() => inProgress.EnsureFirstActiveDueDateIsOpen(nov23Account, new DateOnly(2026, 11, 23))));
-
-        // Null account throws ArgumentNullException
-        Assert.Throws<ArgumentNullException>(() => purchase.EnsureFirstActiveDueDateIsOpen(null!, new DateOnly(2026, 11, 5)));
-        Assert.Throws<ArgumentNullException>(() => purchase.EnsureFirstActiveDueDateIsOpen(new DateOnly(2026, 10, 8), null!, new DateOnly(2026, 11, 5)));
     }
 
     // ---------- UpdateDescription and UpdateCategory ----------
@@ -625,39 +604,40 @@ public class CreditCardPurchaseTests
     [Fact]
     public void UpdateCondition_Changes()
     {
-        var purchase = NewPurchase(condition: PurchaseCondition.Own);
+        var purchase = NewPurchase(conditionId: SystemPurchaseConditions.OwnId);
 
-        purchase.UpdateCondition(PurchaseCondition.Others);
-        Assert.Equal(PurchaseCondition.Others, purchase.Condition);
+        purchase.UpdateCondition(OthersConditionId);
+        Assert.Equal(OthersConditionId, purchase.ConditionId);
 
-        purchase.UpdateCondition(PurchaseCondition.Custom("Ana"));
-        Assert.Equal(PurchaseCondition.Custom("Ana"), purchase.Condition);
+        purchase.UpdateCondition(AnaConditionId);
+        Assert.Equal(AnaConditionId, purchase.ConditionId);
     }
 
     [Fact]
-    public void UpdateCondition_Null_ThrowsAndKeepsTheCondition()
+    public void UpdateCondition_Empty_ThrowsAndKeepsTheCondition()
     {
-        var purchase = NewPurchase(condition: PurchaseCondition.Others);
+        var purchase = NewPurchase(conditionId: OthersConditionId);
 
-        Assert.Throws<ArgumentNullException>(() => purchase.UpdateCondition(null!));
+        Assert.Throws<ArgumentException>(() => purchase.UpdateCondition(Guid.Empty));
 
-        Assert.Equal(PurchaseCondition.Others, purchase.Condition);
+        Assert.Equal(OthersConditionId, purchase.ConditionId);
     }
 
     [Fact]
-    public void DescriptionCategoryAndCondition_RemainEditableAfterTheClosing()
+    public void DescriptionCategoryAndCondition_RemainEditableAfterInvoiceIsPaid()
     {
         var newCategory = Guid.NewGuid();
-        var purchase = NewPurchase();
+        var momConditionId = Guid.NewGuid();
+        var purchase = NewPurchase(rule: CardBillingRule.Of(3, 12));
         Assert.True(purchase.IsLockedAt(new DateOnly(2026, 12, 1)));
 
         purchase.UpdateDescription("Notebook Dell");
         purchase.UpdateCategory(newCategory);
-        purchase.UpdateCondition(PurchaseCondition.Custom("Mãe"));
+        purchase.UpdateCondition(momConditionId);
 
         Assert.Equal("Notebook Dell", purchase.Description);
         Assert.Equal(newCategory, purchase.CategoryId);
-        Assert.Equal(PurchaseCondition.Custom("Mãe"), purchase.Condition);
+        Assert.Equal(momConditionId, purchase.ConditionId);
     }
 
     // ---------- Main invariants ----------
@@ -707,13 +687,13 @@ public class CreditCardPurchaseTests
     [InlineData(1)]
     [InlineData(3)]
     [InlineData(6)]
-    public void IsLockedAt_FlipsOnceAtTheClosingDate_AndNeverGoesBack(int initial)
+    public void IsLockedAt_FlipsOnceAtTheDueDate_AndNeverGoesBack(int initial)
     {
-        var purchase = NewPurchase(count: 6, initial: initial);
-        var closingDate = purchase.FirstCycle.AddCycles(initial - 1).ClosingDate;
+        var purchase = NewPurchase(count: 6, initial: initial, rule: CardBillingRule.Of(3, 12));
+        var dueDate = purchase.FirstCycle.AddCycles(initial - 1).DueDate;
 
         DateOnly? firstLocked = null;
-        for (var day = purchase.Date.AddDays(-400); day <= closingDate.AddDays(400); day = day.AddDays(1))
+        for (var day = purchase.Date.AddDays(-400); day <= dueDate.AddDays(400); day = day.AddDays(1))
         {
             var locked = purchase.IsLockedAt(day);
 
@@ -728,6 +708,6 @@ public class CreditCardPurchaseTests
         }
 
         Assert.NotNull(firstLocked);
-        Assert.Equal(closingDate, firstLocked.Value);
+        Assert.Equal(dueDate, firstLocked.Value);
     }
 }

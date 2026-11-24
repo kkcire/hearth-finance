@@ -42,16 +42,20 @@ public sealed class BudgetsPageTests : WebTestBase
         var budget = Assert.Single(savedBudgets);
         Assert.Equal(Money.FromDecimal(1250.50m), budget.AmountIn(YearMonth.From(Clock.Today)));
 
-        // Change amount (takes effect from current calendar month)
-        await cut.Find($"[data-testid='change-amount-{budget.Id}']").ClickAsync();
+        // Redundant quick-edit buttons are replaced by a single Edit (pencil) button
+        Assert.Empty(cut.FindAll($"[data-testid='change-amount-{budget.Id}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='end-budget-{budget.Id}']"));
+
+        // Change amount (takes effect from current calendar month) via unified Edit panel
+        await cut.Find($"[data-testid='edit-budget-{budget.Id}']").ClickAsync();
         cut.Find("input[data-testid='edit-budget-amount-input']").Change("1.500,00");
         await cut.Find("[data-testid='save-budget-amount']").ClickAsync();
 
         var updated = await CategoryBudgets.GetByIdAsync(budget.Id);
         Assert.Equal(Money.FromDecimal(1500.00m), updated!.AmountIn(YearMonth.From(Clock.Today)));
 
-        // End budget
-        await cut.Find($"[data-testid='end-budget-{budget.Id}']").ClickAsync();
+        // End budget via the same unified Edit panel
+        await cut.Find($"[data-testid='edit-budget-{budget.Id}']").ClickAsync();
         await cut.Find("[data-testid='save-budget-end']").ClickAsync();
 
         var ended = await CategoryBudgets.GetByIdAsync(budget.Id);

@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetProjectedResult;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -72,7 +73,7 @@ public class GetProjectedResultHandlerTests
             1,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Others,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
 
@@ -108,6 +109,29 @@ public class GetProjectedResultHandlerTests
         Assert.Equal(6, dto.Month);
         Assert.Equal(1200.00m, dto.FixedExpenses);
         Assert.Equal(-1200.00m, dto.Result);
+        Assert.Null(dto.ConditionId);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_WithConditionId_FiltersCardInvoiceAndRejectsEmptyGuid()
+    {
+        var account = await SeedAccountAsync();
+        await _purchases.AddAsync(CreditCardPurchase.Create(
+            Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 10, 10), Money.FromDecimal(200.00m),
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OwnId, "Própria", Guid.NewGuid()));
+        await _purchases.AddAsync(CreditCardPurchase.Create(
+            Guid.NewGuid(), account.Id, Guid.NewGuid(), new DateOnly(2026, 10, 12), Money.FromDecimal(500.00m),
+            1, 1, CardBillingRule.Of(3, 12), SystemPurchaseConditions.OthersId, "Outros", Guid.NewGuid()));
+
+        var ownDto = await _handler.ExecuteAsync(
+            new GetProjectedResultQuery(account.Id, 2026, 11, SystemPurchaseConditions.OwnId));
+
+        Assert.Equal(SystemPurchaseConditions.OwnId, ownDto.ConditionId);
+        Assert.Equal(200.00m, ownDto.CardInvoice);
+        Assert.Equal(-200.00m, ownDto.Result);
+
+        await Assert.ThrowsAsync<ArgumentException>(() => _handler.ExecuteAsync(
+            new GetProjectedResultQuery(account.Id, 2026, 11, Guid.Empty)));
     }
 
     [Fact]

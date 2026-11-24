@@ -36,15 +36,6 @@ public sealed class HearthFormatTests
     }
 
     [Fact]
-    public void ConditionLabel_ReturnsPortugueseLabelsAndCustomName()
-    {
-        Assert.Equal("Própria", HearthFormat.ConditionLabel(PurchaseConditionKind.Own));
-        Assert.Equal("Outros", HearthFormat.ConditionLabel(PurchaseConditionKind.Others));
-        Assert.Equal("Mãe", HearthFormat.ConditionLabel(PurchaseConditionKind.Custom, "Mãe"));
-        Assert.Equal("Personalizado", HearthFormat.ConditionLabel(PurchaseConditionKind.Custom, null));
-    }
-
-    [Fact]
     public void DateConversions_RoundTripWithoutTimeShift()
     {
         var date = new DateOnly(2026, 11, 20);

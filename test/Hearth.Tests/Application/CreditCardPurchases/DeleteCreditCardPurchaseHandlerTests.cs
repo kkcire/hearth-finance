@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.DeleteCreditCardPurchase;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -44,7 +45,7 @@ public class DeleteCreditCardPurchaseHandlerTests
             3,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
         await _purchases.AddAsync(purchase);
@@ -52,8 +53,10 @@ public class DeleteCreditCardPurchaseHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_BeforeInvoiceCloses_DeletesAndSaves()
+    public async Task ExecuteAsync_BeforeInvoiceIsPaidIncludingWhileClosed_DeletesAndSaves()
     {
+        // Invoice closes on 03/11/2026 and is due on 12/11/2026 -> still deletable on 10/11/2026.
+        _clock.Today = new DateOnly(2026, 11, 10);
         var purchase = await SeedPurchaseAsync();
 
         await _handler.ExecuteAsync(new DeleteCreditCardPurchaseCommand(purchase.Id));
@@ -64,9 +67,9 @@ public class DeleteCreditCardPurchaseHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_OnOrAfterClosingDate_ThrowsDomainExceptionAndKeepsPurchase()
+    public async Task ExecuteAsync_OnOrAfterDueDate_ThrowsDomainExceptionAndKeepsPurchase()
     {
-        _clock.Today = new DateOnly(2026, 11, 3);
+        _clock.Today = new DateOnly(2026, 11, 12);
         var purchase = await SeedPurchaseAsync();
 
         await Assert.ThrowsAsync<DomainException>(

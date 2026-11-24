@@ -1,7 +1,6 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Reports.GetBudgetStatus;
-using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -58,7 +57,7 @@ public class GetBudgetStatusHandlerTests
             1,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Others,
+            Guid.NewGuid(),
             "Terceiro",
             SystemCategories.FoodId));
 
@@ -66,7 +65,7 @@ public class GetBudgetStatusHandlerTests
             account.Id,
             2026,
             11,
-            IncludedConditions: new[] { new PurchaseConditionFilter(PurchaseConditionKind.Own) }));
+            IncludedConditionIds: new[] { SystemPurchaseConditions.OwnId }));
 
         Assert.Equal(660.00m, ownOnly.TotalBudgeted);
         Assert.Equal(120.00m, ownOnly.TotalSpent);

@@ -75,7 +75,7 @@ public class RealBalanceCalculatorTests
         // - Inst 2: closes Dec 3, due Dec 12
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 10, 10), M(300m), 2, 1,
-            Rule3_12, PurchaseCondition.Own, "Tênis", SystemCategories.ShoppingId);
+            Rule3_12, SystemPurchaseConditions.OwnId, "Tênis", SystemCategories.ShoppingId);
 
         // On Oct 31: income NOT received yet (ReceivedOn = Nov 5), invoice NOT due yet
         var onOct31 = RealBalanceCalculator.Calculate(
@@ -164,13 +164,13 @@ public class RealBalanceCalculatorTests
         // Rule (25, 5): purchase on Oct 10 closes Oct 25, due Nov 5 (next month!).
         var dueNextMonth = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 10, 10), M(120m), 1, 1,
-            Rule25_5, PurchaseCondition.Others, "Cartão ativo", SystemCategories.ShoppingId);
+            Rule25_5, Guid.NewGuid(), "Cartão ativo", SystemCategories.ShoppingId);
 
         // Archived card purchase with DueDate == InitialBalanceDate (Oct 1) using rule (20, 1):
         // Sep 10 closes Sep 20, due Oct 1 -> exact lower bound counts!
         var archivedCardPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ArchivedCardId, new DateOnly(2026, 9, 10), M(80m), 1, 1,
-            CardBillingRule.Of(20, 1), PurchaseCondition.Custom("Mãe"), "Cartão arquivado", SystemCategories.ShoppingId);
+            CardBillingRule.Of(20, 1), Guid.NewGuid(), "Cartão arquivado", SystemCategories.ShoppingId);
 
         // On Oct 31: archived card (due Oct 1) settled; dueNextMonth (closed Oct 25, due Nov 5) NOT settled yet!
         var onOct31 = RealBalanceCalculator.Calculate(
@@ -193,17 +193,17 @@ public class RealBalanceCalculatorTests
         // Due Sep 12 (before InitialDate Oct 1) -> ignored
         var beforeInitial = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 8, 10), M(200m), 1, 1,
-            Rule3_12, PurchaseCondition.Own, "Antiga", SystemCategories.ShoppingId);
+            Rule3_12, SystemPurchaseConditions.OwnId, "Antiga", SystemCategories.ShoppingId);
 
         // Previously paid installment 1 due Oct 12 -> ignored; installment 2 due Nov 12 -> counts
         var inProgress = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 9, 10), M(200m), 2, 2,
-            Rule3_12, PurchaseCondition.Own, "Em andamento", SystemCategories.ShoppingId);
+            Rule3_12, SystemPurchaseConditions.OwnId, "Em andamento", SystemCategories.ShoppingId);
 
         // Other account -> ignored
         var otherAccount = CreditCardPurchase.Create(
             Guid.NewGuid(), OtherAccountId, CardId, new DateOnly(2026, 10, 10), M(999m), 1, 1,
-            Rule3_12, PurchaseCondition.Own, "Outra conta", SystemCategories.ShoppingId);
+            Rule3_12, SystemPurchaseConditions.OwnId, "Outra conta", SystemCategories.ShoppingId);
 
         var balance = RealBalanceCalculator.Calculate(
             account, new DateOnly(2026, 12, 31), [], [], [], [beforeInitial, inProgress, otherAccount]);
@@ -220,15 +220,13 @@ public class RealBalanceCalculatorTests
         var account = Account.Create(AccountId, OwnerUserId, "Conta", M(2000m), initialDate, isInitialBalanceConfirmed: true);
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 11, 8), M(300m), 1, 1,
-            Rule25_5, PurchaseCondition.Own, "Compra pré-saldo", SystemCategories.ShoppingId);
-
-        purchase.EnsureFirstActiveDueDateIsOpen(account, initialDate);
+            Rule25_5, SystemPurchaseConditions.OwnId, "Compra pré-saldo", SystemCategories.ShoppingId);
 
         // On 23/11: RealBalance untouched (2000), limit used = 300, Nov closing invoice = 300
         var realOn23Nov = RealBalanceCalculator.Calculate(account, initialDate, [], [], [], [purchase]);
         Assert.Equal(Money.Zero, realOn23Nov.CardInvoices);
         Assert.Equal(M(2000m), realOn23Nov.Balance);
-        Assert.Equal(M(300m), CreditCardLimitCalculator.CalculateUsedLimit(CardId, initialDate, [purchase]));
+        Assert.Equal(M(300m), CreditCardLimitCalculator.CalculateUsedLimit(CardId, initialDate, [purchase], initialDate));
         Assert.Equal(M(300m), InvoiceCalculator.Calculate(AccountId, YearMonth.Of(2026, 11), [purchase]));
 
         // Dec surplus sees 300 due on 05/12 and projects 1700 closing surplus
@@ -242,6 +240,48 @@ public class RealBalanceCalculatorTests
         var realOnDue = RealBalanceCalculator.Calculate(account, dueDate, [], [], [], [purchase]);
         Assert.Equal(M(300m), realOnDue.CardInvoices);
         Assert.Equal(M(1700m), realOnDue.Balance);
-        Assert.Equal(Money.Zero, CreditCardLimitCalculator.CalculateUsedLimit(CardId, dueDate, [purchase]));
+        Assert.Equal(Money.Zero, CreditCardLimitCalculator.CalculateUsedLimit(CardId, dueDate, [purchase], initialDate));
+    }
+
+    [Fact]
+    public void HistoricalPurchaseDueBeforeInitialBalanceDate_AppearsInInvoice_WithZeroImpactOnRealBalanceLimitAndSurplus()
+    {
+        // Account created on 2026-11-22 with R$ 2000.
+        // 1) Historical 1x purchase on 2026-10-10 of R$ 500 (rule 3/12 -> closes Nov 3, due Nov 12 < InitialBalanceDate).
+        // 2) Old 10x purchase on 2026-03-02 of R$ 1000 (rule 3/12, InitialInstallment = 1 -> inst 1..9 due Mar 12..Nov 12 < InitialBalanceDate, inst 10 due Dec 12 >= InitialBalanceDate).
+        var initialDate = new DateOnly(2026, 11, 22);
+        var account = Account.Create(AccountId, OwnerUserId, "Conta", M(2000m), initialDate, isInitialBalanceConfirmed: true);
+        var card = CreditCard.Create(CardId, AccountId, Rule3_12, "Nubank", M(3000m));
+
+        var historicalSingle = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 10, 10), M(500m), 1, 1,
+            Rule3_12, SystemPurchaseConditions.OwnId, "Fatura passada", SystemCategories.ShoppingId);
+
+        var oldInstallment = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 3, 2), M(1000m), 10, 1,
+            Rule3_12, SystemPurchaseConditions.OwnId, "Parcelamento antigo", SystemCategories.ShoppingId);
+
+        CreditCardPurchase[] purchases = [historicalSingle, oldInstallment];
+
+        // Historical invoice consultation DOES display both Nov 2026 installments (500 + 100 = 600)
+        Assert.Equal(M(600m), InvoiceCalculator.Calculate(AccountId, YearMonth.Of(2026, 11), purchases));
+        Assert.Equal(M(100m), InvoiceCalculator.Calculate(AccountId, YearMonth.Of(2026, 12), purchases));
+
+        // RealBalance on 2026-11-22 has ZERO deductions from installments due before InitialBalanceDate
+        var realBalance = RealBalanceCalculator.Calculate(account, initialDate, [], [], [], purchases);
+        Assert.Equal(Money.Zero, realBalance.CardInvoices);
+        Assert.Equal(M(2000m), realBalance.Balance);
+
+        // CreditCardLimit counts ONLY installment 10 (due 2026-12-12 = 100), ignoring all pre-InitialBalanceDate installments
+        Assert.Equal(M(100m), CreditCardLimitCalculator.CalculateUsedLimit(CardId, initialDate, purchases, initialDate));
+        Assert.Equal(M(2900m), CreditCardLimitCalculator.CalculateAvailableLimit(card, initialDate, purchases, initialDate));
+
+        // MonthlySurplus for Nov and Dec ignores all pre-InitialBalanceDate installments (Nov = 2000, Dec = 1900)
+        var surplus = MonthlySurplusCalculator.CalculateSeries(
+            account, YearMonth.Of(2026, 12), initialDate, [], [], [], purchases, pastMonths: 0, futureMonths: 1);
+        Assert.Equal(Money.Zero, surplus.Points[0].CardInvoiceDue);
+        Assert.Equal(M(2000m), surplus.Points[0].ProjectedSurplus);
+        Assert.Equal(M(100m), surplus.SelectedMonth.CardInvoiceDue);
+        Assert.Equal(M(1900m), surplus.SelectedMonth.ProjectedSurplus);
     }
 }

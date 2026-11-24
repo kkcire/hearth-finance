@@ -29,6 +29,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
     internal FakePasswordHasher PasswordHasher { get; } = new();
     internal InMemoryAccountRepository Accounts { get; } = new();
     internal InMemoryCategoryRepository Categories { get; } = new();
+    internal InMemoryPurchaseConditionRepository PurchaseConditions { get; } = new();
     internal InMemoryCategoryBudgetRepository CategoryBudgets { get; } = new();
     internal InMemoryDirectExpenseRepository DirectExpenses { get; } = new();
     internal InMemoryFixedExpenseRepository FixedExpenses { get; } = new();
@@ -51,6 +52,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         Services.AddSingleton<IPasswordHasher>(PasswordHasher);
         Services.AddSingleton<IAccountRepository>(Accounts);
         Services.AddSingleton<ICategoryRepository>(Categories);
+        Services.AddSingleton<IPurchaseConditionRepository>(PurchaseConditions);
         Services.AddSingleton<ICategoryBudgetRepository>(CategoryBudgets);
         Services.AddSingleton<IDirectExpenseRepository>(DirectExpenses);
         Services.AddSingleton<IFixedExpenseRepository>(FixedExpenses);

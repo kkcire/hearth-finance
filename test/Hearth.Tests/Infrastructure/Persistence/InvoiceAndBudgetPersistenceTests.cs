@@ -68,7 +68,7 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
                 3,
                 1,
                 rule,
-                PurchaseCondition.Own,
+                SystemPurchaseConditions.OwnId,
                 "Passagem",
                 SystemCategories.TransportId));
             await uow.SaveChangesAsync();

@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -17,6 +18,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
+    private readonly InMemoryPurchaseConditionRepository _conditions = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly UpdateCreditCardPurchaseDetailsHandler _handler;
@@ -30,7 +32,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             Money.Zero,
             new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _purchases, _unitOfWork);
+        _handler = new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _conditions, _purchases, _unitOfWork);
     }
 
     [Fact]
@@ -38,8 +40,10 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     {
         var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
         var personal = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Presentes");
+        var momCondition = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Mãe");
         await _categories.AddAsync(shopping);
         await _categories.AddAsync(personal);
+        await _conditions.AddAsync(momCondition);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -50,7 +54,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             3,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             shopping.Id);
         await _purchases.AddAsync(purchase);
@@ -59,12 +63,11 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             purchase.Id,
             "  Presente  ",
             personal.Id,
-            PurchaseConditionKind.Custom,
-            "Mãe"));
+            momCondition.Id));
 
         Assert.Equal("Presente", purchase.Description);
         Assert.Equal(personal.Id, purchase.CategoryId);
-        Assert.Equal(PurchaseCondition.Custom("Mãe"), purchase.Condition);
+        Assert.Equal(momCondition.Id, purchase.ConditionId);
         Assert.Equal(1, _purchases.UpdateCount);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
@@ -74,7 +77,9 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     {
         var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
         shopping.Archive();
+        var othersCondition = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Terceiros");
         await _categories.AddAsync(shopping);
+        await _conditions.AddAsync(othersCondition);
 
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),
@@ -85,16 +90,48 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             3,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             shopping.Id);
         await _purchases.AddAsync(purchase);
 
         await _handler.ExecuteAsync(new UpdateCreditCardPurchaseDetailsCommand(
-            purchase.Id, "Presente", shopping.Id, PurchaseConditionKind.Others, null));
+            purchase.Id, "Presente", shopping.Id, othersCondition.Id));
 
         Assert.Equal("Presente", purchase.Description);
         Assert.Equal(shopping.Id, purchase.CategoryId);
+        Assert.Equal(othersCondition.Id, purchase.ConditionId);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_KeepingArchivedCondition_AllowsUpdatingDescriptionAndCategory()
+    {
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
+        var archivedCondition = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Antiga");
+        archivedCondition.Archive();
+        await _categories.AddAsync(shopping);
+        await _conditions.AddAsync(archivedCondition);
+
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(),
+            _accountId,
+            _cardId,
+            new DateOnly(2026, 10, 10),
+            Money.FromDecimal(300.00m),
+            3,
+            1,
+            CardBillingRule.Of(3, 12),
+            archivedCondition.Id,
+            "Compra",
+            shopping.Id);
+        await _purchases.AddAsync(purchase);
+
+        await _handler.ExecuteAsync(new UpdateCreditCardPurchaseDetailsCommand(
+            purchase.Id, "Presente", shopping.Id, archivedCondition.Id));
+
+        Assert.Equal("Presente", purchase.Description);
+        Assert.Equal(archivedCondition.Id, purchase.ConditionId);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
 
@@ -116,15 +153,76 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             3,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             shopping.Id);
         await _purchases.AddAsync(purchase);
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new UpdateCreditCardPurchaseDetailsCommand(
-                purchase.Id, "Presente", archived.Id, PurchaseConditionKind.Own, null)));
+                purchase.Id, "Presente", archived.Id, SystemPurchaseConditions.OwnId)));
 
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_ReassigningToArchivedCondition_ThrowsDomainException()
+    {
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
+        var archivedCondition = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Antiga");
+        archivedCondition.Archive();
+        await _categories.AddAsync(shopping);
+        await _conditions.AddAsync(archivedCondition);
+
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(),
+            _accountId,
+            _cardId,
+            new DateOnly(2026, 10, 10),
+            Money.FromDecimal(300.00m),
+            3,
+            1,
+            CardBillingRule.Of(3, 12),
+            SystemPurchaseConditions.OwnId,
+            "Compra",
+            shopping.Id);
+        await _purchases.AddAsync(purchase);
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
+            new UpdateCreditCardPurchaseDetailsCommand(
+                purchase.Id, "Presente", shopping.Id, archivedCondition.Id)));
+
+        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_UnknownOrOtherUserCondition_ThrowsNotFound()
+    {
+        var shopping = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Eletrônicos");
+        var otherUserCondition = PurchaseCondition.CreateForUser(Guid.NewGuid(), Guid.NewGuid(), "Outro");
+        await _categories.AddAsync(shopping);
+        await _conditions.AddAsync(otherUserCondition);
+
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(),
+            _accountId,
+            _cardId,
+            new DateOnly(2026, 10, 10),
+            Money.FromDecimal(300.00m),
+            3,
+            1,
+            CardBillingRule.Of(3, 12),
+            SystemPurchaseConditions.OwnId,
+            "Compra",
+            shopping.Id);
+        await _purchases.AddAsync(purchase);
+
+        var exception = await Assert.ThrowsAsync<NotFoundException>(() => _handler.ExecuteAsync(
+            new UpdateCreditCardPurchaseDetailsCommand(
+                purchase.Id, "Presente", shopping.Id, otherUserCondition.Id)));
+
+        Assert.Equal(nameof(PurchaseCondition), exception.ResourceName);
+        Assert.Equal(otherUserCondition.Id, exception.ResourceId);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
 
@@ -135,7 +233,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
 
         var exception = await Assert.ThrowsAsync<NotFoundException>(() => _handler.ExecuteAsync(
             new UpdateCreditCardPurchaseDetailsCommand(
-                unknownId, "Compra", Guid.NewGuid(), PurchaseConditionKind.Own, null)));
+                unknownId, "Compra", Guid.NewGuid(), SystemPurchaseConditions.OwnId)));
 
         Assert.Equal(nameof(CreditCardPurchase), exception.ResourceName);
         Assert.Equal(unknownId, exception.ResourceId);
@@ -152,10 +250,14 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
     public void Constructor_NullDependencies_Throw()
     {
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, null!, _purchases, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDetailsHandler(null!, _categories, _conditions, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, null!, _unitOfWork));
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, null!, _conditions, _purchases, _unitOfWork));
         Assert.Throws<ArgumentNullException>(
-            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _purchases, null!));
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, null!, _purchases, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _conditions, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(
+            () => new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _conditions, _purchases, null!));
     }
 }

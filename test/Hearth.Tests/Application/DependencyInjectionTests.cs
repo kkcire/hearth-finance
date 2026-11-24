@@ -49,6 +49,7 @@ public sealed class DependencyInjectionTests
         var users = new InMemoryUserRepository();
         var accounts = new InMemoryAccountRepository();
         var categories = new InMemoryCategoryRepository();
+        var conditions = new InMemoryPurchaseConditionRepository();
         var budgets = new InMemoryCategoryBudgetRepository();
         var directExpenses = new InMemoryDirectExpenseRepository();
         var fixedExpenses = new InMemoryFixedExpenseRepository();
@@ -61,6 +62,7 @@ public sealed class DependencyInjectionTests
         services.AddSingleton<IPasswordHasher>(new FakePasswordHasher());
         services.AddSingleton<IAccountRepository>(accounts);
         services.AddSingleton<ICategoryRepository>(categories);
+        services.AddSingleton<IPurchaseConditionRepository>(conditions);
         services.AddSingleton<ICategoryBudgetRepository>(budgets);
         services.AddSingleton<IDirectExpenseRepository>(directExpenses);
         services.AddSingleton<IFixedExpenseRepository>(fixedExpenses);

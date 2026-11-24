@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
@@ -24,7 +25,7 @@ public class InvoiceCalculatorTests
         int initial = 1,
         Guid? accountId = null,
         CardBillingRule? rule = null,
-        PurchaseCondition? condition = null) =>
+        Guid? conditionId = null) =>
         CreditCardPurchase.Create(
             Guid.NewGuid(),
             accountId ?? AccountId,
@@ -34,7 +35,7 @@ public class InvoiceCalculatorTests
             count,
             initial,
             rule ?? Rule3,
-            condition ?? PurchaseCondition.Own,
+            conditionId ?? SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
 
@@ -193,17 +194,44 @@ public class InvoiceCalculatorTests
     // ---------- Condition ----------
 
     [Fact]
-    public void Calculate_PurchaseCondition_NeverChangesTheResult()
+    public void Calculate_WithoutConditionFilter_SumsAllConditions_AndWithConditionFilter_SumsOnlyMatchingCondition()
     {
-        var own = NewPurchase(Day(2026, 10, 10), amount: 100.00m, condition: PurchaseCondition.Own);
-        var others = NewPurchase(Day(2026, 10, 10), amount: 100.00m, condition: PurchaseCondition.Others);
-        var custom = NewPurchase(
-            Day(2026, 10, 10), amount: 100.00m, condition: PurchaseCondition.Custom("Ana"));
+        var customConditionId = Guid.NewGuid();
+        var own = NewPurchase(Day(2026, 10, 10), amount: 100.00m, conditionId: SystemPurchaseConditions.OwnId);
+        var others = NewPurchase(Day(2026, 10, 10), amount: 150.00m, conditionId: SystemPurchaseConditions.OthersId);
+        var custom = NewPurchase(Day(2026, 10, 10), amount: 250.00m, conditionId: customConditionId);
 
-        Assert.Equal(M(100.00m), Calc(YM(2026, 11), own));
-        Assert.Equal(M(100.00m), Calc(YM(2026, 11), others));
-        Assert.Equal(M(100.00m), Calc(YM(2026, 11), custom));
-        Assert.Equal(M(300.00m), Calc(YM(2026, 11), own, others, custom));
+        Assert.Equal(M(500.00m), InvoiceCalculator.Calculate(AccountId, YM(2026, 11), [own, others, custom]));
+        Assert.Equal(M(100.00m), InvoiceCalculator.Calculate(AccountId, YM(2026, 11), [own, others, custom], SystemPurchaseConditions.OwnId));
+        Assert.Equal(M(150.00m), InvoiceCalculator.Calculate(AccountId, YM(2026, 11), [own, others, custom], SystemPurchaseConditions.OthersId));
+        Assert.Equal(M(250.00m), InvoiceCalculator.Calculate(AccountId, YM(2026, 11), [own, others, custom], customConditionId));
+        Assert.Equal(Money.Zero, InvoiceCalculator.Calculate(AccountId, YM(2026, 11), [own, others, custom], Guid.NewGuid()));
+    }
+
+    [Fact]
+    public void Calculate_EmptyConditionId_ThrowsArgumentException()
+    {
+        Assert.Throws<ArgumentException>(
+            () => InvoiceCalculator.Calculate(AccountId, YM(2026, 11), Array.Empty<CreditCardPurchase>(), Guid.Empty));
+    }
+
+    [Fact]
+    public void CalculateByDueMonth_GroupsByDueDateMonthAndRespectsConditionFilter()
+    {
+        // Rule (25, 5): purchase on Nov 10 closes Nov 25, due Dec 5 (DueMonth = Dec 2026).
+        // Rule (3, 12): purchase on Nov 10 closes Dec 3, due Dec 12 (DueMonth = Dec 2026).
+        var ownCrossMonth = NewPurchase(
+            Day(2026, 11, 10), amount: 200.00m, rule: CardBillingRule.Of(25, 5), conditionId: SystemPurchaseConditions.OwnId);
+        var othersSameMonth = NewPurchase(
+            Day(2026, 11, 10), amount: 300.00m, rule: CardBillingRule.Of(3, 12), conditionId: SystemPurchaseConditions.OthersId);
+
+        Assert.Equal(Money.Zero, InvoiceCalculator.CalculateByDueMonth(AccountId, YM(2026, 11), [ownCrossMonth, othersSameMonth]));
+        Assert.Equal(M(500.00m), InvoiceCalculator.CalculateByDueMonth(AccountId, YM(2026, 12), [ownCrossMonth, othersSameMonth]));
+        Assert.Equal(
+            M(200.00m),
+            InvoiceCalculator.CalculateByDueMonth(AccountId, YM(2026, 12), [ownCrossMonth, othersSameMonth], SystemPurchaseConditions.OwnId));
+        Assert.Throws<ArgumentException>(
+            () => InvoiceCalculator.CalculateByDueMonth(AccountId, YM(2026, 12), [ownCrossMonth], Guid.Empty));
     }
 
     // ---------- Cycle identity ----------
@@ -241,10 +269,10 @@ public class InvoiceCalculatorTests
 
         var fromActive = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, activeCardId, Day(2026, 10, 10), M(100m), 1, 1,
-            CardBillingRule.Of(3, 12), PurchaseCondition.Own, "Ativo", Guid.NewGuid());
+            CardBillingRule.Of(3, 12), SystemPurchaseConditions.OwnId, "Ativo", Guid.NewGuid());
         var fromArchived = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, archivedCardId, Day(2026, 10, 12), M(75m), 1, 1,
-            CardBillingRule.Of(3, 12), PurchaseCondition.Own, "Arquivado", Guid.NewGuid());
+            CardBillingRule.Of(3, 12), SystemPurchaseConditions.OwnId, "Arquivado", Guid.NewGuid());
 
         Assert.Equal(M(175m), Calc(YM(2026, 11), fromActive, fromArchived));
     }

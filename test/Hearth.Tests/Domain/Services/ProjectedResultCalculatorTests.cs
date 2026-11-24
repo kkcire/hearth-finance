@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
@@ -47,7 +48,7 @@ public class ProjectedResultCalculatorTests
             count,
             initial,
             rule ?? Rule3,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
 
@@ -397,6 +398,39 @@ public class ProjectedResultCalculatorTests
             ProjectedResultCalculator.Calculate(AccountId, YM(2026, 11), incomes, direct, null!, purchases));
         Assert.Throws<ArgumentNullException>(() =>
             ProjectedResultCalculator.Calculate(AccountId, YM(2026, 11), incomes, direct, fixedExpenses, null!));
+    }
+
+    [Fact]
+    public void Calculate_WithConditionId_FiltersOnlyCardInvoiceAndPreservesAccrualResult()
+    {
+        var salary = NewIncome(Day(2026, 11, 5), 5000.00m);
+        var direct = NewDirect(Day(2026, 11, 15), 200.00m);
+        var rent = NewFixed(YM(2026, 1), null, 1000.00m);
+        var ownPurchase = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(300.00m), 1, 1,
+            Rule3, SystemPurchaseConditions.OwnId, "Meu", Guid.NewGuid());
+        var othersPurchase = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 12), M(700.00m), 1, 1,
+            Rule3, SystemPurchaseConditions.OthersId, "Terceiro", Guid.NewGuid());
+
+        var unfiltered = ProjectedResultCalculator.Calculate(
+            AccountId, YM(2026, 11), [salary], [direct], [rent], [ownPurchase, othersPurchase]);
+        var ownOnly = ProjectedResultCalculator.Calculate(
+            AccountId, YM(2026, 11), [salary], [direct], [rent], [ownPurchase, othersPurchase], SystemPurchaseConditions.OwnId);
+
+        Assert.Null(unfiltered.ConditionId);
+        Assert.Equal(M(1000.00m), unfiltered.CardInvoice);
+        Assert.Equal(M(2800.00m), unfiltered.Result);
+
+        Assert.Equal(SystemPurchaseConditions.OwnId, ownOnly.ConditionId);
+        Assert.Equal(M(5000.00m), ownOnly.Incomes);
+        Assert.Equal(M(200.00m), ownOnly.DirectExpenses);
+        Assert.Equal(M(1000.00m), ownOnly.FixedExpenses);
+        Assert.Equal(M(300.00m), ownOnly.CardInvoice);
+        Assert.Equal(M(3500.00m), ownOnly.Result);
+
+        Assert.Throws<ArgumentException>(() => ProjectedResultCalculator.Calculate(
+            AccountId, YM(2026, 11), [], [], [], [], Guid.Empty));
     }
 
     [Fact]

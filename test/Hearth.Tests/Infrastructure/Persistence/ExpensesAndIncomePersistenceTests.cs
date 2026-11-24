@@ -21,18 +21,20 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task<(Guid AccountId, Guid CardId, Guid CategoryId)> SeedAccountCardAndCategoryAsync()
+    private async Task<(Guid AccountId, Guid CardId, Guid CategoryId, Guid ConditionId)> SeedAccountCardAndCategoryAsync()
     {
         var userId = Guid.CreateVersion7();
         var accountId = Guid.CreateVersion7();
         var cardId = Guid.CreateVersion7();
         var categoryId = Guid.CreateVersion7();
+        var conditionId = Guid.CreateVersion7();
 
         await using var scope = _fixture.CreateScope();
         var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
         var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
         var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
         var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+        var conditions = scope.ServiceProvider.GetRequiredService<IPurchaseConditionRepository>();
         var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
         await users.AddAsync(User.Create(
@@ -42,15 +44,16 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
         await cards.AddAsync(CreditCard.Create(
             cardId, accountId, CardBillingRule.Of(3, 12), "Nubank", Money.FromDecimal(3000.00m)));
         await categories.AddAsync(Category.CreateForUser(categoryId, userId, "Geral"));
+        await conditions.AddAsync(PurchaseCondition.CreateForUser(conditionId, userId, "Viagem"));
         await uow.SaveChangesAsync();
 
-        return (accountId, cardId, categoryId);
+        return (accountId, cardId, categoryId, conditionId);
     }
 
     [Fact]
     public async Task FixedExpenseRepository_PersistsAmountHistoryPaymentsUpdatesAndCascadeDelete()
     {
-        var (accountId, _, categoryId) = await SeedAccountCardAndCategoryAsync();
+        var (accountId, _, categoryId, _) = await SeedAccountCardAndCategoryAsync();
         var expenseId = Guid.CreateVersion7();
 
         await using (var scope = _fixture.CreateScope())
@@ -116,7 +119,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
     [Fact]
     public async Task DirectExpenseIncomeAndCreditCardPurchase_RoundTripAllFieldsAndConditions()
     {
-        var (accountId, cardId, categoryId) = await SeedAccountCardAndCategoryAsync();
+        var (accountId, cardId, categoryId, conditionId) = await SeedAccountCardAndCategoryAsync();
         var directId = Guid.CreateVersion7();
         var incomeId = Guid.CreateVersion7();
         var purchaseId = Guid.CreateVersion7();
@@ -145,7 +148,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
                 3,
                 2,
                 CardBillingRule.Of(3, 12),
-                PurchaseCondition.Custom("Viagem"),
+                conditionId,
                 "Hotel",
                 categoryId));
 
@@ -171,7 +174,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             var purchase = await purchases.GetByIdAsync(purchaseId);
             Assert.NotNull(purchase);
             Assert.Equal(cardId, purchase.CreditCardId);
-            Assert.Equal(PurchaseCondition.Custom("Viagem"), purchase.Condition);
+            Assert.Equal(conditionId, purchase.ConditionId);
             Assert.Equal(CardBillingRule.Of(3, 12), purchase.Rule);
             Assert.Equal(2, purchase.InitialInstallment);
             Assert.True(await purchases.AnyByCategoryAsync(categoryId));

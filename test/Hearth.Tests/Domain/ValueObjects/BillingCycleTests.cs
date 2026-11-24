@@ -72,6 +72,25 @@ public class BillingCycleTests
         Assert.True(cycle.DueDate > cycle.ClosingDate);
     }
 
+    [Theory]
+    [InlineData(2026, 11, 3, 12, 2026, 11, 2026, 11, 12)]
+    [InlineData(2026, 12, 25, 5, 2026, 11, 2026, 12, 5)]
+    [InlineData(2027, 1, 25, 5, 2026, 12, 2027, 1, 5)]
+    [InlineData(2027, 1, 10, 10, 2026, 12, 2027, 1, 10)]
+    public void DueIn_ResolvesCycleWhoseDueMonthMatchesRequestedMonth(
+        int dueYear, int dueMonth, int closingDay, int dueDay,
+        int expectedClosingYear, int expectedClosingMonth,
+        int expectedDueYear, int expectedDueMonth, int expectedDueDay)
+    {
+        var cycle = BillingCycle.DueIn(
+            YearMonth.Of(dueYear, dueMonth),
+            CardBillingRule.Of(closingDay, dueDay));
+
+        Assert.Equal(YearMonth.Of(expectedClosingYear, expectedClosingMonth), cycle.ClosingMonth);
+        Assert.Equal(YearMonth.Of(expectedDueYear, expectedDueMonth), cycle.DueMonth);
+        Assert.Equal(new DateOnly(expectedDueYear, expectedDueMonth, expectedDueDay), cycle.DueDate);
+    }
+
     [Fact]
     public void GetStatus_TransitionsAtClosingDateAndDueDate_IncludingDueDateInFollowingMonth()
     {

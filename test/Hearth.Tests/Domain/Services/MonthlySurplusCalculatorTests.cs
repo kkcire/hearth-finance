@@ -80,7 +80,7 @@ public class MonthlySurplusCalculatorTests
         // DueDate == today (Nov 12) -> auto-settled in SaldoDeCaixa, must NOT appear in CardInvoiceDue
         var cardSettledToday = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 10, 10), M(300m), 1, 1,
-            Rule3_12, PurchaseCondition.Own, "Fatura hoje", SystemCategories.ShoppingId);
+            Rule3_12, SystemPurchaseConditions.OwnId, "Fatura hoje", SystemCategories.ShoppingId);
 
         // Pending in Nov (not yet in SaldoDeCaixa): MUST appear in cascade components
         var freelanceExpected = Income.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 25), M(800m), "Freela");
@@ -93,13 +93,13 @@ public class MonthlySurplusCalculatorTests
         // DueDate == Nov 20 > today -> pending in CardInvoiceDue
         var cardDueLater = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 10, 15), M(450m), 1, 1,
-            Rule10_20, PurchaseCondition.Own, "Fatura futura", SystemCategories.ShoppingId);
+            Rule10_20, SystemPurchaseConditions.OwnId, "Fatura futura", SystemCategories.ShoppingId);
 
         // Noise from another account and previously-paid installment -> must be ignored
         var otherIncome = Income.Create(Guid.NewGuid(), OtherAccountId, Day(2026, 11, 25), M(9999m), "Outra conta");
         var previouslyPaidCard = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 9, 15), M(600m), 2, 2,
-            Rule10_20, PurchaseCondition.Own, "Em andamento", SystemCategories.ShoppingId);
+            Rule10_20, SystemPurchaseConditions.OwnId, "Em andamento", SystemCategories.ShoppingId);
         // Installment 1 due Oct 20 (previously paid -> ignored), Installment 2 due Nov 20 (active -> +300!)
 
         var series = MonthlySurplusCalculator.CalculateSeries(
@@ -186,12 +186,12 @@ public class MonthlySurplusCalculatorTests
         // Inst 2 closes Dec 25, DueDate Jan 5 (DueMonth 2027-01) -> 200
         var activeCardPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 11, 10), M(400m), 2, 1,
-            Rule25_5, PurchaseCondition.Own, "Notebook", SystemCategories.ShoppingId);
+            Rule25_5, SystemPurchaseConditions.OwnId, "Notebook", SystemCategories.ShoppingId);
 
         // Archived card purchase on Nov 10 (300 in 1x, rule 3/12): closes Dec 3, DueDate Dec 12 -> 300
         var archivedCardPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ArchivedCardId, Day(2026, 11, 10), M(300m), 1, 1,
-            Rule3_12, PurchaseCondition.Others, "Cartão arquivado", SystemCategories.ShoppingId);
+            Rule3_12, Guid.NewGuid(), "Cartão arquivado", SystemCategories.ShoppingId);
 
         var series = MonthlySurplusCalculator.CalculateSeries(
             account,
@@ -264,7 +264,7 @@ public class MonthlySurplusCalculatorTests
 
         var octCard = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 9, 10), M(300m), 1, 1,
-            Rule3_12, PurchaseCondition.Own, "Tênis", SystemCategories.ShoppingId); // Due Oct 12
+            Rule3_12, SystemPurchaseConditions.OwnId, "Tênis", SystemCategories.ShoppingId); // Due Oct 12
 
         Income[] incomes = [sepSalary, octSalary];
         DirectExpense[] directs = [sepDirect];
@@ -347,5 +347,144 @@ public class MonthlySurplusCalculatorTests
             account, YM(2026, 11), today, [novIncome, octIncome], [], [decExpense], [], pastMonths: 1, futureMonths: 1);
         Assert.Equal(series, repeated);
         Assert.Equal(series.GetHashCode(), repeated.GetHashCode());
+    }
+
+    [Fact]
+    public void CalculateSeries_WithConditionId_KeepsRealBalanceIntactAndFiltersOnlyPendingAndFutureCardInvoices()
+    {
+        var account = NewAccount(initialBalance: 1000m, initialDate: Day(2026, 10, 1));
+        var today = Day(2026, 11, 15);
+        var momConditionId = Guid.NewGuid();
+
+        // Historical Oct: "Outros" installment due Oct 12 (200) -> already settled in RealBalance(Oct 31) = 800
+        var octOthers = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 9, 10), M(200m), 1, 1,
+            Rule3_12, SystemPurchaseConditions.OthersId, "Out Outros", SystemCategories.ShoppingId);
+
+        // Current month Nov, already settled <= today (DueDate Nov 12 <= Nov 15): "Outros" 100 -> already left bank cash!
+        // RealBalance(today Nov 15) = 1000 - 200 - 100 = 700 (MUST remain 700 even when filtering by OwnId!)
+        var novSettledOthers = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 10, 10), M(100m), 1, 1,
+            Rule3_12, SystemPurchaseConditions.OthersId, "Nov Pago Outros", SystemCategories.ShoppingId);
+
+        // Current month Nov, pending > today (DueDate Nov 20 > Nov 15): Own 150 + Mom 250 = 400
+        var novPendingOwn = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 10, 15), M(150m), 1, 1,
+            Rule10_20, SystemPurchaseConditions.OwnId, "Nov Própria", SystemCategories.ShoppingId);
+        var novPendingMom = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 10, 16), M(250m), 1, 1,
+            Rule10_20, momConditionId, "Nov Mãe", SystemCategories.ShoppingId);
+
+        // Future month Dec (DueDate Dec 12): Own 200 + Others 300 = 500
+        var decOwn = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 11, 10), M(200m), 1, 1,
+            Rule3_12, SystemPurchaseConditions.OwnId, "Dez Própria", SystemCategories.ShoppingId);
+        var decOthers = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 11, 11), M(300m), 1, 1,
+            Rule3_12, SystemPurchaseConditions.OthersId, "Dez Outros", SystemCategories.ShoppingId);
+
+        CreditCardPurchase[] purchases = [octOthers, novSettledOthers, novPendingOwn, novPendingMom, decOwn, decOthers];
+
+        var realToday = RealBalanceCalculator.Calculate(account, today, [], [], [], purchases);
+        var unfiltered = MonthlySurplusCalculator.CalculateSeries(
+            account, YM(2026, 11), today, [], [], [], purchases, pastMonths: 1, futureMonths: 1);
+        var ownOnly = MonthlySurplusCalculator.CalculateSeries(
+            account, YM(2026, 11), today, [], [], [], purchases, pastMonths: 1, futureMonths: 1, conditionId: SystemPurchaseConditions.OwnId);
+
+        Assert.Null(unfiltered.ConditionId);
+        Assert.Equal(SystemPurchaseConditions.OwnId, ownOnly.ConditionId);
+        Assert.NotEqual(unfiltered, ownOnly);
+
+        // RealBalance on today (700) and historical Oct (800) are NEVER altered or masked
+        Assert.Equal(M(700m), realToday.Balance);
+        Assert.Equal(M(800m), unfiltered.Points[0].ProjectedSurplus);
+        Assert.Equal(M(800m), ownOnly.Points[0].ProjectedSurplus);
+        Assert.Equal(realToday.Balance, unfiltered.Points[1].StartingCashBalance);
+        Assert.Equal(realToday.Balance, ownOnly.Points[1].StartingCashBalance);
+
+        // Nov filtered: 700 - 150 (only Own pending > today) = 550 (vs unfiltered 700 - 400 = 300)
+        Assert.Equal(M(400m), unfiltered.Points[1].CardInvoiceDue);
+        Assert.Equal(M(300m), unfiltered.Points[1].ProjectedSurplus);
+        Assert.Equal(M(150m), ownOnly.Points[1].CardInvoiceDue);
+        Assert.Equal(M(550m), ownOnly.Points[1].ProjectedSurplus);
+
+        // Dec filtered rollover: starts 550 - 200 (only Own) = 350 (vs unfiltered 300 - 500 = -200)
+        Assert.Equal(M(300m), unfiltered.Points[2].StartingCashBalance);
+        Assert.Equal(M(500m), unfiltered.Points[2].CardInvoiceDue);
+        Assert.Equal(M(-200m), unfiltered.Points[2].ProjectedSurplus);
+
+        Assert.Equal(M(550m), ownOnly.Points[2].StartingCashBalance);
+        Assert.Equal(M(200m), ownOnly.Points[2].CardInvoiceDue);
+        Assert.Equal(M(350m), ownOnly.Points[2].ProjectedSurplus);
+
+        // Telescoping invariant still holds under condition filter: 1000 + (-200 - 250 - 200) = 350
+        Assert.Equal(
+            ownOnly.Points[^1].ProjectedSurplus,
+            account.InitialBalance + Money.Sum(ownOnly.Points.Select(p => p.NetMonthlyVariation)));
+
+        // Empty ConditionId rejected at boundary
+        Assert.Throws<ArgumentException>(() => MonthlySurplusCalculator.CalculateSeries(
+            account, YM(2026, 11), today, [], [], [], purchases, conditionId: Guid.Empty));
+    }
+
+    [Fact]
+    public void CalculateSeries_DoesNotCarryOverOverduePendingsFromPreviousMonths_AndSeparatesDueDateFromAccrualProjectedResult()
+    {
+        var account = NewAccount(initialBalance: 1000m, initialDate: Day(2026, 10, 1));
+        var today = Day(2026, 11, 15);
+
+        // Overdue unreceived income from Oct (must NOT be dragged into Nov!)
+        var overdueOctIncome = Income.Create(Guid.NewGuid(), AccountId, Day(2026, 10, 20), M(900m), "Freela atrasado Out");
+        // Overdue unpaid fixed expense from Oct only (must NOT be dragged into Nov!)
+        var overdueOctFixed = FixedExpense.Create(
+            Guid.NewGuid(), AccountId, YM(2026, 10), YM(2026, 10), M(400m), "Seguro Out", SystemCategories.ServicesId);
+
+        // Direct expenses in Nov: Nov 10 <= today (already in cash), Nov 15 == today (already in cash), Nov 20 > today (in cascade)
+        var directBefore = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 10), M(100m), "Mercado", SystemCategories.FoodId);
+        var directToday = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 15), M(50m), "Café", SystemCategories.FoodId);
+        var directFuture = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 20), M(75m), "Consulta", SystemCategories.HealthId);
+
+        // Rule (25, 5): purchase on Nov 10 closes Nov 25 (Nov accrual!) and is due Dec 5 (Dec cash surplus!)
+        var crossMonthPurchase = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, ActiveCardId, Day(2026, 11, 10), M(300m), 1, 1,
+            Rule25_5, SystemPurchaseConditions.OwnId, "Passagem", SystemCategories.TransportId);
+
+        var series = MonthlySurplusCalculator.CalculateSeries(
+            account,
+            YM(2026, 11),
+            today,
+            [overdueOctIncome],
+            [directBefore, directToday, directFuture],
+            [overdueOctFixed],
+            [crossMonthPurchase],
+            pastMonths: 1,
+            futureMonths: 1);
+
+        var novSurplus = series.SelectedMonth;
+        // Cash on Nov 15 = 1000 - 100 - 50 = 850; no overdue Oct income or Oct fixed dragged into Nov
+        Assert.Equal(M(850m), novSurplus.StartingCashBalance);
+        Assert.Equal(Money.Zero, novSurplus.ExpectedIncomes);
+        Assert.Equal(Money.Zero, novSurplus.FixedExpenses);
+        Assert.Equal(Money.Zero, novSurplus.CardInvoiceDue); // Due Dec 5 -> NOT in Nov surplus
+        Assert.Equal(M(75m), novSurplus.DirectExpenses);     // Only Date > today
+        Assert.Equal(M(775m), novSurplus.ProjectedSurplus);
+
+        // Dec cash surplus carries 775 and pays the 300 invoice due Dec 5 -> 475
+        var decSurplus = series.Points[2];
+        Assert.Equal(M(775m), decSurplus.StartingCashBalance);
+        Assert.Equal(M(300m), decSurplus.CardInvoiceDue);
+        Assert.Equal(M(475m), decSurplus.ProjectedSurplus);
+
+        // Pure accrual ProjectedResult for Nov includes the Nov-closing invoice (300) and all Nov direct expenses (225)
+        var novAccrual = ProjectedResultCalculator.Calculate(
+            AccountId,
+            YM(2026, 11),
+            [overdueOctIncome],
+            [directBefore, directToday, directFuture],
+            [overdueOctFixed],
+            [crossMonthPurchase]);
+        Assert.Equal(M(300m), novAccrual.CardInvoice);
+        Assert.Equal(M(225m), novAccrual.DirectExpenses);
+        Assert.Equal(M(-525m), novAccrual.Result);
     }
 }

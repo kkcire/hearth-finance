@@ -44,7 +44,7 @@ public sealed class CreditCardLimitCalculatorTests
             3,
             1,
             Rule3_12,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             SystemCategories.ShoppingId);
 
@@ -76,7 +76,7 @@ public sealed class CreditCardLimitCalculatorTests
         // Rule (25, 5): purchase on 2026-12-10 closes 2026-12-25, due 2027-01-05.
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 12, 10), Money.FromDecimal(250m),
-            1, 1, Rule25_5, PurchaseCondition.Others, "Presente", SystemCategories.ShoppingId);
+            1, 1, Rule25_5, Guid.NewGuid(), "Presente", SystemCategories.ShoppingId);
 
         Assert.Equal(Money.FromDecimal(250m), CreditCardLimitCalculator.CalculateUsedLimit(CardId, new DateOnly(2026, 12, 26), [purchase]));
         Assert.Equal(Money.FromDecimal(250m), CreditCardLimitCalculator.CalculateUsedLimit(CardId, new DateOnly(2027, 1, 4), [purchase]));
@@ -96,7 +96,7 @@ public sealed class CreditCardLimitCalculatorTests
             3,
             3, // only installment 3 (due Dec 12) counts
             Rule3_12,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Antiga",
             SystemCategories.ShoppingId);
 
@@ -109,7 +109,7 @@ public sealed class CreditCardLimitCalculatorTests
             1,
             1,
             Rule3_12,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Outro Cartão",
             SystemCategories.ShoppingId);
 
@@ -133,7 +133,7 @@ public sealed class CreditCardLimitCalculatorTests
         var card = CreditCard.Create(CardId, AccountId, Rule3_12, "Nubank", Money.FromDecimal(200m));
         var exactPurchase = CreditCardPurchase.Create(
             Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 11, 10), Money.FromDecimal(200m),
-            1, 1, Rule3_12, PurchaseCondition.Own, "Exato", SystemCategories.ShoppingId);
+            1, 1, Rule3_12, SystemPurchaseConditions.OwnId, "Exato", SystemCategories.ShoppingId);
 
         Assert.Equal(Money.FromDecimal(200m), CreditCardLimitCalculator.CalculateAvailableLimit(card, new DateOnly(2026, 11, 15), []));
         Assert.Equal(Money.Zero, CreditCardLimitCalculator.CalculateAvailableLimit(card, new DateOnly(2026, 11, 15), [exactPurchase]));
@@ -152,7 +152,7 @@ public sealed class CreditCardLimitCalculatorTests
             1,
             1,
             Rule3_12,
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Acima",
             SystemCategories.ShoppingId);
 
@@ -160,5 +160,37 @@ public sealed class CreditCardLimitCalculatorTests
             card, new DateOnly(2026, 11, 15), [purchase]);
 
         Assert.Equal(Money.FromDecimal(-50m), available);
+    }
+
+    [Fact]
+    public void CalculateUsedAndAvailableLimit_IgnoreInstallmentsDueBeforeInitialBalanceDate()
+    {
+        // Account initialBalanceDate = 2026-11-22.
+        // Purchase on 2026-10-10 in 2x of R$ 200 (rule 3/12):
+        // - Inst 1 due 2026-11-12 (< initialBalanceDate) -> must NEVER occupy limit, even if queried on 2026-11-01!
+        // - Inst 2 due 2026-12-12 (>= initialBalanceDate) -> occupies R$ 100.
+        var card = CreditCard.Create(CardId, AccountId, Rule3_12, "Nubank", Money.FromDecimal(1000m));
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(),
+            AccountId,
+            CardId,
+            new DateOnly(2026, 10, 10),
+            Money.FromDecimal(200m),
+            2,
+            1,
+            Rule3_12,
+            SystemPurchaseConditions.OwnId,
+            "Histórica + futura",
+            SystemCategories.ShoppingId);
+
+        var initialBalanceDate = new DateOnly(2026, 11, 22);
+        var queryBeforeDue = new DateOnly(2026, 11, 1);
+
+        Assert.Equal(
+            Money.FromDecimal(100m),
+            CreditCardLimitCalculator.CalculateUsedLimit(CardId, queryBeforeDue, [purchase], initialBalanceDate));
+        Assert.Equal(
+            Money.FromDecimal(900m),
+            CreditCardLimitCalculator.CalculateAvailableLimit(card, queryBeforeDue, [purchase], initialBalanceDate));
     }
 }

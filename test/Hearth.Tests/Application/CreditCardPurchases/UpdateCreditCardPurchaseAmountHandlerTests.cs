@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseAmount;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -44,7 +45,7 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
             3,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
         await _purchases.AddAsync(purchase);
@@ -52,8 +53,10 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_BeforeInvoiceCloses_UpdatesAmountAndSaves()
+    public async Task ExecuteAsync_BeforeInvoiceIsPaidIncludingWhileClosed_UpdatesAmountAndSaves()
     {
+        // Invoice closes on 03/11/2026 and is due on 12/11/2026 -> still editable on 10/11/2026.
+        _clock.Today = new DateOnly(2026, 11, 10);
         var purchase = await SeedPurchaseAsync();
 
         await _handler.ExecuteAsync(new UpdateCreditCardPurchaseAmountCommand(purchase.Id, 450.00m));
@@ -64,9 +67,9 @@ public class UpdateCreditCardPurchaseAmountHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AfterInvoiceCloses_ThrowsDomainExceptionAndDoesNotSave()
+    public async Task ExecuteAsync_OnOrAfterDueDate_ThrowsDomainExceptionAndDoesNotSave()
     {
-        _clock.Today = new DateOnly(2026, 11, 3);
+        _clock.Today = new DateOnly(2026, 11, 12);
         var purchase = await SeedPurchaseAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(

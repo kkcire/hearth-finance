@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDate;
 using Hearth.Application.Exceptions;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -50,7 +51,7 @@ public class UpdateCreditCardPurchaseDateHandlerTests
             6,
             initialInstallment,
             rule ?? CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             Guid.NewGuid());
         await _purchases.AddAsync(purchase);
@@ -59,8 +60,10 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ValidNewDateBeforeClosing_UpdatesAndSaves()
+    public async Task ExecuteAsync_ValidNewDateBeforeInvoiceIsPaidIncludingWhileClosed_UpdatesAndSaves()
     {
+        // Invoice closes on 03/11/2026 and is due on 12/11/2026 -> editable on 10/11/2026.
+        _clock.Today = new DateOnly(2026, 11, 10);
         var purchase = await SeedAsync();
 
         await _handler.ExecuteAsync(
@@ -92,10 +95,10 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NewDateMovesFirstActiveDueDateBeforeInitialBalanceDate_ThrowsAndPreservesDate()
+    public async Task ExecuteAsync_NewDateMovesDueDateBeforeInitialBalanceDate_WhileCycleStillOpen_IsAccepted()
     {
         // Account initialDate = 2026-11-23, today = 2026-10-10, card (25, 5):
-        // purchase on 2026-11-08 (closes 25/11, due 05/12) moved to 2026-10-15 (closes 25/10 > today, due 05/11 < InitialBalanceDate 23/11).
+        // purchase on 2026-11-08 moved to 2026-10-15 (closes 25/10 > today, due 05/11 < InitialBalanceDate 23/11).
         _clock.Today = new DateOnly(2026, 10, 10);
         var purchase = await SeedAsync(
             purchaseDate: new DateOnly(2026, 11, 8),
@@ -103,16 +106,16 @@ public class UpdateCreditCardPurchaseDateHandlerTests
             initialDate: new DateOnly(2026, 11, 23),
             rule: CardBillingRule.Of(25, 5));
 
-        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
-            new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 10, 15))));
+        await _handler.ExecuteAsync(
+            new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 10, 15)));
 
-        Assert.Equal(new DateOnly(2026, 11, 8), purchase.Date);
-        Assert.Equal(0, _purchases.UpdateCount);
-        Assert.Equal(0, _unitOfWork.SaveChangesCount);
+        Assert.Equal(new DateOnly(2026, 10, 15), purchase.Date);
+        Assert.Equal(1, _purchases.UpdateCount);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
 
     [Fact]
-    public async Task ExecuteAsync_PurchaseInProgress_NewDateMovesFirstActiveDueDateBeforeInitialDateOrToday_Throws()
+    public async Task ExecuteAsync_PurchaseInProgress_NewDateMovesFirstActiveClosingIntoClosedCycle_Throws()
     {
         var purchase = await SeedAsync(purchaseDate: new DateOnly(2026, 7, 10), initialInstallment: 4);
 
@@ -125,9 +128,9 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_AfterInvoiceCloses_ThrowsDomainExceptionAndDoesNotSave()
+    public async Task ExecuteAsync_OnOrAfterDueDate_ThrowsDomainExceptionAndDoesNotSave()
     {
-        _clock.Today = new DateOnly(2026, 11, 3);
+        _clock.Today = new DateOnly(2026, 11, 12);
         var purchase = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
@@ -138,8 +141,9 @@ public class UpdateCreditCardPurchaseDateHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NewDateMovesIntoClosedCycle_ThrowsDomainExceptionAndDoesNotSave()
+    public async Task ExecuteAsync_NewDateMovesIntoPaidInvoice_ThrowsDomainExceptionAndDoesNotSave()
     {
+        // Today is 20/10/2026 -> October invoice was paid on 12/10/2026.
         var purchase = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(

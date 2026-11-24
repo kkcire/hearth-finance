@@ -98,6 +98,10 @@ public sealed class EntriesPagesTests : WebTestBase
 
         var expense = Assert.Single(await FixedExpenses.GetByAccountAsync(accountId));
         Assert.NotEmpty(cut.FindAll($"[data-testid='pay-fixed-{expense.Id}']"));
+        // Redundant per-field quick-edit icons are removed; single Edit (pencil) button centralizes details/amount/end
+        Assert.NotEmpty(cut.FindAll($"[data-testid='edit-fixed-{expense.Id}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='change-amount-fixed-{expense.Id}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='end-fixed-{expense.Id}']"));
 
         // Pay active month (Nov/2026)
         await cut.Find($"[data-testid='pay-fixed-{expense.Id}']").ClickAsync();

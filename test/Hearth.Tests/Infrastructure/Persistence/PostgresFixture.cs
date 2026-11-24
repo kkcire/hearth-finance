@@ -62,6 +62,7 @@ public sealed class PostgresFixture : IAsyncLifetime
                 accounts
             RESTART IDENTITY CASCADE;
             DELETE FROM categories WHERE owner_user_id IS NOT NULL;
+            DELETE FROM purchase_conditions WHERE owner_user_id IS NOT NULL;
             DELETE FROM users;
             """);
     }

@@ -110,7 +110,7 @@ public class DeleteCategoryHandlerTests
             1,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Compra",
             category.Id));
 

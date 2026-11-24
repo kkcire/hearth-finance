@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.Services;
@@ -35,7 +36,7 @@ public class BudgetStatusCalculatorTests
         var directTransport = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 5), M(200.00m), "Uber", TransportId);
         var fixedFood = FixedExpense.Create(Guid.NewGuid(), AccountId, YM(2026, 1), null, M(250.00m), "Marmita", FoodId);
         var cardFood = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(100.00m), 1, 1, Rule3, PurchaseCondition.Own, "Mercado", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(100.00m), 1, 1, Rule3, SystemPurchaseConditions.OwnId, "Mercado", FoodId);
         var unbudgetedExpense = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 10), M(900.00m), "Extra", UnbudgetedId);
 
         var status = BudgetStatusCalculator.Calculate(
@@ -79,11 +80,12 @@ public class BudgetStatusCalculatorTests
     [Fact]
     public void Calculate_RespectsPurchaseConditionFilter()
     {
+        var othersConditionId = Guid.NewGuid();
         var foodBudget = CategoryBudget.Create(Guid.NewGuid(), AccountId, FoodId, YM(2026, 1), null, M(300.00m));
         var own = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(120.00m), 1, 1, Rule3, PurchaseCondition.Own, "Meu", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(120.00m), 1, 1, Rule3, SystemPurchaseConditions.OwnId, "Meu", FoodId);
         var others = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 11), M(400.00m), 1, 1, Rule3, PurchaseCondition.Others, "Terceiro", FoodId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 11), M(400.00m), 1, 1, Rule3, othersConditionId, "Terceiro", FoodId);
 
         var status = BudgetStatusCalculator.Calculate(
             AccountId,
@@ -92,7 +94,7 @@ public class BudgetStatusCalculatorTests
             Array.Empty<DirectExpense>(),
             Array.Empty<FixedExpense>(),
             new[] { own, others },
-            includedConditions: new[] { PurchaseCondition.Own });
+            includedConditionIds: new[] { SystemPurchaseConditions.OwnId });
 
         var item = Assert.Single(status.Items);
         Assert.Equal(M(120.00m), item.SpentAmount);
@@ -141,7 +143,7 @@ public class BudgetStatusCalculatorTests
         var directFood = DirectExpense.Create(Guid.NewGuid(), AccountId, Day(2026, 11, 5), M(200m), "Mercado", FoodId);
         var fixedTransport = FixedExpense.Create(Guid.NewGuid(), AccountId, YM(2026, 1), null, M(1m), "Taxa", TransportId);
         var cardLeisure = CreditCardPurchase.Create(
-            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(300m), 1, 1, Rule3, PurchaseCondition.Own, "Show", LeisureId);
+            Guid.NewGuid(), AccountId, CardId, Day(2026, 10, 10), M(300m), 1, 1, Rule3, SystemPurchaseConditions.OwnId, "Show", LeisureId);
 
         var status = BudgetStatusCalculator.Calculate(
             AccountId,

@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Services;
 using Hearth.Domain.ValueObjects;
@@ -56,11 +57,15 @@ public class CategorySpendingCalculatorTests
         FixedExpense.Create(
             Guid.NewGuid(), accountId ?? AccountId, start, end, M(amount), "Fixa", categoryId ?? ServicesCategoryId);
 
+    private static readonly Guid OthersConditionId = Guid.Parse("00000000-0000-0000-0000-000000000101");
+    private static readonly Guid TripConditionId = Guid.Parse("00000000-0000-0000-0000-000000000102");
+    private static readonly Guid MomConditionId = Guid.Parse("00000000-0000-0000-0000-000000000103");
+
     private static CreditCardPurchase NewPurchase(
         DateOnly date,
         decimal amount,
         Guid? categoryId = null,
-        PurchaseCondition? condition = null,
+        Guid? conditionId = null,
         int count = 1,
         int initial = 1,
         Guid? accountId = null,
@@ -74,7 +79,7 @@ public class CategorySpendingCalculatorTests
             count,
             initial,
             rule ?? Rule3,
-            condition ?? PurchaseCondition.Own,
+            conditionId ?? SystemPurchaseConditions.OwnId,
             "Compra",
             categoryId ?? ShoppingCategoryId);
 
@@ -86,7 +91,7 @@ public class CategorySpendingCalculatorTests
         bool includeDirect = true,
         bool includeFixed = true,
         bool includeCard = true,
-        IReadOnlyCollection<PurchaseCondition>? includedConditions = null) =>
+        IReadOnlyCollection<Guid>? includedConditionIds = null) =>
         CategorySpendingCalculator.Calculate(
             AccountId,
             month,
@@ -96,7 +101,7 @@ public class CategorySpendingCalculatorTests
             includeDirect,
             includeFixed,
             includeCard,
-            includedConditions);
+            includedConditionIds);
 
     // ---------- Empty ----------
 
@@ -294,17 +299,17 @@ public class CategorySpendingCalculatorTests
     {
         var direct = NewDirect(Day(2026, 11, 5), 50.00m, FoodCategoryId);
         var fixedExpense = NewFixed(YM(2026, 1), null, 100.00m, ServicesCategoryId);
-        var own = NewPurchase(Day(2026, 10, 10), 200.00m, FoodCategoryId, PurchaseCondition.Own);
-        var others = NewPurchase(Day(2026, 10, 11), 400.00m, FoodCategoryId, PurchaseCondition.Others);
-        var trip = NewPurchase(Day(2026, 10, 12), 150.00m, EntertainmentCategoryId, PurchaseCondition.Custom("Viagem"));
-        var mom = NewPurchase(Day(2026, 10, 13), 80.00m, HealthCategoryId, PurchaseCondition.Custom("Mae"));
+        var own = NewPurchase(Day(2026, 10, 10), 200.00m, FoodCategoryId, SystemPurchaseConditions.OwnId);
+        var others = NewPurchase(Day(2026, 10, 11), 400.00m, FoodCategoryId, OthersConditionId);
+        var trip = NewPurchase(Day(2026, 10, 12), 150.00m, EntertainmentCategoryId, TripConditionId);
+        var mom = NewPurchase(Day(2026, 10, 13), 80.00m, HealthCategoryId, MomConditionId);
 
         var result = Calc(
             YM(2026, 11),
             direct: new[] { direct },
             fixedExpenses: new[] { fixedExpense },
             purchases: new[] { own, others, trip, mom },
-            includedConditions: new[] { PurchaseCondition.Own, PurchaseCondition.Custom("Viagem") });
+            includedConditionIds: new[] { SystemPurchaseConditions.OwnId, TripConditionId });
 
         Assert.Equal(M(50.00m), result.DirectExpenses);
         Assert.Equal(M(100.00m), result.FixedExpenses);
@@ -315,15 +320,15 @@ public class CategorySpendingCalculatorTests
     }
 
     [Fact]
-    public void Calculate_ConditionFilter_UsesExactCustomNameMatch()
+    public void Calculate_ConditionFilter_MatchesDistinctConditionIds()
     {
-        var upper = NewPurchase(Day(2026, 10, 10), 100.00m, EntertainmentCategoryId, PurchaseCondition.Custom("Viagem"));
-        var lower = NewPurchase(Day(2026, 10, 11), 250.00m, EntertainmentCategoryId, PurchaseCondition.Custom("viagem"));
+        var firstTrip = NewPurchase(Day(2026, 10, 10), 100.00m, EntertainmentCategoryId, TripConditionId);
+        var otherCondition = NewPurchase(Day(2026, 10, 11), 250.00m, EntertainmentCategoryId, MomConditionId);
 
         var result = Calc(
             YM(2026, 11),
-            purchases: new[] { upper, lower },
-            includedConditions: new[] { PurchaseCondition.Custom("Viagem") });
+            purchases: new[] { firstTrip, otherCondition },
+            includedConditionIds: new[] { TripConditionId });
 
         Assert.Equal(M(100.00m), result.CardInstallments);
     }
@@ -333,14 +338,14 @@ public class CategorySpendingCalculatorTests
     {
         var direct = NewDirect(Day(2026, 11, 5), 50.00m, FoodCategoryId);
         var fixedExpense = NewFixed(YM(2026, 1), null, 100.00m, ServicesCategoryId);
-        var own = NewPurchase(Day(2026, 10, 10), 200.00m, ShoppingCategoryId, PurchaseCondition.Own);
+        var own = NewPurchase(Day(2026, 10, 10), 200.00m, ShoppingCategoryId, SystemPurchaseConditions.OwnId);
 
         var result = Calc(
             YM(2026, 11),
             direct: new[] { direct },
             fixedExpenses: new[] { fixedExpense },
             purchases: new[] { own },
-            includedConditions: Array.Empty<PurchaseCondition>());
+            includedConditionIds: Array.Empty<Guid>());
 
         Assert.Equal(M(50.00m), result.DirectExpenses);
         Assert.Equal(M(100.00m), result.FixedExpenses);
@@ -353,8 +358,8 @@ public class CategorySpendingCalculatorTests
     {
         var direct = NewDirect(Day(2026, 11, 5), 50.00m, FoodCategoryId);
         var fixedExpense = NewFixed(YM(2026, 1), null, 100.00m, ServicesCategoryId);
-        var own = NewPurchase(Day(2026, 10, 10), 200.00m, FoodCategoryId, PurchaseCondition.Own);
-        var others = NewPurchase(Day(2026, 10, 11), 400.00m, FoodCategoryId, PurchaseCondition.Others);
+        var own = NewPurchase(Day(2026, 10, 10), 200.00m, FoodCategoryId, SystemPurchaseConditions.OwnId);
+        var others = NewPurchase(Day(2026, 10, 11), 400.00m, FoodCategoryId, OthersConditionId);
 
         var result = Calc(
             YM(2026, 11),
@@ -364,7 +369,7 @@ public class CategorySpendingCalculatorTests
             includeDirect: false,
             includeFixed: false,
             includeCard: true,
-            includedConditions: new[] { PurchaseCondition.Own });
+            includedConditionIds: new[] { SystemPurchaseConditions.OwnId });
 
         var item = Assert.Single(result.Categories);
         Assert.Equal(FoodCategoryId, item.CategoryId);
@@ -405,11 +410,11 @@ public class CategorySpendingCalculatorTests
     }
 
     [Fact]
-    public void Calculate_NullConditionEntry_Throws()
+    public void Calculate_EmptyConditionIdEntry_Throws()
     {
-        var conditions = new PurchaseCondition[] { PurchaseCondition.Own, null! };
+        var conditions = new[] { SystemPurchaseConditions.OwnId, Guid.Empty };
 
-        Assert.Throws<ArgumentException>(() => Calc(YM(2026, 11), includedConditions: conditions));
+        Assert.Throws<ArgumentException>(() => Calc(YM(2026, 11), includedConditionIds: conditions));
     }
 
     [Fact]
@@ -433,10 +438,10 @@ public class CategorySpendingCalculatorTests
         var random = new Random(20261120);
         var allConditions = new[]
         {
-            PurchaseCondition.Own,
-            PurchaseCondition.Others,
-            PurchaseCondition.Custom("Viagem"),
-            PurchaseCondition.Custom("Mae"),
+            SystemPurchaseConditions.OwnId,
+            OthersConditionId,
+            TripConditionId,
+            MomConditionId,
         };
 
         var directs = new List<DirectExpense>();
@@ -487,7 +492,7 @@ public class CategorySpendingCalculatorTests
         var reversedDirects = directs.AsEnumerable().Reverse().ToList();
         var reversedFixeds = fixeds.AsEnumerable().Reverse().ToList();
         var reversedPurchases = purchases.AsEnumerable().Reverse().ToList();
-        var selectedConditions = new[] { PurchaseCondition.Own, PurchaseCondition.Custom("Viagem") };
+        var selectedConditions = new[] { SystemPurchaseConditions.OwnId, TripConditionId };
 
         for (var month = YM(2026, 1); month <= YM(2028, 12); month = month.AddMonths(1))
         {
@@ -516,7 +521,7 @@ public class CategorySpendingCalculatorTests
                 spending.Categories.All(c => c.Total > Money.Zero),
                 $"Zero category was not omitted: {context}");
 
-            var filtered = Calc(month, directs, fixeds, purchases, includedConditions: selectedConditions);
+            var filtered = Calc(month, directs, fixeds, purchases, includedConditionIds: selectedConditions);
             Assert.True(filtered.DirectExpenses == spending.DirectExpenses, $"Condition filter altered direct: {context}");
             Assert.True(filtered.FixedExpenses == spending.FixedExpenses, $"Condition filter altered fixed: {context}");
             Assert.True(filtered.CardInstallments <= spending.CardInstallments, $"Filtered card exceeds total: {context}");

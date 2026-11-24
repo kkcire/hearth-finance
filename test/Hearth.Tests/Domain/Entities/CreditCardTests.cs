@@ -94,4 +94,25 @@ public sealed class CreditCardTests
         Assert.Equal("Nubank", card.Name);
         Assert.Equal(Money.FromDecimal(3000m), card.Limit);
     }
+
+    [Fact]
+    public void Restore_IsIdempotent_AndReenablesEnsureActiveAndUpdates()
+    {
+        var card = CreditCard.Create(Guid.NewGuid(), DefaultAccountId, Rule3_12, "Nubank", Money.FromDecimal(3000m));
+
+        Assert.False(card.Restore());
+
+        card.Archive();
+        Assert.True(card.IsArchived);
+
+        Assert.True(card.Restore());
+        Assert.False(card.IsArchived);
+        Assert.False(card.Restore());
+
+        Assert.Null(Record.Exception(card.EnsureActive));
+        card.UpdateDetails(CardBillingRule.Of(5, 15), "Nubank Reativado", Money.FromDecimal(5000m));
+        Assert.Equal("Nubank Reativado", card.Name);
+        Assert.Equal(CardBillingRule.Of(5, 15), card.BillingRule);
+        Assert.Equal(Money.FromDecimal(5000m), card.Limit);
+    }
 }

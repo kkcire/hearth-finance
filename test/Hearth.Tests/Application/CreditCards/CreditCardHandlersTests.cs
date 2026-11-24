@@ -4,7 +4,9 @@ using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Application.CreditCards.DeleteCreditCard;
 using Hearth.Application.CreditCards.GetActiveCreditCard;
 using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.CreditCards.UpdateCreditCard;
+using Hearth.Application.Exceptions;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
@@ -84,7 +86,7 @@ public sealed class CreditCardHandlersTests
             1,
             1,
             CardBillingRule.Of(3, 12),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Livro",
             SystemCategories.EducationId));
 
@@ -116,7 +118,7 @@ public sealed class CreditCardHandlersTests
             3,
             1,
             CardBillingRule.Of(5, 15),
-            PurchaseCondition.Own,
+            SystemPurchaseConditions.OwnId,
             "Fone",
             SystemCategories.ShoppingId));
 
@@ -131,5 +133,45 @@ public sealed class CreditCardHandlersTests
 
         var listed = await list.ExecuteAsync(new ListCreditCardsQuery(account.Id));
         Assert.Single(listed);
+    }
+
+    [Fact]
+    public async Task RestoreCreditCard_RestoresWhenNoActiveCardExists_BlocksWhenAnotherIsActive_AndListFiltersArchived()
+    {
+        var account = await SeedAccountAsync();
+        var create = new CreateCreditCardHandler(_guard, _creditCards, _unitOfWork);
+        var archive = new ArchiveCreditCardHandler(_guard, _creditCards, _unitOfWork);
+        var restore = new RestoreCreditCardHandler(_guard, _creditCards, _unitOfWork);
+        var list = new ListCreditCardsHandler(_guard, _creditCards, _purchases, _clock);
+
+        var firstId = await create.ExecuteAsync(new CreateCreditCardCommand(account.Id, 3, 12, "Nubank", 5000m));
+
+        // Restoring an already active card is idempotent
+        Assert.False(await restore.ExecuteAsync(new RestoreCreditCardCommand(firstId)));
+
+        // Archive first card -> active-only list is empty; includeArchived list still has it
+        Assert.True(await archive.ExecuteAsync(new ArchiveCreditCardCommand(firstId)));
+        Assert.Empty(await list.ExecuteAsync(new ListCreditCardsQuery(account.Id, IncludeArchived: false)));
+        var allWithArchived = await list.ExecuteAsync(new ListCreditCardsQuery(account.Id, IncludeArchived: true));
+        Assert.Single(allWithArchived);
+        Assert.True(allWithArchived[0].IsArchived);
+
+        // Restore succeeds when no active card exists
+        Assert.True(await restore.ExecuteAsync(new RestoreCreditCardCommand(firstId)));
+        Assert.Single(await list.ExecuteAsync(new ListCreditCardsQuery(account.Id, IncludeArchived: false)));
+
+        // Archive first, create second active card -> restoring first must fail while second is active
+        await archive.ExecuteAsync(new ArchiveCreditCardCommand(firstId));
+        var secondId = await create.ExecuteAsync(new CreateCreditCardCommand(account.Id, 10, 20, "Inter", 3000m));
+
+        var activeOnly = await list.ExecuteAsync(new ListCreditCardsQuery(account.Id, IncludeArchived: false));
+        Assert.Single(activeOnly);
+        Assert.Equal(secondId, activeOnly[0].Id);
+        Assert.Equal(2, (await list.ExecuteAsync(new ListCreditCardsQuery(account.Id, IncludeArchived: true))).Count);
+
+        await Assert.ThrowsAsync<DomainException>(() => restore.ExecuteAsync(new RestoreCreditCardCommand(firstId)));
+
+        // Unknown card throws NotFoundException
+        await Assert.ThrowsAsync<NotFoundException>(() => restore.ExecuteAsync(new RestoreCreditCardCommand(Guid.NewGuid())));
     }
 }

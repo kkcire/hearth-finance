@@ -24,6 +24,7 @@ using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Application.CreditCards.DeleteCreditCard;
 using Hearth.Application.CreditCards.GetActiveCreditCard;
 using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.CreditCards.UpdateCreditCard;
 using Hearth.Application.DirectExpenses.DeleteDirectExpense;
 using Hearth.Application.DirectExpenses.ListDirectExpenses;
@@ -45,11 +46,13 @@ using Hearth.Application.Incomes.RegisterIncome;
 using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
+using Hearth.Application.PurchaseConditions.ListPurchaseConditions;
 using Hearth.Application.Reports.GetBudgetStatus;
 using Hearth.Application.Reports.GetExpensesByCategory;
 using Hearth.Application.Reports.GetMonthlySurplus;
 using Hearth.Application.Reports.GetProjectedResult;
 using Hearth.Application.Reports.GetRealBalance;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
 using Hearth.Tests.Application.Fakes;
@@ -68,6 +71,7 @@ public sealed class CrossUserIsolationTests
 
     private readonly InMemoryAccountRepository _accounts = new();
     private readonly InMemoryCategoryRepository _categories = new();
+    private readonly InMemoryPurchaseConditionRepository _conditions = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
@@ -77,23 +81,25 @@ public sealed class CrossUserIsolationTests
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
 
-    private async Task<(Account Account, Category Category, CategoryBudget Budget, DirectExpense Direct, FixedExpense Fixed, CreditCard Card, CreditCardPurchase Purchase, Income Income)>
+    private async Task<(Account Account, Category Category, PurchaseCondition Condition, CategoryBudget Budget, DirectExpense Direct, FixedExpense Fixed, CreditCard Card, CreditCardPurchase Purchase, Income Income)>
         SeedUserADataAsync()
     {
         var rule = CardBillingRule.Of(3, 12);
         var account = Account.Create(Guid.NewGuid(), UserAId, "Conta User A", Money.FromDecimal(1000m), new DateOnly(2026, 1, 1));
         var category = Category.CreateForUser(Guid.NewGuid(), UserAId, "Faculdade");
+        var condition = PurchaseCondition.CreateForUser(Guid.NewGuid(), UserAId, "Viagem User A");
         var budget = CategoryBudget.Create(Guid.NewGuid(), account.Id, category.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(500m));
         var direct = DirectExpense.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(80m), "Almoço", category.Id);
         var fixedExp = FixedExpense.Create(Guid.NewGuid(), account.Id, YearMonth.Of(2026, 10), null, Money.FromDecimal(100m), "Internet", category.Id);
         fixedExp.MarkAsPaid(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5), _clock.Today);
         var card = CreditCard.Create(Guid.NewGuid(), account.Id, rule, "Nubank", Money.FromDecimal(3000m));
-        var purchase = CreditCardPurchase.Create(Guid.NewGuid(), account.Id, card.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200m), 2, 1, rule, PurchaseCondition.Own, "Tênis", category.Id);
+        var purchase = CreditCardPurchase.Create(Guid.NewGuid(), account.Id, card.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(200m), 2, 1, rule, condition.Id, "Tênis", category.Id);
         var income = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(3000m), "Salário");
         income.MarkAsReceived(new DateOnly(2026, 11, 5), _clock.Today);
 
         await _accounts.AddAsync(account);
         await _categories.AddAsync(category);
+        await _conditions.AddAsync(condition);
         await _budgets.AddAsync(budget);
         await _directExpenses.AddAsync(direct);
         await _fixedExpenses.AddAsync(fixedExp);
@@ -101,13 +107,13 @@ public sealed class CrossUserIsolationTests
         await _purchases.AddAsync(purchase);
         await _incomes.AddAsync(income);
 
-        return (account, category, budget, direct, fixedExp, card, purchase, income);
+        return (account, category, condition, budget, direct, fixedExp, card, purchase, income);
     }
 
     [Fact]
     public async Task UserB_CannotReadOrMutateAnyResourceOwnedByUserA()
     {
-        var (account, category, budget, direct, fixedExp, card, purchase, income) = await SeedUserADataAsync();
+        var (account, category, condition, budget, direct, fixedExp, card, purchase, income) = await SeedUserADataAsync();
         var userBGuard = new AccountAccessGuard(_accounts, new FakeCurrentUser(UserBId, "User B", "b@hearth.app"));
 
         // Accounts
@@ -152,14 +158,19 @@ public sealed class CrossUserIsolationTests
         await Assert.ThrowsAsync<NotFoundException>(() => new ListCreditCardsHandler(userBGuard, _creditCards, _purchases, _clock).ExecuteAsync(new ListCreditCardsQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new UpdateCreditCardCommand(card.Id, 5, 12, "Hack", 1000m)));
         await Assert.ThrowsAsync<NotFoundException>(() => new ArchiveCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new ArchiveCreditCardCommand(card.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new RestoreCreditCardHandler(userBGuard, _creditCards, _unitOfWork).ExecuteAsync(new RestoreCreditCardCommand(card.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new DeleteCreditCardHandler(userBGuard, _creditCards, _purchases, _unitOfWork).ExecuteAsync(new DeleteCreditCardCommand(card.Id)));
 
+        // Purchase conditions (User B only sees system conditions, never User A's custom condition)
+        var userBConditions = await new ListPurchaseConditionsHandler(userBGuard, _conditions).ExecuteAsync(new ListPurchaseConditionsQuery(IncludeArchived: true));
+        Assert.DoesNotContain(userBConditions, c => c.Id == condition.Id);
+
         // Credit card purchases
-        await Assert.ThrowsAsync<NotFoundException>(() => new RegisterCreditCardPurchaseHandler(userBGuard, _creditCards, _categories, _purchases, _clock, _unitOfWork).ExecuteAsync(new RegisterCreditCardPurchaseCommand(account.Id, card.Id, new DateOnly(2026, 11, 10), 50m, 1, 1, PurchaseConditionKind.Own, null, "Hack", category.Id)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new RegisterCreditCardPurchaseHandler(userBGuard, _creditCards, _categories, _conditions, _purchases, _unitOfWork).ExecuteAsync(new RegisterCreditCardPurchaseCommand(account.Id, card.Id, new DateOnly(2026, 11, 10), 50m, 1, 1, SystemPurchaseConditions.OwnId, "Hack", category.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new ListCreditCardPurchasesHandler(userBGuard, _purchases, _clock).ExecuteAsync(new ListCreditCardPurchasesQuery(account.Id)));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseAmountHandler(userBGuard, _purchases, _clock, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseAmountCommand(purchase.Id, 999m)));
         await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseDateHandler(userBGuard, _purchases, _clock, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseDateCommand(purchase.Id, new DateOnly(2026, 11, 15))));
-        await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseDetailsHandler(userBGuard, _categories, _purchases, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseDetailsCommand(purchase.Id, "Hack", category.Id, PurchaseConditionKind.Own, null)));
+        await Assert.ThrowsAsync<NotFoundException>(() => new UpdateCreditCardPurchaseDetailsHandler(userBGuard, _categories, _conditions, _purchases, _unitOfWork).ExecuteAsync(new UpdateCreditCardPurchaseDetailsCommand(purchase.Id, "Hack", category.Id, SystemPurchaseConditions.OwnId)));
         await Assert.ThrowsAsync<NotFoundException>(() => new DeleteCreditCardPurchaseHandler(userBGuard, _purchases, _clock, _unitOfWork).ExecuteAsync(new DeleteCreditCardPurchaseCommand(purchase.Id)));
 
         // Incomes

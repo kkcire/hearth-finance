@@ -1,12 +1,18 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
 using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
+using Hearth.Application.CreditCards.ArchiveCreditCard;
+using Hearth.Application.CreditCards.CreateCreditCard;
+using Hearth.Application.CreditCards.DeleteCreditCard;
 using Hearth.Application.CreditCards.GetActiveCreditCard;
+using Hearth.Application.CreditCards.ListCreditCards;
+using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Application.Reports.GetMonthlySurplus;
 using Hearth.Application.Reports.GetRealBalance;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
+using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
 using Hearth.Infrastructure;
 using Hearth.Infrastructure.Persistence;
@@ -130,7 +136,7 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             await cards.AddAsync(card);
             await purchases.AddAsync(CreditCardPurchase.Create(
                 purchaseId, accountId, cardId, new DateOnly(2026, 10, 10), Money.FromDecimal(200m), 2, 1,
-                card.BillingRule, PurchaseCondition.Own, "Monitor", SystemCategories.ShoppingId));
+                card.BillingRule, SystemPurchaseConditions.OwnId, "Monitor", SystemCategories.ShoppingId));
             await uow.SaveChangesAsync();
         }
 
@@ -203,7 +209,8 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                 var oldCustom1 = Guid.CreateVersion7();
                 var oldCustom2 = Guid.CreateVersion7();
                 var directId = Guid.CreateVersion7();
-                var purchaseId = Guid.CreateVersion7();
+                var ownPurchaseId = Guid.CreateVersion7();
+                var othersPurchaseId = Guid.CreateVersion7();
 
                 await db.Database.ExecuteSqlInterpolatedAsync($"""
                     INSERT INTO users (id, name, email, password_hash, created_at_utc)
@@ -227,14 +234,15 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                     INSERT INTO credit_card_purchases
                         (id, account_id, category_id, date, amount, installment_count, initial_installment, description, closing_day, due_day, condition_kind, condition_name)
                     VALUES
-                        ({purchaseId}, {account1Id}, {oldCustom2}, DATE '2026-10-10', 120.00, 2, 1, 'Livro', 3, 12, 0, NULL);
+                        ({ownPurchaseId}, {account1Id}, {oldCustom2}, DATE '2026-10-10', 120.00, 2, 1, 'Livro', 3, 12, 0, NULL),
+                        ({othersPurchaseId}, {account1Id}, {oldCustom2}, DATE '2026-10-11', 80.00, 1, 1, 'Presente', 3, 12, 1, NULL);
 
                     INSERT INTO invoices (id, account_id, closing_month, closing_day, due_day, charged_amount, paid_on)
                     VALUES ({Guid.CreateVersion7()}, {account1Id}, 202611, 3, 12, 60.00, DATE '2026-11-12');
                     """);
             }
 
-            // 2. Apply RedesignMvpSchema onto populated database
+            // 2. Apply RedesignMvpSchema and AddPurchaseConditions onto populated database
             await using (var scope = provider.CreateAsyncScope())
             {
                 var db = scope.ServiceProvider.GetRequiredService<HearthDbContext>();
@@ -253,9 +261,20 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                 var card = Assert.Single(await db.CreditCards.ToListAsync());
                 Assert.Equal(CardBillingRule.Of(3, 12), card.BillingRule);
 
-                var purchase = Assert.Single(await db.CreditCardPurchases.ToListAsync());
-                Assert.Equal(card.Id, purchase.CreditCardId);
-                Assert.Equal(categories.Single(c => c.Name == "Faculdade").Id, purchase.CategoryId);
+                var purchases = await db.CreditCardPurchases.OrderBy(p => p.Date).ToListAsync();
+                Assert.Equal(2, purchases.Count);
+                Assert.All(purchases, p =>
+                {
+                    Assert.Equal(card.Id, p.CreditCardId);
+                    Assert.Equal(categories.Single(c => c.Name == "Faculdade").Id, p.CategoryId);
+                });
+                Assert.Equal(SystemPurchaseConditions.OwnId, purchases[0].ConditionId);
+                Assert.Equal(SystemPurchaseConditions.OthersId, purchases[1].ConditionId);
+
+                var conditions = await db.PurchaseConditions.ToListAsync();
+                Assert.Equal(SystemPurchaseConditions.Definitions.Count, conditions.Count);
+                Assert.Contains(conditions, c => c.Id == SystemPurchaseConditions.OwnId && c.Name == "Própria");
+                Assert.Contains(conditions, c => c.Id == SystemPurchaseConditions.OthersId && c.Name == "Outros");
             }
         }
         finally
@@ -293,10 +312,11 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             await uow.SaveChangesAsync();
         }
 
-        // Register 10x purchase from 02/03/2026 starting at installment 9:
-        // Installment 1 due 2026-04-12 .. installment 8 due 2026-11-12 (< InitialBalanceDate, IsPreviouslyPaid == true)
-        // Installment 9 due 2026-12-12, installment 10 due 2027-01-12 (>= InitialBalanceDate, active)
+        // Register:
+        // 1) 10x purchase from 02/03/2026 starting at installment 9 (inst 1..8 previously paid, inst 9 due Dec 12, inst 10 due Jan 12)
+        // 2) Historical 1x purchase from 10/10/2026 of R$ 500 already due on 12/11/2026 (< InitialBalanceDate) for invoice history!
         Guid purchaseId;
+        Guid historicalId;
         await using (var scope = _fixture.CreateScope())
         {
             var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
@@ -305,8 +325,8 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                 guard,
                 scope.ServiceProvider.GetRequiredService<ICreditCardRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
+                scope.ServiceProvider.GetRequiredService<IPurchaseConditionRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>(),
-                new FakeClock(today),
                 scope.ServiceProvider.GetRequiredService<IUnitOfWork>());
 
             purchaseId = await handler.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
@@ -316,9 +336,19 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                 1000.00m,
                 10,
                 9,
-                PurchaseConditionKind.Own,
-                null,
+                SystemPurchaseConditions.OwnId,
                 "Geladeira",
+                SystemCategories.ShoppingId));
+
+            historicalId = await handler.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
+                accountId,
+                cardId,
+                new DateOnly(2026, 10, 10),
+                500.00m,
+                1,
+                1,
+                SystemPurchaseConditions.OwnId,
+                "Fatura passada",
                 SystemCategories.ShoppingId));
         }
 
@@ -339,7 +369,11 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             Assert.Equal(new DateOnly(2026, 4, 12), saved.FirstCycle.DueDate);
             Assert.Equal(new DateOnly(2026, 12, 12), saved.FirstActiveCycle.DueDate);
 
-            // Real balance on 2026-11-22 must NOT deduct installments 1..8
+            var historical = await purchases.GetByIdAsync(historicalId);
+            Assert.NotNull(historical);
+            Assert.Equal(new DateOnly(2026, 11, 12), historical.FirstActiveCycle.DueDate);
+
+            // Real balance on 2026-11-22 must NOT deduct installments 1..8 OR the historical 500 invoice (< InitialBalanceDate)
             var realBalance = await new GetRealBalanceHandler(guard, incomes, directs, fixedExpenses, purchases, clock)
                 .ExecuteAsync(new GetRealBalanceQuery(accountId));
             Assert.Equal(0.00m, realBalance.CardInvoices);
@@ -352,9 +386,9 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             Assert.Equal(200.00m, activeCard.UsedLimit);
             Assert.Equal(2800.00m, activeCard.AvailableLimit);
 
-            // Invoices: Nov 2026 = 0 (installment 8 is previously paid), Dec 2026 = 100 (inst 9), Jan 2027 = 100 (inst 10)
+            // Invoices: Nov 2026 displays historical 500 (inst 8 is previously paid -> 0), Dec 2026 = 100 (inst 9), Jan 2027 = 100 (inst 10)
             var invoiceHandler = new GetInvoiceSummaryHandler(guard, cards, purchases, clock);
-            Assert.Equal(0.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 11))).CalculatedAmount);
+            Assert.Equal(500.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 11))).CalculatedAmount);
             Assert.Equal(100.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2026, 12))).CalculatedAmount);
             Assert.Equal(100.00m, (await invoiceHandler.ExecuteAsync(new GetInvoiceSummaryQuery(accountId, 2027, 1))).CalculatedAmount);
 
@@ -366,6 +400,90 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
             Assert.Equal(1900.00m, surplus.SelectedMonth.ProjectedSurplus);
             Assert.Equal(100.00m, surplus.Series[2].CardInvoiceDue);
             Assert.Equal(1800.00m, surplus.Series[2].ProjectedSurplus);
+        }
+    }
+
+    [Fact]
+    public async Task CreditCardLifecycle_ArchiveRestoreAndSafeDelete_PersistsCleanlyInPostgres()
+    {
+        var userId = Guid.CreateVersion7();
+        var accountId = Guid.CreateVersion7();
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var users = scope.ServiceProvider.GetRequiredService<IUserRepository>();
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            await users.AddAsync(User.Create(
+                userId, "Erick", $"lifecycle-{userId:N}@hearth.app", "hash", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
+            await accounts.AddAsync(Account.Create(
+                accountId, userId, "Principal", Money.FromDecimal(1000m), new DateOnly(2026, 1, 1), isInitialBalanceConfirmed: true));
+            await uow.SaveChangesAsync();
+        }
+
+        Guid cardWithHistoryId;
+        Guid unusedCardId;
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
+            var categories = scope.ServiceProvider.GetRequiredService<ICategoryRepository>();
+            var conditions = scope.ServiceProvider.GetRequiredService<IPurchaseConditionRepository>();
+            var purchases = scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var guard = new AccountAccessGuard(accounts, new FakeCurrentUser(userId));
+
+            var create = new CreateCreditCardHandler(guard, cards, uow);
+            var archive = new ArchiveCreditCardHandler(guard, cards, uow);
+            var restore = new RestoreCreditCardHandler(guard, cards, uow);
+            var registerPurchase = new RegisterCreditCardPurchaseHandler(guard, cards, categories, conditions, purchases, uow);
+
+            cardWithHistoryId = await create.ExecuteAsync(new CreateCreditCardCommand(accountId, 3, 12, "Nubank", 5000m));
+            await registerPurchase.ExecuteAsync(new RegisterCreditCardPurchaseCommand(
+                accountId, cardWithHistoryId, new DateOnly(2026, 11, 10), 200m, 1, 1,
+                SystemPurchaseConditions.OwnId, "Fone", SystemCategories.ShoppingId));
+
+            // Archive -> Restore -> Archive again -> Create unused second card -> Archive unused
+            Assert.True(await archive.ExecuteAsync(new ArchiveCreditCardCommand(cardWithHistoryId)));
+            Assert.True(await restore.ExecuteAsync(new RestoreCreditCardCommand(cardWithHistoryId)));
+            Assert.True(await archive.ExecuteAsync(new ArchiveCreditCardCommand(cardWithHistoryId)));
+
+            unusedCardId = await create.ExecuteAsync(new CreateCreditCardCommand(accountId, 10, 20, "Inter", 3000m));
+
+            // Restoring cardWithHistoryId while unusedCardId is active must throw DomainException
+            await Assert.ThrowsAsync<DomainException>(() => restore.ExecuteAsync(new RestoreCreditCardCommand(cardWithHistoryId)));
+
+            Assert.True(await archive.ExecuteAsync(new ArchiveCreditCardCommand(unusedCardId)));
+        }
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var accounts = scope.ServiceProvider.GetRequiredService<IAccountRepository>();
+            var cards = scope.ServiceProvider.GetRequiredService<ICreditCardRepository>();
+            var purchases = scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+            var guard = new AccountAccessGuard(accounts, new FakeCurrentUser(userId));
+            var clock = new FakeClock(new DateOnly(2026, 11, 20));
+
+            var delete = new DeleteCreditCardHandler(guard, cards, purchases, uow);
+            var restore = new RestoreCreditCardHandler(guard, cards, uow);
+            var list = new ListCreditCardsHandler(guard, cards, purchases, clock);
+
+            // Deleting archived card WITH purchases is blocked
+            await Assert.ThrowsAsync<DomainException>(() => delete.ExecuteAsync(new DeleteCreditCardCommand(cardWithHistoryId)));
+
+            // Deleting archived card WITHOUT purchases succeeds
+            await delete.ExecuteAsync(new DeleteCreditCardCommand(unusedCardId));
+
+            // Restoring cardWithHistoryId succeeds now that no active card exists
+            Assert.True(await restore.ExecuteAsync(new RestoreCreditCardCommand(cardWithHistoryId)));
+
+            var activeCards = await list.ExecuteAsync(new ListCreditCardsQuery(accountId, IncludeArchived: false));
+            var singleActive = Assert.Single(activeCards);
+            Assert.Equal(cardWithHistoryId, singleActive.Id);
+            Assert.False(singleActive.IsArchived);
         }
     }
 }
