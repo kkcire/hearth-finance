@@ -1,4 +1,5 @@
 # 🔥 Hearth Finance
+_`"Pull a chair up to the hearth, count the timber you have set aside, and see what the month ahead can afford."`_
 
 A personal finance manager built to answer a simple question: **how much money will I have left after my fixed bills, debts, and upcoming credit card installments?**
 
