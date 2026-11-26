@@ -52,9 +52,7 @@ public sealed class UpdateDirectExpenseHandler
                 _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
         }
 
-        account.EnsureCanRegisterOn(command.Date);
-
-        expense.UpdateDate(command.Date);
+        expense.UpdateDate(account, command.Date);
         expense.UpdateAmount(amount);
         expense.UpdateDescription(command.Description);
         expense.UpdateCategory(command.CategoryId);

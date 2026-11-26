@@ -77,6 +77,8 @@ public sealed class RegisterCreditCardPurchaseHandler
             command.Description,
             command.CategoryId);
 
+        account.EnsureCanRegisterCreditCardPurchase(purchase);
+
         await _purchases.AddAsync(purchase, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
 

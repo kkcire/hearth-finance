@@ -43,9 +43,7 @@ public sealed class MarkIncomeAsReceivedHandler
         var account = await _accountAccess.EnsureCanAccessEntityAsync(
             income.AccountId, nameof(Income), income.Id, cancellationToken);
 
-        account.EnsureCanRegisterOn(command.ReceivedOn);
-
-        var changed = income.MarkAsReceived(command.ReceivedOn, _clock.Today);
+        var changed = income.MarkAsReceived(account, command.ReceivedOn, _clock.Today);
 
         if (changed)
         {

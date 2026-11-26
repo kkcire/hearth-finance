@@ -1,9 +1,11 @@
 using Hearth.Application.Accounts.ConfirmInitialBalance;
 using Hearth.Application.Accounts.CreateAccount;
+using Hearth.Application.Accounts.DeleteBalanceAdjustment;
 using Hearth.Application.Accounts.GetAccount;
 using Hearth.Application.Accounts.ListAccounts;
 using Hearth.Application.Accounts.RenameAccount;
-using Hearth.Application.Accounts.UpdateInitialBalance;
+using Hearth.Application.Accounts.SetAccountBalance;
+using Hearth.Application.Activities.ListActivities;
 using Hearth.Application.Auth.AuthenticateUser;
 using Hearth.Application.Auth.RegisterUser;
 using Hearth.Application.Authorization;
@@ -27,7 +29,6 @@ using Hearth.Application.CreditCardPurchases.UpdateCreditCardPurchaseDetails;
 using Hearth.Application.CreditCards.ArchiveCreditCard;
 using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Application.CreditCards.DeleteCreditCard;
-using Hearth.Application.CreditCards.GetActiveCreditCard;
 using Hearth.Application.CreditCards.ListCreditCards;
 using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.CreditCards.UpdateCreditCard;
@@ -52,11 +53,7 @@ using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Application.PurchaseConditions.CreatePurchaseCondition;
 using Hearth.Application.PurchaseConditions.ListPurchaseConditions;
-using Hearth.Application.Reports.GetBudgetStatus;
-using Hearth.Application.Reports.GetExpensesByCategory;
-using Hearth.Application.Reports.GetMonthlySurplus;
-using Hearth.Application.Reports.GetProjectedResult;
-using Hearth.Application.Reports.GetRealBalance;
+using Hearth.Application.Reports.GetMonthlyDashboard;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Hearth.Application;
@@ -78,7 +75,8 @@ public static class DependencyInjection
         services.AddScoped<GetAccountHandler>();
         services.AddScoped<ListAccountsHandler>();
         services.AddScoped<RenameAccountHandler>();
-        services.AddScoped<UpdateInitialBalanceHandler>();
+        services.AddScoped<SetAccountBalanceHandler>();
+        services.AddScoped<DeleteBalanceAdjustmentHandler>();
 
         // Categories
         services.AddScoped<CreateCategoryHandler>();
@@ -117,7 +115,6 @@ public static class DependencyInjection
         services.AddScoped<ArchiveCreditCardHandler>();
         services.AddScoped<RestoreCreditCardHandler>();
         services.AddScoped<DeleteCreditCardHandler>();
-        services.AddScoped<GetActiveCreditCardHandler>();
         services.AddScoped<ListCreditCardsHandler>();
 
         // Credit card purchases
@@ -144,11 +141,10 @@ public static class DependencyInjection
         services.AddScoped<GetInvoiceSummaryHandler>();
 
         // Reports
-        services.AddScoped<GetMonthlySurplusHandler>();
-        services.AddScoped<GetProjectedResultHandler>();
-        services.AddScoped<GetRealBalanceHandler>();
-        services.AddScoped<GetExpensesByCategoryHandler>();
-        services.AddScoped<GetBudgetStatusHandler>();
+        services.AddScoped<GetMonthlyDashboardHandler>();
+
+        // Activities
+        services.AddScoped<ListActivitiesHandler>();
 
         return services;
     }

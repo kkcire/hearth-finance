@@ -46,17 +46,16 @@ public sealed class GetInvoiceSummaryHandler
 
         var groupByDueMonth = query.MonthBasis == InvoiceMonthBasis.DueMonth;
         var calculatedAmount = groupByDueMonth
-            ? InvoiceCalculator.CalculateByDueMonth(account.Id, targetMonth, purchases, query.ConditionId)
-            : InvoiceCalculator.Calculate(account.Id, targetMonth, purchases, query.ConditionId);
+            ? InvoiceCalculator.CalculateByDueMonth(account.Id, targetMonth, purchases, query.ConditionId, account.TrackingStartDate)
+            : InvoiceCalculator.Calculate(account.Id, targetMonth, purchases, query.ConditionId, account.TrackingStartDate);
 
         var matchingInstallments = purchases
             .Where(purchase => purchase.AccountId == account.Id
                                && (!query.ConditionId.HasValue || purchase.ConditionId == query.ConditionId.Value))
-            .SelectMany(purchase => purchase.GetInstallments()
-                .Where(installment => !installment.IsPreviouslyPaid
-                                      && (groupByDueMonth
-                                          ? installment.Cycle.DueMonth == targetMonth
-                                          : installment.Cycle.ClosingMonth == targetMonth))
+            .SelectMany(purchase => purchase.GetTrackedInstallments(account.TrackingStartDate)
+                .Where(installment => groupByDueMonth
+                    ? installment.Cycle.DueMonth == targetMonth
+                    : installment.Cycle.ClosingMonth == targetMonth)
                 .Select(installment => (Purchase: purchase, Installment: installment)))
             .ToList();
 
@@ -84,11 +83,18 @@ public sealed class GetInvoiceSummaryHandler
                 : BillingCycle.ForPurchase(today, activeCard.BillingRule).ClosingMonth)
             : YearMonth.From(today);
 
-        BillingCycle? cycle = activeCard is not null
-            ? (groupByDueMonth
-                ? BillingCycle.DueIn(targetMonth, activeCard.BillingRule)
-                : BillingCycle.Closing(targetMonth, activeCard.BillingRule))
-            : matchingInstallments.FirstOrDefault().Installment?.Cycle;
+        var snapshotCycle = matchingInstallments
+            .Select(item => item.Installment.Cycle)
+            .OrderBy(c => c.DueDate)
+            .ThenBy(c => c.ClosingDate)
+            .FirstOrDefault();
+
+        BillingCycle? cycle = snapshotCycle
+            ?? (activeCard is not null
+                ? (groupByDueMonth
+                    ? BillingCycle.DueIn(targetMonth, activeCard.BillingRule)
+                    : BillingCycle.Closing(targetMonth, activeCard.BillingRule))
+                : null);
 
         InvoiceStatus? status = cycle is not null
             ? cycle.GetStatus(today)

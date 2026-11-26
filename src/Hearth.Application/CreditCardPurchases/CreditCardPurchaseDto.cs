@@ -26,9 +26,16 @@ public sealed record CreditCardPurchaseDto(
     bool IsLocked,
     IReadOnlyList<InstallmentDto> Installments)
 {
-    internal static CreditCardPurchaseDto FromEntity(CreditCardPurchase purchase, DateOnly today)
+    internal static CreditCardPurchaseDto FromEntity(
+        CreditCardPurchase purchase,
+        DateOnly today,
+        DateOnly? trackingStartDate = null)
     {
-        var firstActive = purchase.FirstActiveCycle.ClosingMonth;
+        var installments = purchase.GetInstallments();
+        var firstTracked = trackingStartDate.HasValue
+            ? installments.FirstOrDefault(i => i.Cycle.DueDate >= trackingStartDate.Value)?.Cycle.ClosingMonth
+            : null;
+        var firstActive = firstTracked ?? purchase.FirstActiveCycle.ClosingMonth;
 
         return new(
             purchase.Id,
@@ -43,15 +50,17 @@ public sealed record CreditCardPurchaseDto(
             purchase.ConditionId,
             purchase.Description,
             purchase.CategoryId,
-            purchase.IsLockedAt(today),
-            purchase.GetInstallments()
+            purchase.IsLockedAt(today, trackingStartDate),
+            installments
                 .Select(installment => new InstallmentDto(
                     installment.Number,
                     installment.Amount.Amount,
                     installment.Cycle.ClosingMonth.Year,
                     installment.Cycle.ClosingMonth.Month,
                     installment.Cycle.DueDate,
-                    installment.IsPreviouslyPaid))
+                    trackingStartDate.HasValue
+                        ? installment.Cycle.DueDate < trackingStartDate.Value
+                        : installment.IsPreviouslyPaid))
                 .ToList());
     }
 }

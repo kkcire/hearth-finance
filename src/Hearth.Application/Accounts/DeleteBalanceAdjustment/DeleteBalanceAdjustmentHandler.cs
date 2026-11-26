@@ -1,16 +1,17 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
-using Hearth.Domain.ValueObjects;
+using Hearth.Application.Exceptions;
+using Hearth.Domain.Entities;
 
-namespace Hearth.Application.Accounts.UpdateInitialBalance;
+namespace Hearth.Application.Accounts.DeleteBalanceAdjustment;
 
-public sealed class UpdateInitialBalanceHandler
+public sealed class DeleteBalanceAdjustmentHandler
 {
     private readonly AccountAccessGuard _accountAccess;
     private readonly IAccountRepository _accounts;
     private readonly IUnitOfWork _unitOfWork;
 
-    public UpdateInitialBalanceHandler(
+    public DeleteBalanceAdjustmentHandler(
         AccountAccessGuard accountAccess,
         IAccountRepository accounts,
         IUnitOfWork unitOfWork)
@@ -25,17 +26,16 @@ public sealed class UpdateInitialBalanceHandler
     }
 
     public async Task ExecuteAsync(
-        UpdateInitialBalanceCommand command,
+        DeleteBalanceAdjustmentCommand command,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(command);
 
-        var newBalance = Money.FromDecimal(command.InitialBalance);
+        var account = await _accountAccess.GetAuthorizedAccountWithBalanceHistoryAsync(command.AccountId, cancellationToken);
+        var removed = account.RemoveBalanceAdjustment(command.AdjustmentId)
+                      ?? throw new NotFoundException(nameof(BalanceAdjustment), command.AdjustmentId);
 
-        var account = await _accountAccess.GetAuthorizedAccountAsync(command.AccountId, cancellationToken);
-
-        account.UpdateInitialBalance(newBalance);
-
+        await _accounts.RemoveBalanceAdjustmentAsync(removed, cancellationToken);
         await _accounts.UpdateAsync(account, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);
     }

@@ -43,7 +43,7 @@ public sealed class CreateAccountHandler
             ownerUserId,
             command.Name,
             initialBalance,
-            _clock.Today,
+            _clock.UtcNow,
             command.IsInitialBalanceConfirmed);
 
         await _accounts.AddAsync(account, cancellationToken);

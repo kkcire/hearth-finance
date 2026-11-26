@@ -42,10 +42,10 @@ public sealed class UpdateCreditCardPurchaseAmountHandler
         var purchase = await _purchases.GetByIdAsync(command.PurchaseId, cancellationToken)
                        ?? throw new NotFoundException(nameof(CreditCardPurchase), command.PurchaseId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
             purchase.AccountId, nameof(CreditCardPurchase), purchase.Id, cancellationToken);
 
-        purchase.UpdateAmount(newAmount, _clock.Today);
+        purchase.UpdateAmount(newAmount, _clock.Today, account.TrackingStartDate);
 
         await _purchases.UpdateAsync(purchase, cancellationToken);
         await _unitOfWork.SaveChangesAsync(cancellationToken);

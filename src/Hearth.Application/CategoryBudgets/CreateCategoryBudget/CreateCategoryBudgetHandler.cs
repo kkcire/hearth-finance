@@ -54,7 +54,7 @@ public sealed class CreateCategoryBudgetHandler
         await CategoryValidation.EnsureUsableForUserAsync(
             _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
-        account.EnsureCanRegisterOn(startMonth.LastDay);
+        account.EnsureCanRegisterInMonth(startMonth);
 
         var budget = CategoryBudget.Create(
             Guid.CreateVersion7(),

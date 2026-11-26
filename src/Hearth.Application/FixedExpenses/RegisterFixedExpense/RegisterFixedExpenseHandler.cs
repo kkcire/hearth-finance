@@ -53,11 +53,9 @@ public sealed class RegisterFixedExpenseHandler
         await CategoryValidation.EnsureUsableForUserAsync(
             _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
-        account.EnsureCanRegisterOn(startMonth.LastDay);
-
         var expense = FixedExpense.Create(
             Guid.CreateVersion7(),
-            account.Id,
+            account,
             startMonth,
             endMonth,
             amount,

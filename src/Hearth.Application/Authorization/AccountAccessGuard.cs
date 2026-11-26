@@ -41,6 +41,21 @@ public sealed class AccountAccessGuard
         return account;
     }
 
+    public async Task<Account> GetAuthorizedAccountWithBalanceHistoryAsync(
+        Guid accountId,
+        CancellationToken cancellationToken = default)
+    {
+        var userId = _currentUser.GetRequiredUserId();
+
+        var account = await _accounts.GetByIdWithBalanceHistoryAsync(accountId, cancellationToken);
+        if (account is null || account.OwnerUserId != userId)
+        {
+            throw new NotFoundException(nameof(Account), accountId);
+        }
+
+        return account;
+    }
+
     public async Task<Account> EnsureCanAccessEntityAsync(
         Guid accountId,
         string entityName,

@@ -9,7 +9,8 @@ public sealed record IncomeDto(
     decimal Amount,
     string Description,
     DateOnly? ReceivedOn,
-    bool IsReceived)
+    bool IsReceived,
+    Guid ConditionId)
 {
     internal static IncomeDto FromEntity(Income income) =>
         new(
@@ -19,5 +20,6 @@ public sealed record IncomeDto(
             income.Amount.Amount,
             income.Description,
             income.ReceivedOn,
-            income.IsReceived);
+            income.IsReceived,
+            income.ConditionId);
 }

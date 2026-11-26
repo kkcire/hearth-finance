@@ -5,4 +5,5 @@ public sealed record RegisterIncomeCommand(
     DateOnly ExpectedDate,
     decimal Amount,
     string Description,
-    DateOnly? ReceivedOn = null);
+    DateOnly? ReceivedOn = null,
+    Guid? ConditionId = null);

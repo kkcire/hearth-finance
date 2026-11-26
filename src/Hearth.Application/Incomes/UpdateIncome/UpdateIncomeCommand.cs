@@ -4,4 +4,5 @@ public sealed record UpdateIncomeCommand(
     Guid IncomeId,
     DateOnly ExpectedDate,
     decimal Amount,
-    string Description);
+    string Description,
+    Guid? ConditionId = null);

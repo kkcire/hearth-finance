@@ -41,10 +41,10 @@ public sealed class DeleteCreditCardPurchaseHandler
         var purchase = await _purchases.GetByIdAsync(command.PurchaseId, cancellationToken)
                        ?? throw new NotFoundException(nameof(CreditCardPurchase), command.PurchaseId);
 
-        await _accountAccess.EnsureCanAccessEntityAsync(
+        var account = await _accountAccess.EnsureCanAccessEntityAsync(
             purchase.AccountId, nameof(CreditCardPurchase), purchase.Id, cancellationToken);
 
-        if (purchase.IsLockedAt(_clock.Today))
+        if (purchase.IsLockedAt(_clock.Today, account.TrackingStartDate))
         {
             throw new DomainException(
                 "The purchase cannot be deleted after a linked invoice has been paid.");

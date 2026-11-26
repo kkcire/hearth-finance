@@ -45,9 +45,7 @@ public sealed class MarkFixedExpenseAsPaidHandler
         var account = await _accountAccess.EnsureCanAccessEntityAsync(
             expense.AccountId, nameof(FixedExpense), expense.Id, cancellationToken);
 
-        account.EnsureCanRegisterOn(command.PaidOn);
-
-        var changed = expense.MarkAsPaid(month, command.PaidOn, _clock.Today);
+        var changed = expense.MarkAsPaid(account, month, command.PaidOn, _clock.Today);
 
         if (changed)
         {

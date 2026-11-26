@@ -19,7 +19,7 @@ public sealed class GetAccountHandler
     {
         ArgumentNullException.ThrowIfNull(query);
 
-        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
+        var account = await _accountAccess.GetAuthorizedAccountWithBalanceHistoryAsync(query.AccountId, cancellationToken);
 
         return AccountDto.FromEntity(account);
     }

@@ -31,7 +31,7 @@ public sealed class ListCreditCardPurchasesHandler
         ArgumentNullException.ThrowIfNull(query);
         PurchaseConditionValidation.EnsureOptionalFilterNotEmpty(query.ConditionId, nameof(query));
 
-        _ = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
+        var account = await _accountAccess.GetAuthorizedAccountAsync(query.AccountId, cancellationToken);
 
         var purchases = await _purchases.GetByAccountAsync(query.AccountId, cancellationToken);
         var today = _clock.Today;
@@ -39,7 +39,7 @@ public sealed class ListCreditCardPurchasesHandler
         return purchases
             .Where(purchase => !query.ConditionId.HasValue || purchase.ConditionId == query.ConditionId.Value)
             .OrderByDescending(purchase => purchase.Date)
-            .Select(purchase => CreditCardPurchaseDto.FromEntity(purchase, today))
+            .Select(purchase => CreditCardPurchaseDto.FromEntity(purchase, today, account.TrackingStartDate))
             .ToList();
     }
 }

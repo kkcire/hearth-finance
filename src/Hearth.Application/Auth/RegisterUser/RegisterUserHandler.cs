@@ -82,7 +82,7 @@ public sealed class RegisterUserHandler
             user.Id,
             DefaultAccountName,
             Money.Zero,
-            _clock.Today,
+            _clock.UtcNow,
             isInitialBalanceConfirmed: false);
 
         await _users.AddAsync(user, cancellationToken);

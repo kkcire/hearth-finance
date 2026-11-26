@@ -43,11 +43,9 @@ public sealed class RegisterDirectExpenseHandler
         await CategoryValidation.EnsureUsableForUserAsync(
             _categories, account.OwnerUserId, command.CategoryId, cancellationToken);
 
-        account.EnsureCanRegisterOn(command.Date);
-
         var expense = DirectExpense.Create(
             Guid.CreateVersion7(),
-            account.Id,
+            account,
             command.Date,
             amount,
             command.Description,
