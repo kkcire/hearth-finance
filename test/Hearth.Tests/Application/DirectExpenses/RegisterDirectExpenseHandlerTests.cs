@@ -34,7 +34,7 @@ public class RegisterDirectExpenseHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate);
+            TestTime.UtcOn(InitialDate));
         await _accounts.AddAsync(account);
 
         var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Lanches");

@@ -33,7 +33,7 @@ public sealed class CreditCardLimitCalculatorTests
         // - Installment 1: closes 2026-11-03, due 2026-11-12
         // - Installment 2: closes 2026-12-03, due 2026-12-12
         // - Installment 3: closes 2027-01-03, due 2027-01-12
-        var account = Account.Create(AccountId, OwnerUserId, "Conta", Money.FromDecimal(1000m), new DateOnly(2026, 1, 1));
+        var account = Account.Create(AccountId, OwnerUserId, "Conta", Money.FromDecimal(1000m), TestTime.UtcOn(new DateOnly(2026, 1, 1)));
         var card = CreditCard.Create(CardId, AccountId, Rule3_12, "Nubank", Money.FromDecimal(500m));
         var purchase = CreditCardPurchase.Create(
             Guid.NewGuid(),

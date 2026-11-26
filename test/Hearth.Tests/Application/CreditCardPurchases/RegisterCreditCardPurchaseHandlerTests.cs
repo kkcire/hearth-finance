@@ -40,7 +40,7 @@ public class RegisterCreditCardPurchaseHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            initialDate ?? InitialDate);
+            TestTime.UtcOn(initialDate ?? InitialDate));
         await _accounts.AddAsync(account);
 
         var card = CreditCard.Create(

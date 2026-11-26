@@ -43,8 +43,22 @@ public class CreateAccountHandlerTests
         Assert.Equal(FakeCurrentUser.DefaultUserId, saved.OwnerUserId);
         Assert.Equal("Nubank", saved.Name);
         Assert.Equal(Money.FromDecimal(2345.67m), saved.InitialBalance);
-        Assert.Equal(_clock.Today, saved.InitialBalanceDate);
+        Assert.Equal(new DateOnly(2026, 10, 1), saved.TrackingStartDate);
         Assert.True(saved.IsInitialBalanceConfirmed);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_AtUtcMonthBoundary_DerivesDay1InBrasiliaTime()
+    {
+        // Nov 30, 2026 22:30 BRT == Dec 1, 2026 01:30 UTC
+        _clock.UtcNow = new DateTimeOffset(2026, 12, 1, 1, 30, 0, TimeSpan.Zero);
+
+        var id = await _handler.ExecuteAsync(ValidCommand(name: "Conta BRT", initialBalance: 500m));
+
+        var saved = await _accounts.GetByIdAsync(id);
+        Assert.NotNull(saved);
+        Assert.Equal(new DateOnly(2026, 11, 1), saved.TrackingStartDate);
+        Assert.Equal(YearMonth.Of(2026, 11), saved.TrackingStartPeriod);
     }
 
     [Theory]

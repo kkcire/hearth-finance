@@ -29,7 +29,7 @@ public class GetAccountHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1500.50m),
-            new DateOnly(2026, 10, 1),
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)),
             isInitialBalanceConfirmed: true);
         await _accounts.AddAsync(account);
 
@@ -68,7 +68,7 @@ public class GetAccountHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            new DateOnly(2026, 10, 1));
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)));
         await _accounts.AddAsync(account);
         using var cts = new CancellationTokenSource();
 

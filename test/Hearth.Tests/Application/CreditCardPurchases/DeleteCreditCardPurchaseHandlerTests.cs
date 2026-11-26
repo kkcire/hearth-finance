@@ -28,7 +28,7 @@ public class DeleteCreditCardPurchaseHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)))).GetAwaiter().GetResult();
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new DeleteCreditCardPurchaseHandler(_accountAccess, _purchases, _clock, _unitOfWork);
     }

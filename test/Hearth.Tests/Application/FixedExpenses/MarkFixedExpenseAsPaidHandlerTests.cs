@@ -34,7 +34,7 @@ public class MarkFixedExpenseAsPaidHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate);
+            TestTime.UtcOn(InitialDate));
         await _accounts.AddAsync(account);
 
         var expense = FixedExpense.Create(

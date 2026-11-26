@@ -34,7 +34,7 @@ public class CreateCategoryBudgetHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            InitialDate);
+            TestTime.UtcOn(InitialDate));
         await _accounts.AddAsync(account);
 
         var category = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Faculdade");

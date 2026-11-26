@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.UpdateIncome;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -16,6 +17,7 @@ public class UpdateIncomeHandlerTests
     private readonly InMemoryAccountRepository _accounts = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
+    private readonly InMemoryPurchaseConditionRepository _conditions = new();
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeUnitOfWork _unitOfWork = new();
     private readonly UpdateIncomeHandler _handler;
@@ -23,7 +25,7 @@ public class UpdateIncomeHandlerTests
     public UpdateIncomeHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new UpdateIncomeHandler(_accountAccess, _incomes, _unitOfWork);
+        _handler = new UpdateIncomeHandler(_accountAccess, _incomes, _conditions, _unitOfWork);
     }
 
     private async Task<(Account Account, Income Income)> SeedAsync(bool received = false)
@@ -33,7 +35,7 @@ public class UpdateIncomeHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate);
+            TestTime.UtcOn(InitialDate));
         await _accounts.AddAsync(account);
 
         var income = Income.Create(
@@ -154,10 +156,31 @@ public class UpdateIncomeHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_ReceivedIncome_AllowsConditionChangeWithoutBreakingCashRule()
+    {
+        var (_, income) = await SeedAsync(received: true);
+        var pai = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Pai");
+        await _conditions.AddAsync(pai);
+
+        await _handler.ExecuteAsync(new UpdateIncomeCommand(
+            income.Id,
+            income.ExpectedDate,
+            income.Amount.Amount,
+            income.Description,
+            ConditionId: pai.Id));
+
+        Assert.Equal(pai.Id, income.ConditionId);
+        Assert.False(income.IsOwn);
+        Assert.Equal(1, _incomes.UpdateCount);
+        Assert.Equal(1, _unitOfWork.SaveChangesCount);
+    }
+
+    [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(null!, _incomes, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, _incomes, null!));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(null!, _incomes, _conditions, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, null!, _conditions, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, _incomes, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new UpdateIncomeHandler(_accountAccess, _incomes, _conditions, null!));
     }
 }

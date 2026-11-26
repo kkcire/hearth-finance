@@ -40,7 +40,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
         await users.AddAsync(User.Create(
             userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1)));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), TestTime.UtcOn(new DateOnly(2026, 1, 1))));
         await cards.AddAsync(CreditCard.Create(
             cardId, accountId, CardBillingRule.Of(3, 12), "Nubank", Money.FromDecimal(3000.00m)));
         await categories.AddAsync(Category.CreateForUser(categoryId, userId, "Geral"));
@@ -135,7 +135,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
                 directId, accountId, new DateOnly(2026, 10, 15), Money.FromDecimal(89.90m), "Mercado", categoryId));
 
             var income = Income.Create(
-                incomeId, accountId, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário");
+                incomeId, accountId, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário", conditionId);
             income.MarkAsReceived(new DateOnly(2026, 11, 2), new DateOnly(2026, 12, 31));
             await incomes.AddAsync(income);
 
@@ -170,6 +170,8 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             Assert.NotNull(income);
             Assert.True(income.IsReceived);
             Assert.Equal(new DateOnly(2026, 11, 2), income.ReceivedOn);
+            Assert.Equal(conditionId, income.ConditionId);
+            Assert.False(income.IsOwn);
 
             var purchase = await purchases.GetByIdAsync(purchaseId);
             Assert.NotNull(purchase);

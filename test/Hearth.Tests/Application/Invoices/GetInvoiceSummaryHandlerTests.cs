@@ -26,7 +26,7 @@ public sealed class GetInvoiceSummaryHandlerTests
     private async Task<Account> SeedAccountAsync()
     {
         var account = Account.Create(
-            Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Principal", Money.Zero, new DateOnly(2026, 1, 1), true);
+            Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Principal", Money.Zero, TestTime.UtcOn(new DateOnly(2026, 1, 1)), true);
         await _accounts.AddAsync(account);
         return account;
     }

@@ -87,12 +87,13 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         bool initializeContext = true)
     {
         var date = initialBalanceDate ?? new DateOnly(2026, 1, 1);
+        var createdAtUtc = new DateTimeOffset(date.ToDateTime(new TimeOnly(15, 0)), TimeSpan.Zero);
         var account = Hearth.Domain.Entities.Account.Create(
             Guid.CreateVersion7(),
             CurrentUser.UserId!.Value,
             name,
             Hearth.Domain.ValueObjects.Money.FromDecimal(initialBalance),
-            date,
+            createdAtUtc,
             isInitialBalanceConfirmed: true);
 
         await Accounts.AddAsync(account);

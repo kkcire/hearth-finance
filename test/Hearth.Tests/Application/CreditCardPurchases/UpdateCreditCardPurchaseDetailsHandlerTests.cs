@@ -30,7 +30,7 @@ public class UpdateCreditCardPurchaseDetailsHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta",
             Money.Zero,
-            new DateOnly(2026, 1, 1))).GetAwaiter().GetResult();
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)))).GetAwaiter().GetResult();
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
         _handler = new UpdateCreditCardPurchaseDetailsHandler(_accountAccess, _categories, _conditions, _purchases, _unitOfWork);
     }

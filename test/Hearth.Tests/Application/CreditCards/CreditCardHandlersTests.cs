@@ -2,7 +2,6 @@ using Hearth.Application.Authorization;
 using Hearth.Application.CreditCards.ArchiveCreditCard;
 using Hearth.Application.CreditCards.CreateCreditCard;
 using Hearth.Application.CreditCards.DeleteCreditCard;
-using Hearth.Application.CreditCards.GetActiveCreditCard;
 using Hearth.Application.CreditCards.ListCreditCards;
 using Hearth.Application.CreditCards.RestoreCreditCard;
 using Hearth.Application.CreditCards.UpdateCreditCard;
@@ -38,7 +37,7 @@ public sealed class CreditCardHandlersTests
             FakeCurrentUser.DefaultUserId,
             "Conta Principal",
             Money.Zero,
-            new DateOnly(2026, 1, 1),
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)),
             isInitialBalanceConfirmed: true);
         await _accounts.AddAsync(account);
         return account;
@@ -95,15 +94,14 @@ public sealed class CreditCardHandlersTests
     }
 
     [Fact]
-    public async Task UpdateAndGetActiveCreditCard_ComputesLiveUsedAndAvailableLimit()
+    public async Task UpdateAndListCreditCards_ComputesLiveUsedAndAvailableLimit()
     {
         var account = await SeedAccountAsync();
         var create = new CreateCreditCardHandler(_guard, _creditCards, _unitOfWork);
         var update = new UpdateCreditCardHandler(_guard, _creditCards, _unitOfWork);
-        var getActive = new GetActiveCreditCardHandler(_guard, _creditCards, _purchases, _clock);
         var list = new ListCreditCardsHandler(_guard, _creditCards, _purchases, _clock);
 
-        Assert.Null(await getActive.ExecuteAsync(new GetActiveCreditCardQuery(account.Id)));
+        Assert.Empty(await list.ExecuteAsync(new ListCreditCardsQuery(account.Id)));
 
         var cardId = await create.ExecuteAsync(new CreateCreditCardCommand(account.Id, 3, 12, "Nubank", 1000m));
         await update.ExecuteAsync(new UpdateCreditCardCommand(cardId, 5, 15, "Nubank Ultravioleta", 1500m));
@@ -122,17 +120,14 @@ public sealed class CreditCardHandlersTests
             "Fone",
             SystemCategories.ShoppingId));
 
-        var active = await getActive.ExecuteAsync(new GetActiveCreditCardQuery(account.Id));
-        Assert.NotNull(active);
+        var listed = await list.ExecuteAsync(new ListCreditCardsQuery(account.Id));
+        var active = Assert.Single(listed);
         Assert.Equal("Nubank Ultravioleta", active.Name);
         Assert.Equal(5, active.ClosingDay);
         Assert.Equal(15, active.DueDay);
         Assert.Equal(1500m, active.Limit);
         Assert.Equal(300m, active.UsedLimit);
         Assert.Equal(1200m, active.AvailableLimit);
-
-        var listed = await list.ExecuteAsync(new ListCreditCardsQuery(account.Id));
-        Assert.Single(listed);
     }
 
     [Fact]

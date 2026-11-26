@@ -32,7 +32,7 @@ public class ChangeFixedExpenseAmountHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            new DateOnly(2026, 1, 1));
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)));
         await _accounts.AddAsync(account);
 
         var expense = FixedExpense.Create(

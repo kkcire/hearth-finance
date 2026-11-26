@@ -1,7 +1,7 @@
 using Hearth.Application.Abstractions;
 using Hearth.Application.Authorization;
 using Hearth.Application.Invoices.GetInvoiceSummary;
-using Hearth.Application.Reports.GetBudgetStatus;
+using Hearth.Application.Reports.GetMonthlyDashboard;
 using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.ValueObjects;
@@ -39,7 +39,7 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
         await users.AddAsync(User.Create(
             userId, "Erick", $"erick-{userId:N}@hearth.app", "hash-placeholder", new DateTimeOffset(2026, 11, 22, 12, 0, 0, TimeSpan.Zero)));
         await accounts.AddAsync(Account.Create(
-            accountId, userId, "Conta", Money.FromDecimal(1000.00m), new DateOnly(2026, 1, 1)));
+            accountId, userId, "Conta", Money.FromDecimal(1000.00m), TestTime.UtcOn(new DateOnly(2026, 1, 1))));
         await uow.SaveChangesAsync();
 
         return (userId, accountId);
@@ -139,23 +139,24 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
             var guard = new AccountAccessGuard(
                 scope.ServiceProvider.GetRequiredService<IAccountRepository>(),
                 new FakeCurrentUser(userId));
-            var handler = new GetBudgetStatusHandler(
+            var handler = new GetMonthlyDashboardHandler(
                 guard,
+                scope.ServiceProvider.GetRequiredService<ICreditCardRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryBudgetRepository>(),
+                scope.ServiceProvider.GetRequiredService<IIncomeRepository>(),
                 scope.ServiceProvider.GetRequiredService<IDirectExpenseRepository>(),
                 scope.ServiceProvider.GetRequiredService<IFixedExpenseRepository>(),
-                scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>());
+                scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>(),
+                new FakeClock(new DateOnly(2026, 11, 15)));
 
-            var status = await handler.ExecuteAsync(new GetBudgetStatusQuery(accountId, 2026, 11));
+            var dashboard = await handler.ExecuteAsync(new GetMonthlyDashboardQuery(accountId, YearMonth.Of(2026, 11)));
 
-            var item = Assert.Single(status.Items);
+            var item = Assert.Single(dashboard.CategorySpending);
             Assert.Equal("Transporte", item.CategoryName);
             Assert.Equal(200.00m, item.BudgetAmount);
-            Assert.Equal(150.00m, item.SpentAmount);
-            Assert.Equal(50.00m, item.RemainingAmount);
-            Assert.Equal(75.00m, item.UsagePercentage);
-            Assert.False(item.IsExceeded);
+            Assert.Equal(150.00m, item.AmountSpent);
+            Assert.Equal(75.0m, item.BudgetUsagePercentage);
         }
     }
 }

@@ -1,6 +1,8 @@
 using Bunit;
 using Hearth.Application.Categories.ArchiveCategory;
 using Hearth.Application.Categories.CreateCategory;
+using Hearth.Application.DirectExpenses.RegisterDirectExpense;
+using Hearth.Domain;
 using Hearth.Domain.ValueObjects;
 using Hearth.Web.Components.Pages;
 using MudBlazor;
@@ -58,6 +60,7 @@ public sealed class EntriesPagesTests : WebTestBase
     public async Task IncomesPage_CreateReceiveRevertAndDelete()
     {
         var accountId = await SeedAccountAsync();
+        Render<MudPopoverProvider>();
         var cut = Render<IncomesPage>();
 
         await cut.Find("[data-testid='new-income-button']").ClickAsync();
@@ -121,5 +124,28 @@ public sealed class EntriesPagesTests : WebTestBase
 
         var reverted = await FixedExpenses.GetByIdAsync(expense.Id);
         Assert.Empty(reverted!.Payments);
+    }
+
+    [Fact]
+    public async Task DirectExpensesPage_SearchInputFiltersByDescriptionAndCategory()
+    {
+        var accountId = await SeedAccountAsync();
+        await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
+            (h, ct) => h.ExecuteAsync(new RegisterDirectExpenseCommand(accountId, new DateOnly(2026, 11, 5), 65m, "Padaria Central", SystemCategories.FoodId), ct),
+            showErrorSnackbar: false);
+        await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
+            (h, ct) => h.ExecuteAsync(new RegisterDirectExpenseCommand(accountId, new DateOnly(2026, 11, 8), 120m, "Uber Aeroporto", SystemCategories.TransportId), ct),
+            showErrorSnackbar: false);
+
+        var cut = Render<DirectExpensesPage>();
+
+        Assert.Contains("Padaria Central", cut.Markup);
+        Assert.Contains("Uber Aeroporto", cut.Markup);
+
+        cut.Find("input[data-testid='direct-expense-search']").Input("Padaria");
+
+        Assert.Contains("Padaria Central", cut.Markup);
+        Assert.DoesNotContain("Uber Aeroporto", cut.Markup);
+        Assert.Contains("65,00", cut.Find("[data-testid='direct-expenses-total']").TextContent);
     }
 }

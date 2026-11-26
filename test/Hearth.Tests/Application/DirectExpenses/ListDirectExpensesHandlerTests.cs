@@ -29,7 +29,7 @@ public class ListDirectExpensesHandlerTests
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 10, 1));
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)));
         await _accounts.AddAsync(account);
         return account;
     }

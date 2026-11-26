@@ -17,7 +17,7 @@ public sealed class AccountAccessGuardTests
             ownerUserId,
             "Conta",
             Money.FromDecimal(100m),
-            new DateOnly(2026, 1, 1));
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)));
 
     [Fact]
     public async Task GetAuthorizedAccountAsync_OwnedAccount_ReturnsAccount()

@@ -43,7 +43,7 @@ public sealed class RegisterUserHandlerTests
         Assert.Equal(savedUser.Id, defaultAccount.OwnerUserId);
         Assert.Equal(RegisterUserHandler.DefaultAccountName, defaultAccount.Name);
         Assert.Equal(Money.Zero, defaultAccount.InitialBalance);
-        Assert.Equal(_clock.Today, defaultAccount.InitialBalanceDate);
+        Assert.Equal(new DateOnly(2026, 11, 1), defaultAccount.TrackingStartDate);
         Assert.False(defaultAccount.IsInitialBalanceConfirmed);
 
         Assert.Equal(1, _unitOfWork.SaveChangesCount);

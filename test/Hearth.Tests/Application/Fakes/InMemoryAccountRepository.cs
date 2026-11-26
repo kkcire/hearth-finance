@@ -26,6 +26,9 @@ internal sealed class InMemoryAccountRepository : IAccountRepository
         return Task.FromResult(_accounts.GetValueOrDefault(id));
     }
 
+    public Task<Account?> GetByIdWithBalanceHistoryAsync(Guid id, CancellationToken cancellationToken = default) =>
+        GetByIdAsync(id, cancellationToken);
+
     public Task<IReadOnlyList<Account>> GetByOwnerAsync(
         Guid ownerUserId,
         CancellationToken cancellationToken = default)
@@ -42,6 +45,18 @@ internal sealed class InMemoryAccountRepository : IAccountRepository
         LastCancellationToken = cancellationToken;
         _accounts[account.Id] = account;
         UpdateCount++;
+        return Task.CompletedTask;
+    }
+
+    public Task AddBalanceAdjustmentAsync(BalanceAdjustment adjustment, CancellationToken cancellationToken = default)
+    {
+        LastCancellationToken = cancellationToken;
+        return Task.CompletedTask;
+    }
+
+    public Task RemoveBalanceAdjustmentAsync(BalanceAdjustment adjustment, CancellationToken cancellationToken = default)
+    {
+        LastCancellationToken = cancellationToken;
         return Task.CompletedTask;
     }
 }

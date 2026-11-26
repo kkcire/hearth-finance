@@ -36,14 +36,14 @@ public class ListAccountsHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Nubank",
             Money.FromDecimal(1000.00m),
-            new DateOnly(2026, 10, 1),
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)),
             isInitialBalanceConfirmed: true);
         var second = Account.Create(
             Guid.NewGuid(),
             FakeCurrentUser.DefaultUserId,
             "Inter",
             Money.FromDecimal(-250.50m),
-            new DateOnly(2026, 11, 1),
+            TestTime.UtcOn(new DateOnly(2026, 11, 1)),
             isInitialBalanceConfirmed: false);
         await _accounts.AddAsync(first);
         await _accounts.AddAsync(second);

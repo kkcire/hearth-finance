@@ -1,16 +1,36 @@
 using Hearth.Application.Abstractions;
+using Hearth.Domain;
 
 namespace Hearth.Tests.Application.Fakes;
 
 internal sealed class FakeClock : IClock
 {
+    private DateOnly _today;
+    private DateTimeOffset _utcNow;
+
     public FakeClock(DateOnly today, DateTimeOffset? utcNow = null)
     {
-        Today = today;
-        UtcNow = utcNow ?? new DateTimeOffset(today.ToDateTime(new TimeOnly(12, 0)), TimeSpan.Zero);
+        _today = today;
+        _utcNow = utcNow ?? new DateTimeOffset(today.ToDateTime(new TimeOnly(15, 0)), TimeSpan.Zero);
     }
 
-    public DateOnly Today { get; set; }
+    public DateOnly Today
+    {
+        get => _today;
+        set
+        {
+            _today = value;
+            _utcNow = new DateTimeOffset(value.ToDateTime(new TimeOnly(15, 0)), TimeSpan.Zero);
+        }
+    }
 
-    public DateTimeOffset UtcNow { get; set; }
+    public DateTimeOffset UtcNow
+    {
+        get => _utcNow;
+        set
+        {
+            _utcNow = value.ToUniversalTime();
+            _today = BrasiliaTime.ToLocalDate(_utcNow);
+        }
+    }
 }

@@ -23,6 +23,11 @@ public sealed class OnboardingPageTests : WebTestBase
     {
         var cut = Render<OnboardingPage>();
 
+        // Read-only auto-derived tracking start period is displayed (Day 1 of current Brasília month)
+        var startInput = cut.Find("input[data-testid='tracking-start-period-readonly']");
+        Assert.True(startInput.HasAttribute("readonly"));
+        Assert.Equal("01/11/2026 — Novembro de 2026", startInput.GetAttribute("value"));
+
         cut.Find("input[data-testid='account-name-input']").Input("Conta Erick");
         cut.Find("input[data-testid='initial-balance-input']").Change("1.234,56");
 
@@ -34,7 +39,7 @@ public sealed class OnboardingPageTests : WebTestBase
         var created = Assert.Single(savedAccounts);
         Assert.Equal("Conta Erick", created.Name);
         Assert.Equal(Money.FromDecimal(1234.56m), created.InitialBalance);
-        Assert.Equal(Clock.Today, created.InitialBalanceDate);
+        Assert.Equal(new DateOnly(2026, 11, 1), created.TrackingStartDate);
 
         var categories = await Categories.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
         Assert.Equal(8, categories.Count);

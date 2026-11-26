@@ -230,9 +230,9 @@ public sealed class CardPagesTests : WebTestBase
         Assert.True(cut.Find("[data-testid='edit-purchase-amount-input']").HasAttribute("disabled"));
         Assert.True(cut.Find("input[data-testid='edit-purchase-date-input']").HasAttribute("disabled"));
 
-        // Expand installments shows "Já paga" for installment 1/3
+        // Expand installments shows "Fatura paga" for tracked paid installments (Oct 12 and Nov 12 >= TrackingStartDate Jan 1)
         await cut.Find($"[data-testid='expand-purchase-{lockedResult.Value}']").ClickAsync();
-        Assert.Contains("Já paga", cut.Markup);
+        Assert.Contains("Fatura paga", cut.Markup);
 
         // Open purchase keeps unified edit (including amount & date) and delete enabled, and saves changes via the single Edit flow
         await cut.Find("[data-testid='filter-condition-all']").ClickAsync();
@@ -529,5 +529,52 @@ public sealed class CardPagesTests : WebTestBase
         // Still only one "Viagem" condition in repository
         var allConditionsAfter = await PurchaseConditions.GetVisibleForUserAsync(CurrentUser.UserId!.Value);
         Assert.Single(allConditionsAfter, c => c.Name == "Viagem");
+    }
+
+    [Fact]
+    public async Task CardPage_OngoingPurchaseWithInitialInstallmentSkippingEntryMonth_ShowsAndSumsEntryMonthPaidInvoice()
+    {
+        // Account created Nov 25, 2026 -> TrackingStartDate = 2026-11-01; card closes day 2, due day 14
+        Clock.Today = new DateOnly(2026, 11, 25);
+        var accountId = await SeedAccountAsync(initialBalanceDate: new DateOnly(2026, 11, 25));
+        var cardId = await SeedCreditCardAsync(accountId, closingDay: 2, dueDay: 14);
+
+        var purchaseResult = await Executor.ExecuteAsync<RegisterCreditCardPurchaseHandler, Guid>(
+            (handler, ct) => handler.ExecuteAsync(
+                new RegisterCreditCardPurchaseCommand(
+                    accountId,
+                    cardId,
+                    new DateOnly(2026, 3, 2),
+                    2400.00m,
+                    10,
+                    9,
+                    SystemPurchaseConditions.OwnId,
+                    "Celular S23 Ultra",
+                    SystemCategories.ShoppingId),
+                ct),
+            showErrorSnackbar: false);
+        Assert.True(purchaseResult.IsSuccess);
+
+        var nav = Services.GetRequiredService<NavigationManager>();
+        nav.NavigateTo("/cartao?aba=fatura");
+
+        Render<MudPopoverProvider>();
+        var cut = Render<CardPage>();
+
+        // Default cycle is Dec 2026 (R$ 240,00); navigate back to entry month Nov 2026 (paid invoice)
+        Assert.Contains("240,00", cut.Find("[data-testid='invoice-calculated-amount']").TextContent);
+        await cut.Find("[data-testid='month-prev']").ClickAsync();
+
+        // Nov 2026 invoice MUST show installment 8/10 (R$ 240,00) with status "Paga"
+        Assert.Contains("240,00", cut.Find("[data-testid='invoice-calculated-amount']").TextContent);
+        Assert.Contains("Paga", cut.Find("[data-testid='invoice-status-chip']").TextContent);
+        Assert.Contains("Celular S23 Ultra", cut.Find("[data-testid='card-invoice-panel']").TextContent);
+
+        // Switch to Compras tab and expand purchase -> shows "Já paga (fora do período)" for 1..7, "Fatura paga" for 8, "Na fatura" for 9..10
+        await cut.Find("[data-testid='card-tab-purchases']").ClickAsync();
+        await cut.Find($"[data-testid='expand-purchase-{purchaseResult.Value}']").ClickAsync();
+        Assert.Contains("Já paga (fora do período)", cut.Markup);
+        Assert.Contains("Fatura paga", cut.Markup);
+        Assert.Contains("Na fatura", cut.Markup);
     }
 }

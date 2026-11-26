@@ -43,6 +43,7 @@ public sealed class MainLayoutTests : WebTestBase
         Assert.Contains("Painel", cut.Markup);
         Assert.Contains("Cartão", cut.Markup);
         Assert.Contains("Lançamentos", cut.Markup);
+        Assert.Contains("Atividades", cut.Markup);
         Assert.Contains("Planejamento", cut.Markup);
         Assert.Contains("Conta", cut.Markup);
         Assert.Contains("Erick", cut.Find("[data-testid='user-name']").TextContent);
@@ -50,6 +51,10 @@ public sealed class MainLayoutTests : WebTestBase
         var logoutForm = cut.Find("form[data-testid='logout-form']");
         Assert.Equal("post", logoutForm.GetAttribute("method"), ignoreCase: true);
         Assert.Equal("/auth/logout", logoutForm.GetAttribute("action"));
+
+        // Navbar bell button present without rendering any notifications drawer/sidebar
+        Assert.NotEmpty(cut.FindAll("[data-testid='navbar-notifications-button']"));
+        Assert.Empty(cut.FindAll("[data-testid='notifications-drawer']"));
     }
 
     [Fact]

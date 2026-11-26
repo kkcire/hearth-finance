@@ -152,7 +152,7 @@ public sealed class PurchaseConditionPersistenceTests : IAsyncLifetime
             var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
 
             await accounts.AddAsync(Account.Create(
-                accountId, userId, "Conta", Money.Zero, new DateOnly(2026, 1, 1), isInitialBalanceConfirmed: true));
+                accountId, userId, "Conta", Money.Zero, TestTime.UtcOn(new DateOnly(2026, 1, 1)), isInitialBalanceConfirmed: true));
             await cards.AddAsync(CreditCard.Create(
                 cardId, accountId, CardBillingRule.Of(3, 12), "Nubank", Money.FromDecimal(3000m)));
             await conditions.AddAsync(PurchaseCondition.CreateForUser(conditionId, userId, "Trabalho"));

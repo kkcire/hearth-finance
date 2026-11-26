@@ -28,7 +28,7 @@ public class ListCategoryBudgetsHandlerTests
     {
         var account = Account.Create(
             Guid.NewGuid(),
-            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, new DateOnly(2026, 1, 1));
+            FakeCurrentUser.DefaultUserId, "Minha", Money.Zero, TestTime.UtcOn(new DateOnly(2026, 1, 1)));
         await _accounts.AddAsync(account);
 
         var mobility = Category.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Mobilidade");

@@ -33,7 +33,7 @@ public class ListCreditCardPurchasesHandlerTests
             FakeCurrentUser.DefaultUserId,
             name,
             Money.Zero,
-            new DateOnly(2026, 1, 1));
+            TestTime.UtcOn(new DateOnly(2026, 1, 1)));
         await _accounts.AddAsync(account);
         return account;
     }

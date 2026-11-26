@@ -1,6 +1,7 @@
 using Hearth.Application.Authorization;
 using Hearth.Application.Exceptions;
 using Hearth.Application.Incomes.RegisterIncome;
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -16,6 +17,7 @@ public class RegisterIncomeHandlerTests
     private readonly InMemoryAccountRepository _accounts = new();
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
+    private readonly InMemoryPurchaseConditionRepository _conditions = new();
     private readonly InMemoryIncomeRepository _incomes = new();
     private readonly FakeClock _clock = new(new DateOnly(2026, 11, 20));
     private readonly FakeUnitOfWork _unitOfWork = new();
@@ -24,7 +26,7 @@ public class RegisterIncomeHandlerTests
     public RegisterIncomeHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new RegisterIncomeHandler(_accountAccess, _incomes, _clock, _unitOfWork);
+        _handler = new RegisterIncomeHandler(_accountAccess, _incomes, _conditions, _clock, _unitOfWork);
     }
 
     private async Task<Account> SeedAccountAsync()
@@ -34,7 +36,7 @@ public class RegisterIncomeHandlerTests
             FakeCurrentUser.DefaultUserId,
             "Conta principal",
             Money.FromDecimal(1000.00m),
-            InitialDate);
+            TestTime.UtcOn(InitialDate));
         await _accounts.AddAsync(account);
         return account;
     }
@@ -170,11 +172,42 @@ public class RegisterIncomeHandlerTests
     }
 
     [Fact]
+    public async Task ExecuteAsync_WithCustomCondition_PersistsConditionId_AndRejectsArchivedCondition()
+    {
+        var account = await SeedAccountAsync();
+        var pai = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Pai");
+        var archived = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Antiga");
+        archived.Archive();
+        await _conditions.AddAsync(pai);
+        await _conditions.AddAsync(archived);
+
+        var id = await _handler.ExecuteAsync(new RegisterIncomeCommand(
+            account.Id,
+            new DateOnly(2026, 10, 15),
+            950.00m,
+            "Reembolso fatura",
+            ConditionId: pai.Id));
+
+        var saved = await _incomes.GetByIdAsync(id);
+        Assert.NotNull(saved);
+        Assert.Equal(pai.Id, saved.ConditionId);
+        Assert.False(saved.IsOwn);
+
+        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(new RegisterIncomeCommand(
+            account.Id,
+            new DateOnly(2026, 10, 15),
+            100.00m,
+            "Arquivada",
+            ConditionId: archived.Id)));
+    }
+
+    [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(null!, _incomes, _clock, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, null!, _clock, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, null!, _unitOfWork));
-        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, _clock, null!));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(null!, _incomes, _conditions, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, null!, _conditions, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, null!, _clock, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, _conditions, null!, _unitOfWork));
+        Assert.Throws<ArgumentNullException>(() => new RegisterIncomeHandler(_accountAccess, _incomes, _conditions, _clock, null!));
     }
 }

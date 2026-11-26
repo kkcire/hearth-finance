@@ -29,7 +29,7 @@ public class RenameAccountHandlerTests
             FakeCurrentUser.DefaultUserId,
             name,
             Money.FromDecimal(1000.00m),
-            new DateOnly(2026, 10, 1));
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)));
 
         await _accounts.AddAsync(account);
         return account;
