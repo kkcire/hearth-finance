@@ -28,14 +28,14 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("id");
 
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
                     b.Property<decimal>("InitialBalance")
                         .HasPrecision(18, 2)
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("initial_balance");
-
-                    b.Property<DateOnly>("InitialBalanceDate")
-                        .HasColumnType("date")
-                        .HasColumnName("initial_balance_date");
 
                     b.Property<bool>("IsInitialBalanceConfirmed")
                         .HasColumnType("boolean")
@@ -51,13 +51,57 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("owner_user_id");
 
+                    b.Property<DateOnly>("TrackingStartDate")
+                        .HasColumnType("date")
+                        .HasColumnName("tracking_start_date");
+
                     b.HasKey("Id")
                         .HasName("pk_accounts");
 
                     b.HasIndex("OwnerUserId")
                         .HasDatabaseName("ix_accounts_owner_user_id");
 
-                    b.ToTable("accounts", (string)null);
+                    b.ToTable("accounts", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_accounts_tracking_start_day_one", "EXTRACT(DAY FROM tracking_start_date) = 1");
+                        });
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.BalanceAdjustment", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<decimal>("Amount")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)")
+                        .HasColumnName("amount");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("created_at");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
+                    b.Property<string>("Reason")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("reason");
+
+                    b.HasKey("Id")
+                        .HasName("pk_balance_adjustments");
+
+                    b.HasIndex("AccountId", "Date")
+                        .HasDatabaseName("ix_balance_adjustments_account_id_date");
+
+                    b.ToTable("balance_adjustments", (string)null);
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.Category", b =>
@@ -384,6 +428,12 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasColumnType("numeric(18,2)")
                         .HasColumnName("amount");
 
+                    b.Property<Guid>("ConditionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValue(new Guid("01900000-0000-7000-8000-000000000201"))
+                        .HasColumnName("condition_id");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(200)
@@ -400,6 +450,9 @@ namespace Hearth.Infrastructure.Persistence.Migrations
 
                     b.HasKey("Id")
                         .HasName("pk_incomes");
+
+                    b.HasIndex("ConditionId")
+                        .HasDatabaseName("ix_incomes_condition_id");
 
                     b.HasIndex("AccountId", "ExpectedDate")
                         .HasDatabaseName("ix_incomes_account_id_expected_date");
@@ -513,6 +566,16 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_accounts_users_owner_user_id");
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.BalanceAdjustment", b =>
+                {
+                    b.HasOne("Hearth.Domain.Entities.Account", null)
+                        .WithMany("_balanceAdjustments")
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_balance_adjustments_accounts_account_id");
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.Category", b =>
@@ -752,6 +815,13 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired()
                         .HasConstraintName("fk_incomes_accounts_account_id");
+
+                    b.HasOne("Hearth.Domain.Entities.PurchaseCondition", null)
+                        .WithMany()
+                        .HasForeignKey("ConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_incomes_purchase_conditions_condition_id");
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.PurchaseCondition", b =>
@@ -761,6 +831,11 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasForeignKey("OwnerUserId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .HasConstraintName("fk_purchase_conditions_users_owner_user_id");
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.Account", b =>
+                {
+                    b.Navigation("_balanceAdjustments");
                 });
 #pragma warning restore 612, 618
         }

@@ -23,11 +23,18 @@ internal sealed class AccountRepository : IAccountRepository
     public Task<Account?> GetByIdAsync(Guid id, CancellationToken cancellationToken = default) =>
         _context.Accounts.FirstOrDefaultAsync(account => account.Id == id, cancellationToken);
 
+    public Task<Account?> GetByIdWithBalanceHistoryAsync(Guid id, CancellationToken cancellationToken = default) =>
+        _context.Accounts
+            .Include("_balanceAdjustments")
+            .FirstOrDefaultAsync(account => account.Id == id, cancellationToken);
+
     public async Task<IReadOnlyList<Account>> GetByOwnerAsync(
         Guid ownerUserId,
         CancellationToken cancellationToken = default) =>
         await _context.Accounts
             .Where(account => account.OwnerUserId == ownerUserId)
+            .OrderBy(account => account.CreatedAt)
+            .ThenBy(account => account.Id)
             .ToListAsync(cancellationToken);
 
     public Task UpdateAsync(Account account, CancellationToken cancellationToken = default)
@@ -39,6 +46,23 @@ internal sealed class AccountRepository : IAccountRepository
             _context.Accounts.Update(account);
         }
 
+        return Task.CompletedTask;
+    }
+
+    public async Task AddBalanceAdjustmentAsync(
+        BalanceAdjustment adjustment,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(adjustment);
+        await _context.BalanceAdjustments.AddAsync(adjustment, cancellationToken);
+    }
+
+    public Task RemoveBalanceAdjustmentAsync(
+        BalanceAdjustment adjustment,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(adjustment);
+        _context.BalanceAdjustments.Remove(adjustment);
         return Task.CompletedTask;
     }
 }

@@ -36,9 +36,15 @@ internal sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasMaxLength(DomainValidation.MaxDescriptionLength)
             .IsRequired();
 
+        builder.Property(income => income.ConditionId)
+            .HasColumnName("condition_id")
+            .HasDefaultValue(SystemPurchaseConditions.OwnId)
+            .IsRequired();
+
         builder.Property(income => income.ReceivedOn)
             .HasColumnName("received_on");
 
+        builder.Ignore(income => income.IsOwn);
         builder.Ignore(income => income.IsReceived);
         builder.Ignore(income => income.ExpectedMonth);
         builder.Ignore(income => income.ReceivedMonth);
@@ -49,7 +55,16 @@ internal sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasConstraintName("fk_incomes_accounts_account_id")
             .OnDelete(DeleteBehavior.Restrict);
 
+        builder.HasOne<PurchaseCondition>()
+            .WithMany()
+            .HasForeignKey(income => income.ConditionId)
+            .HasConstraintName("fk_incomes_purchase_conditions_condition_id")
+            .OnDelete(DeleteBehavior.Restrict);
+
         builder.HasIndex(income => new { income.AccountId, income.ExpectedDate })
             .HasDatabaseName("ix_incomes_account_id_expected_date");
+
+        builder.HasIndex(income => income.ConditionId)
+            .HasDatabaseName("ix_incomes_condition_id");
     }
 }

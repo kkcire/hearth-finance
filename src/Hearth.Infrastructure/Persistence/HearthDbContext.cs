@@ -16,6 +16,8 @@ public sealed class HearthDbContext : DbContext
 
     public DbSet<Account> Accounts => Set<Account>();
 
+    public DbSet<BalanceAdjustment> BalanceAdjustments => Set<BalanceAdjustment>();
+
     public DbSet<Category> Categories => Set<Category>();
 
     public DbSet<PurchaseCondition> PurchaseConditions => Set<PurchaseCondition>();
