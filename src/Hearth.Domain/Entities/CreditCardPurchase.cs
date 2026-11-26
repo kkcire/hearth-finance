@@ -160,35 +160,74 @@ public sealed class CreditCardPurchase
         GetInstallments().Where(installment => !installment.IsPreviouslyPaid);
 
     /// <summary>
-    /// True once at least one active installment belongs to a paid invoice
-    /// (<see cref="InvoiceStatus.Paid"/>, i.e., on or after <see cref="FirstActiveCycle"/>'s due date).
-    /// From then on the amount, date, and deletion are locked to protect settled cash history.
+    /// Returns every installment whose invoice <see cref="BillingCycle.DueDate"/> falls on or after
+    /// <paramref name="trackingStartDate"/> (Day 1 of the account's entry month).
+    /// Under the Day 1 tracking invariant, all installments due within the tracked period count in
+    /// invoices, competence totals, categories, activities, and cash calculations — including invoices
+    /// already paid within the entry month — regardless of whether <see cref="InitialInstallment"/>
+    /// pointed to a later cycle. Installments due before <paramref name="trackingStartDate"/> are
+    /// excluded as pre-tracking history.
     /// </summary>
-    public bool IsLockedAt(DateOnly today) =>
-        today >= FirstActiveCycle.DueDate;
+    public IEnumerable<Installment> GetTrackedInstallments(DateOnly trackingStartDate) =>
+        GetInstallments().Where(installment => installment.Cycle.DueDate >= trackingStartDate);
 
-    /// <exception cref="DomainException">A linked invoice has already been paid or the amount cannot be split.</exception>
-    public void UpdateAmount(Money newAmount, DateOnly today)
+    /// <summary>
+    /// True once at least one tracked installment belongs to a paid invoice
+    /// (<see cref="InvoiceStatus.Paid"/>, i.e., on or after its cycle's due date).
+    /// When <paramref name="trackingStartDate"/> is provided, pre-tracking installments
+    /// (<c>DueDate &lt; trackingStartDate</c>) are excluded from the lock check so ongoing
+    /// purchases with unpaid tracked installments remain editable and deletable.
+    /// </summary>
+    public bool IsLockedAt(DateOnly today, DateOnly? trackingStartDate = null)
     {
-        EnsureEditable(today);
+        if (trackingStartDate is null)
+        {
+            return today >= FirstActiveCycle.DueDate;
+        }
+
+        return GetTrackedInstallments(trackingStartDate.Value)
+            .Any(installment => today >= installment.Cycle.DueDate);
+    }
+
+    /// <exception cref="DomainException">A linked tracked invoice has already been paid or the amount cannot be split.</exception>
+    public void UpdateAmount(Money newAmount, DateOnly today, DateOnly? trackingStartDate = null)
+    {
+        EnsureEditable(today, trackingStartDate);
         EnsureConsistent(Date, newAmount, InstallmentCount, Rule);
 
         Amount = newAmount;
     }
 
     /// <exception cref="DomainException">
-    /// A linked invoice has already been paid, or the new date moves the first counting installment into an already paid invoice.
+    /// A linked tracked invoice has already been paid, or the new date moves a tracked installment into an already paid invoice.
     /// </exception>
-    public void UpdateDate(DateOnly newDate, DateOnly today)
+    public void UpdateDate(DateOnly newDate, DateOnly today, DateOnly? trackingStartDate = null)
     {
-        EnsureEditable(today);
+        EnsureEditable(today, trackingStartDate);
         EnsureConsistent(newDate, Amount, InstallmentCount, Rule);
 
-        var targetDueDate = BillingCycle.ForPurchase(newDate, Rule)
-            .AddCycles(InitialInstallment - 1)
-            .DueDate;
+        var targetFirstCycle = BillingCycle.ForPurchase(newDate, Rule);
+        var landsInPaidTrackedCycle = false;
 
-        if (today >= targetDueDate)
+        if (trackingStartDate is null)
+        {
+            var targetDueDate = targetFirstCycle.AddCycles(InitialInstallment - 1).DueDate;
+            landsInPaidTrackedCycle = today >= targetDueDate;
+        }
+        else
+        {
+            for (var number = 1; number <= InstallmentCount; number++)
+            {
+                var dueDate = targetFirstCycle.AddCycles(number - 1).DueDate;
+                if (dueDate >= trackingStartDate.Value && today >= dueDate)
+                {
+                    landsInPaidTrackedCycle = true;
+                    break;
+                }
+            }
+        }
+
+        if (landsInPaidTrackedCycle)
         {
             throw new DomainException(
                 "The purchase date cannot be moved to a cycle whose invoice has already been paid.");
@@ -217,9 +256,9 @@ public sealed class CreditCardPurchase
         CategoryId = categoryId;
     }
 
-    private void EnsureEditable(DateOnly today)
+    private void EnsureEditable(DateOnly today, DateOnly? trackingStartDate)
     {
-        if (IsLockedAt(today))
+        if (IsLockedAt(today, trackingStartDate))
         {
             throw new DomainException(
                 "The amount and the date cannot be changed after a linked invoice has been paid.");

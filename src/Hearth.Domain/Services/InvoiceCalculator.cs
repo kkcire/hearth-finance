@@ -20,10 +20,11 @@ public static class InvoiceCalculator
         Guid accountId,
         YearMonth closingMonth,
         IEnumerable<CreditCardPurchase> purchases,
-        Guid? conditionId = null)
+        Guid? conditionId = null,
+        DateOnly? minDueDate = null)
     {
         ArgumentNullException.ThrowIfNull(closingMonth);
-        return SumInstallments(accountId, purchases, conditionId, cycle => cycle.ClosingMonth == closingMonth);
+        return SumInstallments(accountId, purchases, conditionId, minDueDate, cycle => cycle.ClosingMonth == closingMonth);
     }
 
     /// <summary>
@@ -35,16 +36,18 @@ public static class InvoiceCalculator
         Guid accountId,
         YearMonth dueMonth,
         IEnumerable<CreditCardPurchase> purchases,
-        Guid? conditionId = null)
+        Guid? conditionId = null,
+        DateOnly? minDueDate = null)
     {
         ArgumentNullException.ThrowIfNull(dueMonth);
-        return SumInstallments(accountId, purchases, conditionId, cycle => cycle.DueMonth == dueMonth);
+        return SumInstallments(accountId, purchases, conditionId, minDueDate, cycle => cycle.DueMonth == dueMonth);
     }
 
     private static Money SumInstallments(
         Guid accountId,
         IEnumerable<CreditCardPurchase> purchases,
         Guid? conditionId,
+        DateOnly? minDueDate,
         Func<BillingCycle, bool> cyclePredicate)
     {
         DomainValidation.EnsureNotEmpty(accountId, nameof(accountId), "account id");
@@ -55,7 +58,9 @@ public static class InvoiceCalculator
             purchases
                 .Where(purchase => purchase.AccountId == accountId
                                    && (!conditionId.HasValue || purchase.ConditionId == conditionId.Value))
-                .SelectMany(purchase => purchase.GetActiveInstallments())
+                .SelectMany(purchase => minDueDate.HasValue
+                    ? purchase.GetTrackedInstallments(minDueDate.Value)
+                    : purchase.GetActiveInstallments())
                 .Where(installment => cyclePredicate(installment.Cycle))
                 .Select(installment => installment.Amount));
     }

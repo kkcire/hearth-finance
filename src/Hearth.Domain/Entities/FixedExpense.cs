@@ -66,6 +66,21 @@ public sealed class FixedExpense
 
     public static FixedExpense Create(
         Guid id,
+        Account account,
+        YearMonth startMonth,
+        YearMonth? endMonth,
+        Money amount,
+        string description,
+        Guid categoryId)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        account.EnsureCanRegisterInMonth(startMonth);
+
+        return Create(id, account.Id, startMonth, endMonth, amount, description, categoryId);
+    }
+
+    public static FixedExpense Create(
+        Guid id,
         Guid accountId,
         YearMonth startMonth,
         YearMonth? endMonth,
@@ -151,6 +166,15 @@ public sealed class FixedExpense
         }
 
         EndMonth = lastMonth;
+    }
+
+    public bool MarkAsPaid(Account account, YearMonth month, DateOnly paidOn, DateOnly today)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        account.EnsureCanRegisterInMonth(month);
+        account.EnsureCanRegisterOn(paidOn);
+
+        return MarkAsPaid(month, paidOn, today);
     }
 
     /// <summary>

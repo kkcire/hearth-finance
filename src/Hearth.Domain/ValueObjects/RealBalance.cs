@@ -25,24 +25,25 @@ public sealed record RealBalance
     /// <summary>The last day included in the balance, inclusive.</summary>
     public DateOnly Until { get; }
 
-    /// <summary>The account's initial balance, the starting point of the cash flow.</summary>
+    /// <summary>The account's single manual opening balance on <see cref="Entities.Account.TrackingStartDate"/> (Day 1).</summary>
     public Money InitialBalance { get; }
 
-    /// <summary>Incomes received on or before <see cref="Until"/>, by their received date.</summary>
+    /// <summary>Incomes received from <see cref="Entities.Account.TrackingStartDate"/> through <see cref="Until"/>.</summary>
     public Money Incomes { get; }
 
-    /// <summary>Direct expenses dated on or before <see cref="Until"/>.</summary>
+    /// <summary>Direct expenses dated from <see cref="Entities.Account.TrackingStartDate"/> through <see cref="Until"/>.</summary>
     public Money DirectExpenses { get; }
 
-    /// <summary>Fixed expenses paid on or before <see cref="Until"/>, at the amount of the month paid.</summary>
+    /// <summary>Fixed expenses paid from <see cref="Entities.Account.TrackingStartDate"/> through <see cref="Until"/>.</summary>
     public Money FixedExpenses { get; }
 
-    /// <summary>Card installments whose due date is on or before <see cref="Until"/>.</summary>
+    /// <summary>Card installments whose due date falls from <see cref="Entities.Account.TrackingStartDate"/> through <see cref="Until"/>.</summary>
     public Money CardInvoices { get; }
 
     /// <summary>
-    /// Initial balance + incomes − direct expenses − fixed expenses − card invoices.
+    /// Day-1 initial balance + incomes − direct expenses − fixed expenses − card invoices.
     /// Derived from the components, so it can never disagree with them. It can be negative.
     /// </summary>
-    public Money Balance => InitialBalance + Incomes - DirectExpenses - FixedExpenses - CardInvoices;
+    public Money Balance =>
+        InitialBalance + Incomes - DirectExpenses - FixedExpenses - CardInvoices;
 }

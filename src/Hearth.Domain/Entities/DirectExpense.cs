@@ -47,6 +47,20 @@ public sealed class DirectExpense
 
     public static DirectExpense Create(
         Guid id,
+        Account account,
+        DateOnly date,
+        Money amount,
+        string description,
+        Guid categoryId)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        account.EnsureCanRegisterOn(date);
+
+        return Create(id, account.Id, date, amount, description, categoryId);
+    }
+
+    public static DirectExpense Create(
+        Guid id,
         Guid accountId,
         DateOnly date,
         Money amount,
@@ -61,6 +75,13 @@ public sealed class DirectExpense
         DomainValidation.EnsureNotEmpty(categoryId, nameof(categoryId), "category id");
 
         return new DirectExpense(id, accountId, date, amount, validDescription, categoryId);
+    }
+
+    public void UpdateDate(Account account, DateOnly newDate)
+    {
+        ArgumentNullException.ThrowIfNull(account);
+        account.EnsureCanRegisterOn(newDate);
+        Date = newDate;
     }
 
     public void UpdateDate(DateOnly newDate)

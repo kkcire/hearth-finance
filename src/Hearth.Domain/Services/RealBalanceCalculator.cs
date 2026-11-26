@@ -5,21 +5,12 @@ namespace Hearth.Domain.Services;
 
 /// <summary>
 /// Calculates the cash balance of an account: each item counts on the day the money moves,
-/// not on the month it refers to. The projected result, by accrual, is a separate calculation.
+/// not on the month it refers to. Always starts from the account's single manual opening balance
+/// (<see cref="Account.InitialBalance"/>) on <see cref="Account.TrackingStartDate"/> (Day 1)
+/// and applies every realized cash movement from Day 1 through <c>until</c>.
 /// </summary>
 public static class RealBalanceCalculator
 {
-    /// <summary>
-    /// Cash balance on <paramref name="until"/> (inclusive) = initial balance + received incomes
-    /// − direct expenses − paid fixed expenses − credit card installments whose invoice due date
-    /// has arrived on or before <paramref name="until"/>.
-    /// </summary>
-    /// <remarks>
-    /// Items dated before the account's initial balance date are ignored, because they are already
-    /// inside the initial balance. Items dated on that day count. Only items of the given account are
-    /// considered. Credit card installments settle automatically on their cycle's <see cref="BillingCycle.DueDate"/>
-    /// (symmetric with <see cref="CreditCardLimitCalculator"/>, where <c>DueDate &gt; today</c> occupies limit).
-    /// </remarks>
     public static RealBalance Calculate(
         Account account,
         DateOnly until,
@@ -43,7 +34,8 @@ public static class RealBalanceCalculator
 
         var directTotal = Money.Sum(
             directExpenses
-                .Where(expense => expense.AccountId == account.Id && CountsIn(account, expense.Date, until))
+                .Where(expense => expense.AccountId == account.Id
+                                  && CountsIn(account, expense.Date, until))
                 .Select(expense => expense.Amount));
 
         // A fixed expense is paid month by month: each payment carries its competence month,
@@ -62,7 +54,7 @@ public static class RealBalanceCalculator
         var paidInvoices = Money.Sum(
             purchases
                 .Where(purchase => purchase.AccountId == account.Id)
-                .SelectMany(purchase => purchase.GetActiveInstallments())
+                .SelectMany(purchase => purchase.GetTrackedInstallments(account.TrackingStartDate))
                 .Where(installment => CountsIn(account, installment.Cycle.DueDate, until))
                 .Select(installment => installment.Amount));
 

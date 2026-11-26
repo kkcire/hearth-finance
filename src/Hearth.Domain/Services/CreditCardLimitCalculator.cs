@@ -24,9 +24,10 @@ public static class CreditCardLimitCalculator
         return Money.Sum(
             purchases
                 .Where(purchase => purchase.CreditCardId == creditCardId)
-                .SelectMany(purchase => purchase.GetActiveInstallments())
-                .Where(installment => installment.Cycle.DueDate > today
-                                      && (initialBalanceDate is null || installment.Cycle.DueDate >= initialBalanceDate.Value))
+                .SelectMany(purchase => initialBalanceDate.HasValue
+                    ? purchase.GetTrackedInstallments(initialBalanceDate.Value)
+                    : purchase.GetActiveInstallments())
+                .Where(installment => installment.Cycle.DueDate > today)
                 .Select(installment => installment.Amount));
     }
 
