@@ -1,0 +1,45 @@
+<header class="hearth-page-header @CssClass">
+    <div class="hearth-page-header-lead">
+        @if (Icon is not null)
+        {
+            <div class="hearth-icon-tile hearth-icon-tile--lg" aria-hidden="true">
+                @Icon
+            </div>
+        }
+        <div class="hearth-dash-title-group">
+            <h1 class="hearth-dash-title" data-testid="@TitleTestId">@Title</h1>
+            @if (!string.IsNullOrWhiteSpace(Subtitle))
+            {
+                <p class="hearth-dash-subtitle">@Subtitle</p>
+            }
+        </div>
+    </div>
+
+    @if (Actions is not null)
+    {
+        <div class="hearth-page-header-actions">
+            @Actions
+        </div>
+    }
+</header>
+
+@code
+{
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Subtitle { get; set; }
+
+    [Parameter]
+    public RenderFragment? Icon { get; set; }
+
+    [Parameter]
+    public RenderFragment? Actions { get; set; }
+
+    [Parameter]
+    public string? TitleTestId { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+}

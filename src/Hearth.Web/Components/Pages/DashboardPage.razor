@@ -1,46 +1,65 @@
 @page "/"
 @attribute [Authorize]
 @inherits AccountPageBase
-@using Hearth.Application.Accounts.ConfirmInitialBalance
-@using Hearth.Application.Accounts.UpdateInitialBalance
-@using Hearth.Application.CreditCards
-@using Hearth.Application.CreditCards.GetActiveCreditCard
-@using Hearth.Application.Invoices.GetInvoiceSummary
+@using Hearth.Application.Accounts.DeleteBalanceAdjustment
+@using Hearth.Application.Accounts.SetAccountBalance
 @using Hearth.Application.PurchaseConditions
 @using Hearth.Application.PurchaseConditions.ListPurchaseConditions
-@using Hearth.Application.Reports.GetBudgetStatus
-@using Hearth.Application.Reports.GetExpensesByCategory
-@using Hearth.Application.Reports.GetMonthlySurplus
-@using Hearth.Application.Reports.GetProjectedResult
-@using Hearth.Application.Reports.GetRealBalance
-@using Hearth.Web.Components.Shared
+@using Hearth.Application.Reports.GetMonthlyDashboard
+@using Hearth.Domain.ValueObjects
 @using Hearth.Web.Models
 
 <PageTitle>Painel do Mês — Hearth Finance</PageTitle>
 
 <div class="hearth-dash">
-    @* Cabeçalho limpo + Navegador de Mês *@
-    <header class="hearth-dash-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Painel do Mês</h1>
-            <p class="hearth-dash-subtitle">
-                Caixa real até @HearthFormat.Date(_realBalanceUntil) e projeção de @HearthFormat.MonthYear(_selectedMonth).
-            </p>
-        </div>
+    @* Content Header: Painel do Mês + simple chart icon badge + Month Selector *@
+    <PageHeader Title="Painel do Mês"
+                Subtitle="@($"Seu panorama financeiro para {HearthFormat.MonthYear(_selectedMonth)}.")">
+        <Icon>
+            <svg viewBox="0 0 20 20" fill="none">
+                <path d="M4.5 14.5V10.5M9.5 14.5V6.5M14.5 14.5V4.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
+            </svg>
+        </Icon>
+        <Actions>
+            <div class="hearth-dash-period-controls">
+                <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
+                <MudDatePicker Date="HearthFormat.ToDateTime(_realBalanceUntil)"
+                               DateChanged="OnRealBalanceDateChangedAsync"
+                               MinDate="TrackingStartDate.HasValue ? HearthFormat.ToDateTime(TrackingStartDate.Value) : null"
+                               MaxDate="HearthFormat.ToDateTime(Clock.Today)"
+                               DateFormat="dd/MM/yyyy"
+                               Culture="@HearthFormat.PtBr"
+                               Variant="Variant.Outlined"
+                               Margin="Margin.Dense"
+                               Editable="true"
+                               Disabled="_loading"
+                               Class="hearth-date-picker hearth-dash-date-picker"
+                               aria-label="Data de referência do saldo"
+                               data-testid="real-balance-date-input" />
+                @if (_realBalanceUntil != Clock.Today)
+                {
+                    <MudButton Size="Size.Small"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               Class="hearth-today-btn"
+                               Disabled="_loading"
+                               OnClick="ResetRealBalanceDateAsync"
+                               data-testid="real-balance-today-button">
+                        Hoje
+                    </MudButton>
+                }
+            </div>
+        </Actions>
+    </PageHeader>
 
-        <div class="hearth-dash-header-controls">
-            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
-        </div>
-    </header>
-
-    @* Barra de Comando: Seletor Global de Condição (+{num}) + Atalhos Rápidos *@
+    @* Command Bar: Condição filter chips + single "+ Novo lançamento ▾" CTA *@
     <div class="hearth-dash-command-bar">
-        <div class="hearth-condition-bar" role="group" aria-label="Filtrar painel por condição do cartão">
+        <div class="hearth-condition-bar" role="group" aria-label="Filtrar painel por condição">
             <span class="hearth-condition-label">Condição:</span>
 
-            <div class="hearth-condition-pills">
+            <div class="hearth-condition-pill-row">
                 <button type="button"
-                        class="hearth-filter-pill @(_selectedConditionId is null ? "is-active" : null)"
+                        class="hearth-cond-pill @(_selectedConditionId is null ? "is-active" : null)"
                         aria-pressed="@(_selectedConditionId is null ? "true" : "false")"
                         @onclick="() => OnConditionFilterChangedAsync(null)"
                         data-testid="dashboard-condition-all">
@@ -52,7 +71,7 @@
                     var conditionId = condition.Id;
                     var isConditionActive = _selectedConditionId == conditionId;
                     <button type="button"
-                            class="hearth-filter-pill @(isConditionActive ? "is-active" : null)"
+                            class="hearth-cond-pill @(isConditionActive ? "is-active" : null)"
                             aria-pressed="@(isConditionActive ? "true" : "false")"
                             @onclick="() => OnConditionFilterChangedAsync(conditionId)"
                             data-testid="@GetConditionTestId(condition)">
@@ -67,7 +86,7 @@
                 {
                     <div class="hearth-condition-overflow">
                         <button type="button"
-                                class="hearth-filter-pill hearth-filter-pill--overflow @(_overflowOpen ? "is-open" : null)"
+                                class="hearth-cond-pill hearth-cond-pill--overflow @(_overflowOpen ? "is-open" : null)"
                                 aria-expanded="@(_overflowOpen ? "true" : "false")"
                                 aria-haspopup="menu"
                                 aria-label="@($"Mostrar mais {overflowConditions.Count} condições")"
@@ -97,670 +116,681 @@
             </div>
         </div>
 
-        <nav class="hearth-dash-actions" aria-label="Atalhos de lançamento">
-            <a href="/gastos-diretos" class="hearth-quick-action">
-                <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                    <path d="M10 4.5V15.5M4.5 10H15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+        <nav class="hearth-quick-launch" aria-label="Atalhos de lançamento">
+            <button type="button"
+                    class="hearth-quick-launch-trigger @(_quickLaunchOpen ? "is-open" : null)"
+                    aria-expanded="@(_quickLaunchOpen ? "true" : "false")"
+                    aria-haspopup="menu"
+                    @onclick="ToggleQuickLaunchMenu"
+                    data-testid="quick-launch-trigger">
+                <span>+ Novo lançamento</span>
+                <svg class="hearth-quick-launch-caret" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                    <path d="M6 8L10 12L14 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                <span>Gasto direto</span>
-            </a>
-            <a href="/cartao?aba=compras" class="hearth-quick-action" data-testid="quick-action-card-purchase">
-                <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                    <rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
-                    <path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.6" />
-                </svg>
-                <span>Compra no cartão</span>
-            </a>
-            <a href="/receitas" class="hearth-quick-action">
-                <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                    <path d="M3.5 14L8 9.5L11.2 12.5L16.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                    <path d="M12.8 6.5H16.5V10.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                </svg>
-                <span>Receita</span>
-            </a>
-            <a href="/despesas-fixas" class="hearth-quick-action">
-                <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
-                    <rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6" />
-                    <path d="M6.5 3V6M13.5 3V6M3 8.5H17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
-                </svg>
-                <span>Despesa fixa</span>
-            </a>
+            </button>
+
+            <div class="hearth-quick-launch-menu"
+                 role="menu"
+                 hidden="@(!_quickLaunchOpen)"
+                 aria-hidden="@(!_quickLaunchOpen ? "true" : "false")"
+                 data-testid="quick-launch-menu">
+                <a href="/gastos-diretos" role="menuitem" class="hearth-quick-launch-item" @onclick="CloseQuickLaunchMenu" data-testid="quick-launch-direct">
+                    <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                        <path d="M10 4.5V15.5M4.5 10H15.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+                    </svg>
+                    <span class="hearth-quick-launch-item-copy">
+                        <span class="hearth-quick-launch-item-title">Gasto direto</span>
+                        <span class="hearth-quick-launch-item-desc">Pix, débito ou saída à vista</span>
+                    </span>
+                </a>
+                <a href="/cartao?aba=compras" role="menuitem" class="hearth-quick-launch-item" @onclick="CloseQuickLaunchMenu" data-testid="quick-action-card-purchase">
+                    <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                        <rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.6" />
+                        <path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.6" />
+                    </svg>
+                    <span class="hearth-quick-launch-item-copy">
+                        <span class="hearth-quick-launch-item-title">Compra no cartão</span>
+                        <span class="hearth-quick-launch-item-desc">À vista ou parcelada na fatura</span>
+                    </span>
+                </a>
+                <a href="/receitas" role="menuitem" class="hearth-quick-launch-item" @onclick="CloseQuickLaunchMenu" data-testid="quick-launch-income">
+                    <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                        <path d="M3.5 14L8 9.5L11.2 12.5L16.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                        <path d="M12.8 6.5H16.5V10.2" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                    </svg>
+                    <span class="hearth-quick-launch-item-copy">
+                        <span class="hearth-quick-launch-item-title">Receita</span>
+                        <span class="hearth-quick-launch-item-desc">Entrada prevista ou já recebida</span>
+                    </span>
+                </a>
+                <a href="/despesas-fixas" role="menuitem" class="hearth-quick-launch-item" @onclick="CloseQuickLaunchMenu" data-testid="quick-launch-fixed">
+                    <svg class="hearth-quick-action-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+                        <rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.6" />
+                        <path d="M6.5 3V6M13.5 3V6M3 8.5H17" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                    </svg>
+                    <span class="hearth-quick-launch-item-copy">
+                        <span class="hearth-quick-launch-item-title">Despesa fixa</span>
+                        <span class="hearth-quick-launch-item-desc">Assinatura ou conta recorrente</span>
+                    </span>
+                </a>
+            </div>
         </nav>
     </div>
 
-    @if (_loading && _realBalance is null)
+    @if (_loading && _dashboard is null)
     {
         <div class="hearth-dash-skeleton" aria-busy="true" aria-label="Carregando painel financeiro">
-            <div class="hearth-dash-primary-grid">
+            <div class="hearth-hub-row1">
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--compact"></div>
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--compact"></div>
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--compact"></div>
+                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--compact"></div>
+            </div>
+            <div class="hearth-hub-row2">
                 <div class="hearth-card hearth-skeleton-panel"></div>
                 <div class="hearth-card hearth-skeleton-panel"></div>
             </div>
-            <div class="hearth-card hearth-skeleton-panel"></div>
-            <div class="hearth-dash-secondary-grid">
-                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
-                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
-                <div class="hearth-card hearth-skeleton-panel hearth-skeleton-panel--tall"></div>
+            <div class="hearth-hub-row3">
+                <div class="hearth-card hearth-skeleton-panel"></div>
+                <div class="hearth-card hearth-skeleton-panel"></div>
+                <div class="hearth-card hearth-skeleton-panel"></div>
             </div>
         </div>
     }
-    else
+    else if (_dashboard is not null)
     {
-        @* Primeira Dobra: Saldo de Caixa (Integro) + Sobra Projetada (Cascata Limpa) *@
-        <div class="hearth-dash-primary-grid">
-            @* 1. Saldo de Caixa *@
-            <section class="hearth-card hearth-hero-card" aria-labelledby="heading-real-balance" data-testid="real-balance-card">
-                <div class="hearth-hero-head">
-                    <div class="hearth-ledger-title-wrap">
-                        <h2 id="heading-real-balance" class="hearth-card-title">Saldo de caixa</h2>
-                        <p class="hearth-card-meta">Posição real até @HearthFormat.Date(_realBalanceUntil)</p>
-                    </div>
+        var balance = _dashboard.Balance;
+        var invoice = _dashboard.CurrentInvoice;
+        var flow = _dashboard.CurrentMonthFlow;
+        var nextMonth = _dashboard.NextMonthEstimate;
 
-                    <div class="hearth-ledger-date-control">
-                        <MudDatePicker Date="HearthFormat.ToDateTime(_realBalanceUntil)"
-                                       DateChanged="OnRealBalanceDateChangedAsync"
-                                       DateFormat="dd/MM/yyyy"
-                                       Culture="@HearthFormat.PtBr"
-                                       Variant="Variant.Outlined"
-                                       Margin="Margin.Dense"
-                                       Editable="true"
-                                       Class="hearth-date-picker"
-                                       aria-label="Data do saldo real"
-                                       data-testid="real-balance-date-input" />
-                        @if (_realBalanceUntil != Clock.Today)
-                        {
-                            <MudButton Size="Size.Small"
-                                       Variant="Variant.Outlined"
-                                       Color="Color.Primary"
-                                       Class="hearth-today-btn"
-                                       OnClick="ResetRealBalanceDateAsync"
-                                       data-testid="real-balance-today-button">
-                                Hoje
-                            </MudButton>
-                        }
-                    </div>
-                </div>
-
-                @if (_realBalance is not null)
-                {
-                    <div class="hearth-hero-metric">
-                        <div class="hearth-hero-metric-row">
-                            <p class="hearth-hero-value @(GetRealBalanceToneClass(_realBalance.Balance))"
-                               data-testid="real-balance-value">
-                                @HearthFormat.Money(_realBalance.Balance)
-                            </p>
-                            <span class="hearth-status-pill @(GetRealBalancePillClass(_realBalance.Balance))">
-                                @(_realBalance.Balance < 0 ? "Caixa negativo" : "Caixa em dia")
-                            </span>
-                        </div>
-
-                        @if (_selectedConditionId.HasValue)
-                        {
-                            <p class="hearth-hero-note" data-testid="real-balance-unfiltered-note">
-                                Saldo integral da conta — não afetado pelo filtro de condição.
-                            </p>
-                        }
-                    </div>
-
-                    @* Composição enxuta: exibe somente movimentos não-zerados por padrão, com expansão sob demanda *@
-                    var cashMovements = GetCashCompositionRows(_realBalance, includeZero: _showRealBalanceDetails);
-                    @if (cashMovements.Count > 0)
-                    {
-                        <dl class="hearth-cascade-list">
-                            @foreach (var row in cashMovements)
-                            {
-                                <div class="hearth-cascade-row">
-                                    <dt>
-                                        @if (row.Sign == "+")
-                                        {
-                                            <span class="hearth-sign-positive" aria-hidden="true">+</span>
-                                        }
-                                        else if (row.Sign == "-")
-                                        {
-                                            <span class="hearth-sign-negative" aria-hidden="true">&minus;</span>
-                                        }
-                                        @row.Label
-                                    </dt>
-                                    <dd class="hearth-money @(row.Sign == "+" ? "hearth-money--positive" : null)">
-                                        @HearthFormat.Money(row.Amount)
-                                    </dd>
-                                </div>
-                            }
-                        </dl>
-                    }
-                    else
-                    {
-                        <p class="hearth-cascade-calm">Sem movimentações efetivadas até esta data.</p>
-                    }
-
-                    @if (_editingInitialBalance)
-                    {
-                        <div class="hearth-inline-edit-box" data-testid="inline-initial-balance-form">
-                            <MudNumericField T="decimal"
-                                             @bind-Value="_editInitialBalanceAmount"
-                                             Label="Saldo inicial da conta"
-                                             Variant="Variant.Outlined"
-                                             Margin="Margin.Dense"
-                                             Culture="@HearthFormat.PtBr"
-                                             Format="N2"
-                                             Adornment="Adornment.Start"
-                                             AdornmentText="R$"
-                                             HideSpinButtons="true"
-                                             Immediate="true"
-                                             Disabled="_savingInitialBalance"
-                                             data-testid="inline-initial-balance-input" />
-                            <div class="hearth-inline-edit-actions">
-                                <button type="button"
-                                        class="hearth-subtle-action is-primary"
-                                        disabled="@_savingInitialBalance"
-                                        @onclick="SaveInitialBalanceAsync"
-                                        data-testid="save-initial-balance-button">
-                                    @(_savingInitialBalance ? "Salvando…" : "Salvar")
-                                </button>
-                                <button type="button"
-                                        class="hearth-subtle-action"
-                                        disabled="@_savingInitialBalance"
-                                        @onclick="CancelEditInitialBalance">
-                                    Cancelar
-                                </button>
-                            </div>
-                        </div>
-                    }
-
-                    <div class="hearth-hero-footer">
-                        <button type="button"
-                                class="hearth-subtle-action"
-                                aria-expanded="@(_showRealBalanceDetails ? "true" : "false")"
-                                @onclick="() => _showRealBalanceDetails = !_showRealBalanceDetails"
-                                data-testid="toggle-real-balance-details">
-                            @(_showRealBalanceDetails ? "Ocultar linhas zeradas" : "Ver composição completa")
-                        </button>
-
-                        @if (!_editingInitialBalance)
-                        {
-                            <button type="button"
-                                    class="hearth-subtle-action"
-                                    @onclick="StartEditInitialBalance"
-                                    data-testid="edit-initial-balance-button">
-                                Editar saldo inicial
-                            </button>
-                        }
-                    </div>
-                }
-            </section>
-
-            @* 2. Sobra Projetada (Cascata Limpa) *@
-            <section class="hearth-card hearth-hero-card hearth-hero-card--surplus" aria-labelledby="heading-monthly-surplus" data-testid="monthly-surplus-card">
-                <div class="hearth-hero-head">
-                    <div class="hearth-ledger-title-wrap">
-                        <h2 id="heading-monthly-surplus" class="hearth-card-title">
-                            @(_monthlySurplus?.SelectedMonth.IsHistorical == true ? "Fechamento do mês" : "Sobra projetada")
-                        </h2>
-                        <p class="hearth-card-meta">
-                            @HearthFormat.MonthYear(_selectedMonth)
-                            @if (ActiveConditionName is { } filterName)
-                            {
-                                <span class="hearth-inline-filter-tag">Cartão: @filterName</span>
-                            }
-                        </p>
-                    </div>
-
-                    @if (_monthlySurplus is not null)
-                    {
-                        var netVar = _monthlySurplus.SelectedMonth.NetMonthlyVariation;
-                        <span class="hearth-status-pill @(GetProjectedPillClass(netVar))">
-                            @(netVar > 0m ? $"+{HearthFormat.Money(netVar)} no mês" : $"{HearthFormat.Money(netVar)} no mês")
-                        </span>
-                    }
-                </div>
-
-                @if (_monthlySurplus is not null)
-                {
-                    var surplus = _monthlySurplus.SelectedMonth;
-                    var discountSharePct = surplus.TotalAvailable > 0m
-                        ? Math.Min(100m, Math.Round((surplus.TotalDiscounts / surplus.TotalAvailable) * 100m, 1))
-                        : (surplus.TotalDiscounts > 0m ? 100m : 0m);
-
-                    <div class="hearth-hero-metric">
-                        <div class="hearth-hero-metric-row">
-                            <p class="hearth-hero-value @(GetProjectedToneClass(surplus.ProjectedSurplus))"
-                               data-testid="monthly-surplus-value">
-                                @HearthFormat.Money(surplus.ProjectedSurplus)
-                            </p>
-                            <div class="hearth-surplus-available-chip">
-                                <span>Total disponível</span>
-                                <strong class="hearth-money" data-testid="monthly-surplus-total-available">
-                                    @HearthFormat.Money(surplus.TotalAvailable)
-                                </strong>
-                            </div>
-                        </div>
-
-                        <div class="hearth-meter hearth-meter--slim" role="presentation">
-                            <span class="hearth-meter-fill @(surplus.ProjectedSurplus < 0m ? "is-danger" : discountSharePct >= 80m ? "is-warning" : "is-accent")"
-                                  style="width: @(discountSharePct.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
-                        </div>
-                    </div>
-
-                    <dl class="hearth-cascade-list">
-                        <div class="hearth-cascade-row hearth-cascade-row--base">
-                            <dt>@(surplus.IsCurrentMonth ? "Saldo de caixa atual" : surplus.IsHistorical ? "Saldo de abertura" : "Sobra do mês anterior")</dt>
-                            <dd class="hearth-money">@HearthFormat.Money(surplus.StartingCashBalance)</dd>
-                        </div>
-
-                        @if (surplus.ExpectedIncomes != 0m || _showSurplusDetails)
-                        {
-                            <div class="hearth-cascade-row">
-                                <dt><span class="hearth-sign-positive" aria-hidden="true">+</span> @(surplus.IsHistorical ? "Receitas recebidas" : "Receitas previstas")</dt>
-                                <dd class="hearth-money hearth-money--positive">@HearthFormat.Money(surplus.ExpectedIncomes)</dd>
-                            </div>
-                        }
-
-                        @if (surplus.CardInvoiceDue != 0m || _showSurplusDetails)
-                        {
-                            <div class="hearth-cascade-row">
-                                <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Fatura do mês (vencimento)</dt>
-                                <dd class="hearth-money">@HearthFormat.Money(surplus.CardInvoiceDue)</dd>
-                            </div>
-                        }
-
-                        @if (surplus.FixedExpenses != 0m || _showSurplusDetails)
-                        {
-                            <div class="hearth-cascade-row">
-                                <dt><span class="hearth-sign-negative" aria-hidden="true">&minus;</span> Despesas fixas e assinaturas</dt>
-                                <dd class="hearth-money">@HearthFormat.Money(surplus.FixedExpenses)</dd>
-                            </div>
-                        }
-
-                        @if (surplus.DirectExpenses != 0m || _showSurplusDetails)
-                        {
-                            <div class="hearth-cascade-row">
-                                <dt data-testid="monthly-surplus-direct-label">
-                                    <span class="hearth-sign-negative" aria-hidden="true">&minus;</span>
-                                    @(surplus.DirectExpensesAreFutureOnly ? "Gastos diretos futuros" : "Gastos diretos")
-                                    @if (surplus.DirectExpensesAreFutureOnly)
-                                    {
-                                        <span class="hearth-future-tag">Agendados</span>
-                                    }
-                                </dt>
-                                <dd class="hearth-money">@HearthFormat.Money(surplus.DirectExpenses)</dd>
-                            </div>
-                        }
-                    </dl>
-
-                    @if (surplus.TotalDiscounts == 0m && !_showSurplusDetails)
-                    {
-                        <p class="hearth-cascade-calm">
-                            @(surplus.IsHistorical ? "Sem descontos registrados neste mês." : "Sem descontos pendentes previstos para este mês.")
-                        </p>
-                    }
-
-                    <div class="hearth-hero-footer">
-                        <button type="button"
-                                class="hearth-subtle-action"
-                                aria-expanded="@(_showSurplusDetails ? "true" : "false")"
-                                @onclick="() => _showSurplusDetails = !_showSurplusDetails"
-                                data-testid="toggle-surplus-details">
-                            @(_showSurplusDetails ? "Ocultar linhas zeradas" : "Ver cascata completa")
-                        </button>
-
-                        <span class="hearth-cascade-total-hint hearth-money">
-                            Descontos: @HearthFormat.Money(surplus.TotalDiscounts)
-                        </span>
-                    </div>
-                }
-            </section>
-        </div>
-
-        @* Gráfico de Evolução Mensal (Histórico Solid vs Projeção Dashed + AverageMonthlyVariation) *@
-        @if (_monthlySurplus is not null)
-        {
-            <SurplusEvolutionChart Points="_monthlySurplus.Series"
-                                   SelectedMonth="_selectedMonth"
-                                   AverageMonthlyVariation="_monthlySurplus.AverageMonthlyVariation"
-                                   ActiveConditionName="@ActiveConditionName"
-                                   MonthSelected="OnMonthChangedAsync" />
-        }
-
-        @* Linha Secundária Escaneável: Fatura do Mês (DueDate), Orçamentos, Gastos por Categoria *@
-        <div class="hearth-dash-secondary-grid">
-            @* 1. Fatura do Mês (por DueDate) *@
-            <section class="hearth-card hearth-module-card" aria-labelledby="heading-invoice" data-testid="dashboard-invoice-card">
-                <div class="hearth-module-head">
-                    <div>
-                        <h3 id="heading-invoice" class="hearth-card-title">
-                            Fatura do mês (@HearthFormat.ShortMonthYear(_selectedMonth))
-                        </h3>
-                        <p class="hearth-card-meta">
-                            @if (_activeCard is not null && !string.IsNullOrWhiteSpace(_activeCard.Name))
-                            {
-                                @_activeCard.Name
-                            }
-                            else
-                            {
-                                @("Agrupada pelo vencimento")
-                            }
-                        </p>
-                    </div>
-
-                    @if (_invoiceSummary is not null && !_invoiceSummary.IsEmptyWithoutCard)
-                    {
-                        <span class="hearth-status-pill @(GetInvoiceStatusPillClass(_invoiceSummary.Status))">
-                            @GetInvoiceStatusLabel(_invoiceSummary.Status)
-                        </span>
-                    }
-                </div>
-
-                @if (_invoiceSummary is null || _invoiceSummary.IsEmptyWithoutCard)
-                {
-                    <div class="hearth-empty-state" data-testid="dashboard-no-card-state">
-                        <p class="hearth-empty-title">Nenhum cartão ativo cadastrado</p>
-                        <p class="hearth-empty-desc">
-                            Adicione seu cartão de crédito com dia de fechamento e vencimento para acompanhar faturas e limite.
-                        </p>
-                        <a href="/cartao" class="hearth-secondary-cta" data-testid="dashboard-configure-card-link">
-                            Cadastrar cartão
-                        </a>
-                    </div>
-                }
-                else
-                {
-                    <div class="hearth-invoice-body">
-                        <div class="hearth-invoice-hero-line">
-                            <p class="hearth-module-amount hearth-money" data-testid="dashboard-invoice-calculated">
-                                @HearthFormat.Money(_invoiceSummary.CalculatedAmount)
-                            </p>
-                            <span class="hearth-invoice-count-tag hearth-money">
-                                @_invoiceSummary.Installments.Count @(_invoiceSummary.Installments.Count == 1 ? "parcela" : "parcelas")
-                            </span>
-                        </div>
-
-                        <dl class="hearth-invoice-meta-grid hearth-invoice-meta-grid--two">
-                            @if (_invoiceSummary.ClosingDate.HasValue)
-                            {
-                                <div class="hearth-invoice-meta-item">
-                                    <dt>Fechamento</dt>
-                                    <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.ClosingDate)</dd>
-                                </div>
-                            }
-                            @if (_invoiceSummary.DueDate.HasValue)
-                            {
-                                <div class="hearth-invoice-meta-item">
-                                    <dt>Vencimento</dt>
-                                    <dd class="hearth-money">@HearthFormat.Date(_invoiceSummary.DueDate)</dd>
-                                </div>
-                            }
-                        </dl>
-
-                        @if (_activeCard is not null && _activeCard.Limit is > 0m)
-                        {
-                            var limitPct = Math.Round((_activeCard.UsedLimit / _activeCard.Limit.Value) * 100m, 1);
-                            var limitBarWidth = Math.Min(100d, (double)limitPct);
-                            <div class="hearth-limit-box" data-testid="dashboard-card-limit">
-                                <div class="hearth-commitment-head">
-                                    <span>Limite utilizado</span>
-                                    <span class="hearth-money">@HearthFormat.Percentage(limitPct)</span>
-                                </div>
-                                <div class="hearth-meter" role="presentation">
-                                    <span class="hearth-meter-fill @(limitPct >= 90m ? "is-danger" : limitPct >= 75m ? "is-warning" : "is-accent")"
-                                          style="width: @(limitBarWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
-                                </div>
-                                <div class="hearth-limit-values">
-                                    <span>Usado: <strong class="hearth-money">@HearthFormat.Money(_activeCard.UsedLimit)</strong></span>
-                                    <span>Disponível: <strong class="hearth-money">@HearthFormat.Money(_activeCard.AvailableLimit ?? 0m)</strong></span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-
-                    <div class="hearth-module-footer">
-                        <a href="/cartao?aba=fatura" class="hearth-secondary-cta" data-testid="dashboard-invoices-link">
-                            Abrir fatura e cartão
-                        </a>
-                    </div>
-                }
-            </section>
-
-            @* 2. Orçamentos por Categoria *@
-            <section class="hearth-card hearth-module-card" aria-labelledby="heading-budgets" data-testid="dashboard-budgets-card">
-                <div class="hearth-module-head">
-                    <div>
-                        <h3 id="heading-budgets" class="hearth-card-title">Orçamentos</h3>
-                        @if (_budgetStatus is not null && _budgetStatus.Items.Count > 0)
-                        {
-                            <p class="hearth-card-meta" data-testid="dashboard-budgets-summary">
-                                <span class="hearth-money">@HearthFormat.Money(_budgetStatus.TotalSpent)</span>
-                                de
-                                <span class="hearth-money">@HearthFormat.Money(_budgetStatus.TotalBudgeted)</span>
-                            </p>
-                        }
-                    </div>
-
-                    <a href="/orcamentos" class="hearth-inline-link">Gerenciar</a>
-                </div>
-
-                @if (_budgetStatus is null || _budgetStatus.Items.Count == 0)
-                {
-                    <div class="hearth-empty-state">
-                        <p class="hearth-empty-title">Nenhum orçamento ativo em @HearthFormat.MonthYear(_selectedMonth)</p>
-                        <p class="hearth-empty-desc">
-                            Defina limites por categoria para acompanhar desvios sem bloquear lançamentos.
-                        </p>
-                        <a href="/orcamentos" class="hearth-secondary-cta">Criar orçamento</a>
-                    </div>
-                }
-                else
-                {
-                    var overallPct = _budgetStatus.TotalBudgeted > 0m
-                        ? Math.Round((_budgetStatus.TotalSpent / _budgetStatus.TotalBudgeted) * 100m, 1)
-                        : 0m;
-                    var overallBar = Math.Min(100d, (double)overallPct);
-
-                    <div class="hearth-budget-overview">
-                        <div class="hearth-commitment-head">
-                            <span>Consumo geral</span>
-                            <strong class="hearth-money">@HearthFormat.Percentage(overallPct)</strong>
-                        </div>
-                        <div class="hearth-meter" role="presentation">
-                            <span class="hearth-meter-fill @(overallPct > 100m ? "is-danger" : overallPct >= 80m ? "is-warning" : "is-positive")"
-                                  style="width: @(overallBar.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
-                        </div>
-                    </div>
-
-                    <div class="hearth-budget-list">
-                        @foreach (var item in _budgetStatus.Items)
-                        {
-                            var progressValue = Math.Min(100d, (double)item.UsagePercentage);
-                            <div class="hearth-budget-item" data-testid="@($"budget-item-{item.CategoryId}")">
-                                <div class="hearth-budget-row">
-                                    <div class="hearth-budget-name-wrap">
-                                        <span class="hearth-budget-name">@item.CategoryName</span>
-                                        @if (item.IsExceeded)
-                                        {
-                                            <span class="hearth-exceeded-badge" data-testid="budget-exceeded-badge">
-                                                <svg class="hearth-badge-icon" viewBox="0 0 16 16" fill="none" aria-hidden="true" focusable="false">
-                                                    <path d="M8 2.2L14 13H2L8 2.2Z" stroke="currentColor" stroke-width="1.4" stroke-linejoin="round" />
-                                                    <path d="M8 6.2V9.3" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" />
-                                                    <circle cx="8" cy="11.3" r="0.65" fill="currentColor" />
-                                                </svg>
-                                                Estourado
-                                            </span>
-                                        }
-                                    </div>
-
-                                    <span class="hearth-budget-numbers hearth-money @(item.IsExceeded ? "is-danger" : null)">
-                                        @HearthFormat.Money(item.SpentAmount) / @HearthFormat.Money(item.BudgetAmount)
-                                    </span>
-                                </div>
-
-                                <div class="hearth-meter hearth-meter--slim" role="presentation">
-                                    <span class="hearth-meter-fill @(item.IsExceeded ? "is-danger" : item.UsagePercentage >= 80m ? "is-warning" : "is-neutral")"
-                                          style="width: @(progressValue.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                }
-            </section>
-
-            @* 3. Gastos por Categoria *@
-            <section class="hearth-card hearth-module-card" aria-labelledby="heading-spending" data-testid="dashboard-spending-card">
-                <div class="hearth-module-head">
-                    <div>
-                        <h3 id="heading-spending" class="hearth-card-title">Gastos por categoria</h3>
-                        <p class="hearth-card-meta">Combine origens do mês</p>
-                    </div>
-                </div>
-
-                <div class="hearth-origin-grid" role="group" aria-label="Filtrar gastos por origem">
-                    <button type="button"
-                            class="hearth-origin-btn @(_includeCard ? "is-active" : null)"
-                            aria-pressed="@(_includeCard ? "true" : "false")"
-                            @onclick="ToggleCardOriginAsync"
-                            data-testid="toggle-origin-card">
-                        <span class="hearth-origin-name">Cartão</span>
-                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.CardInstallments ?? 0m)</span>
-                    </button>
-
-                    <button type="button"
-                            class="hearth-origin-btn @(_includeFixed ? "is-active" : null)"
-                            aria-pressed="@(_includeFixed ? "true" : "false")"
-                            @onclick="ToggleFixedOriginAsync"
-                            data-testid="toggle-origin-fixed">
-                        <span class="hearth-origin-name">Fixo</span>
-                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.FixedExpenses ?? 0m)</span>
-                    </button>
-
-                    <button type="button"
-                            class="hearth-origin-btn @(_includeDirect ? "is-active" : null)"
-                            aria-pressed="@(_includeDirect ? "true" : "false")"
-                            @onclick="ToggleDirectOriginAsync"
-                            data-testid="toggle-origin-direct">
-                        <span class="hearth-origin-name">Direto</span>
-                        <span class="hearth-origin-value hearth-money">@HearthFormat.Money(_categorySpending?.DirectExpenses ?? 0m)</span>
-                    </button>
-                </div>
-
-                @if (_categorySpending is null || _categorySpending.Categories.Count == 0)
-                {
-                    <div class="hearth-empty-state hearth-empty-state--compact">
-                        <p class="hearth-empty-title">Sem gastos para os filtros atuais</p>
-                        <p class="hearth-empty-desc">
-                            Ative outra origem acima ou ajuste a condição selecionada.
-                        </p>
-                    </div>
-                }
-                else
-                {
-                    <div class="hearth-spending-list" data-testid="spending-categories-list">
-                        @foreach (var item in _categorySpending.Categories)
-                        {
-                            var sharePct = _categorySpending.Total > 0m
-                                ? Math.Round((item.Total / _categorySpending.Total) * 100m, 1)
-                                : 0m;
-                            var barWidth = Math.Min(100d, (double)sharePct);
-
-                            <div class="hearth-spending-item">
-                                <div class="hearth-spending-row">
-                                    <span class="hearth-spending-name">@item.CategoryName</span>
-                                    <span class="hearth-spending-meta">
-                                        <span class="hearth-spending-pct hearth-money">@HearthFormat.Percentage(sharePct)</span>
-                                        <span class="hearth-spending-amount hearth-money">@HearthFormat.Money(item.Total)</span>
-                                    </span>
-                                </div>
-                                <div class="hearth-meter hearth-meter--slim" role="presentation">
-                                    <span class="hearth-meter-fill is-accent"
-                                          style="width: @(barWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-
-                    <div class="hearth-spending-total-row">
-                        <span>Total filtrado</span>
-                        <strong class="hearth-money" data-testid="spending-total">
-                            @HearthFormat.Money(_categorySpending.Total)
-                        </strong>
-                    </div>
-                }
-            </section>
-        </div>
-
-        @* Seção Analítica Inferior: Resultado Projetado por Competência *@
-        @if (_projectedResult is not null)
-        {
-            var totalOutflows = _projectedResult.DirectExpenses + _projectedResult.FixedExpenses + _projectedResult.CardInvoice;
-            var commitmentPct = _projectedResult.Incomes > 0m
-                ? Math.Round((totalOutflows / _projectedResult.Incomes) * 100m, 1)
-                : (totalOutflows > 0m ? 100m : 0m);
-            var commitmentBarWidth = Math.Min(100d, (double)commitmentPct);
-
-            <section class="hearth-card hearth-analytical-band" aria-labelledby="heading-projected-result" data-testid="projected-result-card">
-                <div class="hearth-analytical-head">
-                    <div>
-                        <h2 id="heading-projected-result" class="hearth-card-title">Resultado por competência</h2>
-                        <p class="hearth-card-meta">
-                            Leitura analítica de @HearthFormat.MonthYear(_selectedMonth) independente da data de pagamento
-                            @if (ActiveConditionName is { } filterLabel)
-                            {
-                                <span class="hearth-inline-filter-tag">Cartão: @filterLabel</span>
-                            }
-                        </p>
-                    </div>
-
-                    <span class="hearth-status-pill @(GetProjectedPillClass(_projectedResult.Result))">
-                        @(_projectedResult.Result > 0 ? "Superávit" : _projectedResult.Result < 0 ? "Déficit" : "Equilibrado")
+        @* ROW 1 — 4 Equal-Height Columns (Decision & Hub) *@
+        <div class="hearth-hub-row1" data-testid="dashboard-row-1">
+            @* 1. SALDO (Real Cash Balance) *@
+            <section class="hearth-card hearth-kpi-card" aria-labelledby="heading-balance" data-testid="dashboard-balance-card">
+                <div class="hearth-kpi-card-head">
+                    <h2 id="heading-balance" class="hearth-kpi-card-label">SALDO</h2>
+                    <span class="hearth-neutral-icon" aria-hidden="true">
+                        <svg viewBox="0 0 20 20" fill="none">
+                            <rect x="2.5" y="4.5" width="15" height="11" rx="2.5" stroke="currentColor" stroke-width="1.5" />
+                            <path d="M13 10H17.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+                            <circle cx="13.5" cy="10" r="1" fill="currentColor" />
+                        </svg>
                     </span>
                 </div>
 
-                <div class="hearth-analytical-grid">
-                    <div class="hearth-analytical-hero">
-                        <span class="hearth-kpi-caption">Balanço do mês (competência)</span>
-                        <p class="hearth-kpi-value @(GetProjectedToneClass(_projectedResult.Result))"
-                           data-testid="projected-result-value">
-                            @HearthFormat.Money(_projectedResult.Result)
-                        </p>
-                    </div>
+                <p class="hearth-kpi-card-value hearth-money @(balance.Amount < 0m ? "is-danger" : "is-primary")"
+                   data-testid="real-balance-value">
+                    @HearthFormat.Money(balance.Amount)
+                </p>
 
-                    <dl class="hearth-analytical-metrics">
-                        <div class="hearth-analytical-metric">
-                            <dt>Receitas</dt>
-                            <dd class="hearth-money hearth-money--positive">@HearthFormat.Money(_projectedResult.Incomes)</dd>
-                        </div>
-                        <div class="hearth-analytical-metric">
-                            <dt>Cartão (fechamento)</dt>
-                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.CardInvoice)</dd>
-                        </div>
-                        <div class="hearth-analytical-metric">
-                            <dt>Fixas</dt>
-                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.FixedExpenses)</dd>
-                        </div>
-                        <div class="hearth-analytical-metric">
-                            <dt>Diretos</dt>
-                            <dd class="hearth-money">@HearthFormat.Money(_projectedResult.DirectExpenses)</dd>
-                        </div>
-                    </dl>
+                <div class="hearth-kpi-card-meta">
+                    <span class="hearth-kpi-caption-line">Posição em @HearthFormat.Date(balance.AsOfDate)</span>
+                    @if (_selectedConditionId.HasValue)
+                    {
+                        <span class="hearth-kpi-unfiltered-note" data-testid="real-balance-unfiltered-note">
+                            Não afetado pelo filtro de condição
+                        </span>
+                    }
                 </div>
 
-                <div class="hearth-analytical-commitment">
-                    <div class="hearth-commitment-head">
-                        <span>Comprometimento da receita</span>
-                        <span class="hearth-money">
-                            @if (_projectedResult.Incomes > 0m)
-                            {
-                                @($"{HearthFormat.Money(totalOutflows)} ({HearthFormat.Percentage(commitmentPct)})")
-                            }
-                            else
-                            {
-                                @HearthFormat.Money(totalOutflows)
-                            }
-                        </span>
+                <div class="hearth-kpi-card-actions">
+                    <button type="button"
+                            class="hearth-inline-text-btn @(_activeRow1Panel == Row1Panel.BalanceComposition ? "is-active" : null)"
+                            aria-expanded="@(_activeRow1Panel == Row1Panel.BalanceComposition ? "true" : "false")"
+                            @onclick="ToggleBalanceComposition"
+                            data-testid="toggle-real-balance-details">
+                        @(_activeRow1Panel == Row1Panel.BalanceComposition ? "Ocultar composição" : "Ver composição")
+                    </button>
+                    <button type="button"
+                            class="hearth-inline-text-btn @(_activeRow1Panel == Row1Panel.SetBalance ? "is-active" : null)"
+                            aria-expanded="@(_activeRow1Panel == Row1Panel.SetBalance ? "true" : "false")"
+                            @onclick="StartSetBalance"
+                            data-testid="set-balance-button">
+                        Saldo inicial
+                    </button>
+                </div>
+            </section>
+
+            @* 2. Fatura Atual *@
+            <section class="hearth-card hearth-kpi-card" aria-labelledby="heading-current-invoice" data-testid="dashboard-invoice-card">
+                <div class="hearth-kpi-card-head">
+                    <h2 id="heading-current-invoice" class="hearth-kpi-card-label">Fatura Atual</h2>
+                    <a href="/cartao?aba=fatura" class="hearth-neutral-icon-link" title="Abrir fatura e cartão" aria-label="Abrir fatura e cartão">
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                            <rect x="2.5" y="4.5" width="15" height="11" rx="2.2" stroke="currentColor" stroke-width="1.5" />
+                            <path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.5" />
+                        </svg>
+                    </a>
+                </div>
+
+                @if (!invoice.HasActiveCard && invoice.CycleAmount == 0m && invoice.FutureInstallmentsTotal == 0m)
+                {
+                    <div class="hearth-kpi-empty" data-testid="dashboard-no-card-state">
+                        <p class="hearth-kpi-subtitle-line">Nenhum cartão ativo cadastrado.</p>
+                        <a href="/cartao" class="hearth-inline-link" data-testid="dashboard-configure-card-link">
+                            Cadastrar cartão &rarr;
+                        </a>
                     </div>
-                    <div class="hearth-meter hearth-meter--slim" role="presentation">
-                        <span class="hearth-meter-fill @(commitmentPct > 100m ? "is-danger" : commitmentPct >= 80m ? "is-warning" : "is-positive")"
-                              style="width: @(commitmentBarWidth.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture))%;"></span>
+                }
+                else
+                {
+                    <p class="hearth-kpi-card-value hearth-money is-primary" data-testid="dashboard-invoice-amount">
+                        @HearthFormat.Money(invoice.CycleAmount)
+                    </p>
+
+                    <div class="hearth-kpi-card-meta">
+                        <div class="hearth-invoice-meta-line">
+                            @if (invoice.DueDate.HasValue)
+                            {
+                                <span class="hearth-kpi-caption-line">
+                                    Venc. @invoice.DueDate.Value.ToString("dd/MM", HearthFormat.PtBr)
+                                </span>
+                            }
+                            else if (!string.IsNullOrWhiteSpace(invoice.CardName))
+                            {
+                                <span class="hearth-kpi-caption-line">@invoice.CardName</span>
+                            }
+
+                            @if (invoice.Status is { } status)
+                            {
+                                <span class="hearth-invoice-status-tag @GetInvoiceStatusClass(status)" data-testid="dashboard-invoice-status">
+                                    @GetInvoiceStatusLabel(status)
+                                </span>
+                            }
+                        </div>
+                        @if (invoice.BillingMonth != _selectedMonth)
+                        {
+                            <span class="hearth-kpi-subtitle-line">
+                                Ciclo @HearthFormat.ShortMonthYear(invoice.BillingMonth)
+                            </span>
+                        }
+                    </div>
+
+                    <div class="hearth-invoice-future-pill hearth-money" data-testid="dashboard-future-installments">
+                        + @HearthFormat.Money(invoice.FutureInstallmentsTotal) parcelado futuro
+                    </div>
+                }
+            </section>
+
+            @* 3. Interactive 3-in-1 Card: Summary (Receita + Despesa) <-> Receita View <-> Despesa View *@
+            <section class="hearth-card hearth-flow-stack-card @(_flowCardView == FlowCardView.Income ? "is-income-view" : _flowCardView == FlowCardView.Expenses ? "is-expenses-view" : null)"
+                     aria-label="Receita e despesa do mês"
+                     data-testid="dashboard-flow-stack-card">
+                @if (_flowCardView == FlowCardView.Summary)
+                {
+                    <button type="button"
+                            class="hearth-flow-half hearth-flow-half-btn"
+                            @onclick="() => _flowCardView = FlowCardView.Income"
+                            data-testid="flow-open-income">
+                        <div class="hearth-flow-half-copy">
+                            <span class="hearth-kpi-card-label">Receita do Mês</span>
+                            <strong class="hearth-flow-half-value hearth-money is-positive" data-testid="dashboard-monthly-income">
+                                @HearthFormat.Money(flow.MonthlyIncome)
+                            </strong>
+                        </div>
+                        <span class="hearth-flow-arrow is-positive" aria-hidden="true">
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M10 15V5M10 5L5.5 9.5M10 5L14.5 9.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </span>
+                    </button>
+
+                    <div class="hearth-flow-divider" role="separator"></div>
+
+                    <button type="button"
+                            class="hearth-flow-half hearth-flow-half-btn"
+                            @onclick="() => _flowCardView = FlowCardView.Expenses"
+                            data-testid="flow-open-expenses">
+                        <div class="hearth-flow-half-copy">
+                            <span class="hearth-kpi-card-label">Despesa Total</span>
+                            <strong class="hearth-flow-half-value hearth-money is-danger" data-testid="dashboard-monthly-expenses">
+                                @(flow.TotalExpenses > 0m ? $"-{HearthFormat.Money(flow.TotalExpenses)}" : HearthFormat.Money(0m))
+                            </strong>
+                        </div>
+                        <span class="hearth-flow-arrow is-danger" aria-hidden="true">
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M10 5V15M10 15L5.5 10.5M10 15L14.5 10.5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </span>
+                    </button>
+                }
+                else if (_flowCardView == FlowCardView.Income)
+                {
+                    var incomeEntries = flow.IncomeEntries ?? [];
+                    <div class="hearth-flow-detail-view" data-testid="flow-income-view">
+                        <div class="hearth-flow-detail-head">
+                            <span class="hearth-kpi-card-label">Receita do Mês</span>
+                            <button type="button"
+                                    class="hearth-inline-text-btn"
+                                    @onclick="() => _flowCardView = FlowCardView.Summary"
+                                    data-testid="flow-back-summary">
+                                &larr; Voltar
+                            </button>
+                        </div>
+
+                        <strong class="hearth-flow-detail-total hearth-money is-positive" data-testid="flow-comp-income">
+                            @HearthFormat.Money(flow.MonthlyIncome)
+                        </strong>
+
+                        @if (incomeEntries.Count == 0)
+                        {
+                            <p class="hearth-flow-detail-empty">Sem receitas registradas neste mês.</p>
+                        }
+                        else
+                        {
+                            <ul class="hearth-flow-detail-list">
+                                @foreach (var item in incomeEntries.Take(3))
+                                {
+                                    <li class="hearth-flow-detail-row">
+                                        <span class="hearth-flow-detail-label" title="@item.Description">@item.Description</span>
+                                        <span class="hearth-flow-detail-val hearth-money is-positive">@HearthFormat.Money(item.Amount)</span>
+                                    </li>
+                                }
+                            </ul>
+                        }
+
+                        <div class="hearth-flow-detail-foot">
+                            <a href="/receitas" class="hearth-inline-text-btn">Abrir receitas &rarr;</a>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="hearth-flow-detail-view" data-testid="flow-expenses-view">
+                        <div class="hearth-flow-detail-head">
+                            <span class="hearth-kpi-card-label">Despesa Total</span>
+                            <button type="button"
+                                    class="hearth-inline-text-btn"
+                                    @onclick="() => _flowCardView = FlowCardView.Summary"
+                                    data-testid="flow-back-summary">
+                                &larr; Voltar
+                            </button>
+                        </div>
+
+                        <strong class="hearth-flow-detail-total hearth-money is-danger" data-testid="flow-comp-expenses-total">
+                            @(flow.TotalExpenses > 0m ? $"-{HearthFormat.Money(flow.TotalExpenses)}" : HearthFormat.Money(0m))
+                        </strong>
+
+                        <dl class="hearth-flow-detail-list">
+                            <div class="hearth-flow-detail-row">
+                                <dt><a href="/gastos-diretos" class="hearth-flow-detail-link">Gastos diretos</a></dt>
+                                <dd class="hearth-flow-detail-val hearth-money" data-testid="flow-comp-direct">@HearthFormat.Money(flow.DirectExpenses)</dd>
+                            </div>
+                            <div class="hearth-flow-detail-row">
+                                <dt><a href="/despesas-fixas" class="hearth-flow-detail-link">Despesas fixas</a></dt>
+                                <dd class="hearth-flow-detail-val hearth-money" data-testid="flow-comp-fixed">@HearthFormat.Money(flow.FixedExpenses)</dd>
+                            </div>
+                            <div class="hearth-flow-detail-row">
+                                <dt><a href="/cartao?aba=fatura" class="hearth-flow-detail-link">Fatura do cartão</a></dt>
+                                <dd class="hearth-flow-detail-val hearth-money" data-testid="flow-comp-card">@HearthFormat.Money(flow.CardInvoice)</dd>
+                            </div>
+                        </dl>
+                    </div>
+                }
+            </section>
+
+            @* 4. Resultado do Mês (Isolated Net Monthly Balance) *@
+            @{
+                var resultCardClass = flow.MonthlyResult > 0m
+                    ? "is-positive"
+                    : flow.MonthlyResult < 0m
+                        ? "is-danger"
+                        : "is-neutral";
+            }
+            <section class="hearth-card hearth-kpi-card hearth-result-kpi-card @resultCardClass"
+                     aria-labelledby="heading-monthly-result"
+                     data-testid="dashboard-monthly-result-card">
+                <div class="hearth-kpi-card-head">
+                    <h2 id="heading-monthly-result" class="hearth-kpi-card-label">Resultado do Mês</h2>
+                    <span class="hearth-result-trend-icon @resultCardClass" aria-hidden="true">
+                        @if (flow.MonthlyResult < 0m)
+                        {
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M4.5 6.5L15.5 14.5M15.5 14.5H9.5M15.5 14.5V8.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        }
+                        else
+                        {
+                            <svg viewBox="0 0 20 20" fill="none">
+                                <path d="M4.5 14.5L15.5 5.5M15.5 5.5H9.5M15.5 5.5V11.5" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        }
+                    </span>
+                </div>
+
+                <p class="hearth-kpi-card-value hearth-money @resultCardClass" data-testid="dashboard-monthly-result-value">
+                    @HearthFormat.Money(flow.MonthlyResult)
+                </p>
+
+                <div class="hearth-kpi-card-meta">
+                    <span class="hearth-kpi-subtitle-line">Balanço do mês corrente</span>
+                    @if (ActiveConditionName is { } filterName)
+                    {
+                        <span class="hearth-inline-filter-tag hearth-inline-filter-tag--compact">Condição: @filterName</span>
+                    }
+                </div>
+            </section>
+        </div>
+
+        @* Expandable Detail Tray beneath Row 1 (keeps all 4 Row 1 cards strictly equal height) *@
+        @if (_activeRow1Panel == Row1Panel.BalanceComposition)
+        {
+            <section class="hearth-card hearth-row1-tray-card" aria-label="Composição do saldo real" data-testid="balance-composition-drawer">
+                <div class="hearth-row1-tray-head">
+                    <div>
+                        <h3 class="hearth-row1-tray-title">Composição do saldo real</h3>
+                        <p class="hearth-card-meta">
+                            @($"Saldo inicial em {(TrackingStartDate.HasValue ? HearthFormat.Date(TrackingStartDate.Value) : "dia 1º")} com entradas e saídas efetivadas até {HearthFormat.Date(balance.AsOfDate)}.")
+                        </p>
+                    </div>
+                    <div class="hearth-row1-tray-controls">
+                        <button type="button" class="hearth-subtle-action" @onclick="CloseRow1Panel">Fechar</button>
+                    </div>
+                </div>
+
+                <dl class="hearth-tray-grid hearth-money">
+                    <div class="hearth-tray-cell" data-testid="balance-composition-initial">
+                        <dt>Saldo inicial (@(TrackingStartDate.HasValue ? HearthFormat.Date(TrackingStartDate.Value) : "dia 1º"))</dt>
+                        <dd class="@(balance.InitialBalance > 0m ? "hearth-money--positive" : balance.InitialBalance < 0m ? "hearth-money--negative" : null)">
+                            @HearthFormat.Money(balance.InitialBalance)
+                        </dd>
+                    </div>
+                    <div class="hearth-tray-cell">
+                        <dt><span class="hearth-sign-positive">+</span> Receitas recebidas</dt>
+                        <dd class="hearth-money--positive">@HearthFormat.Money(balance.ReceivedIncomes)</dd>
+                    </div>
+                    <div class="hearth-tray-cell">
+                        <dt><span class="hearth-sign-negative">&minus;</span> Gastos diretos</dt>
+                        <dd>@HearthFormat.Money(balance.DirectExpenses)</dd>
+                    </div>
+                    <div class="hearth-tray-cell">
+                        <dt><span class="hearth-sign-negative">&minus;</span> Despesas fixas pagas</dt>
+                        <dd>@HearthFormat.Money(balance.PaidFixedExpenses)</dd>
+                    </div>
+                    <div class="hearth-tray-cell">
+                        <dt><span class="hearth-sign-negative">&minus;</span> Faturas pagas</dt>
+                        <dd>@HearthFormat.Money(balance.PaidInvoices)</dd>
+                    </div>
+                </dl>
+
+                @if (balance.BalanceHistory is { Count: > 0 } balanceHistory)
+                {
+                    <div class="hearth-adjustments-log-inline" data-testid="balance-composition-history-log">
+                        <span class="hearth-card-meta">Histórico de alterações do saldo inicial (controle de caixa — não entra como receita ou despesa):</span>
+                        <div class="hearth-adjustments-list">
+                            @foreach (var entry in balanceHistory)
+                            {
+                                var entryId = entry.Id;
+                                <div class="hearth-adjustment-row" data-testid="@($"balance-history-row-{entryId}")">
+                                    <div>
+                                        <span class="hearth-adjustment-reason">@(string.IsNullOrWhiteSpace(entry.Reason) ? "Saldo inicial atualizado" : entry.Reason)</span>
+                                        <span class="hearth-adjustment-date">Saldo inicial · @HearthFormat.Date(entry.Date)</span>
+                                    </div>
+                                    <div class="hearth-adjustment-row-right">
+                                        <span class="hearth-money @(entry.Amount > 0m ? "hearth-money--positive" : entry.Amount < 0m ? "hearth-money--negative" : null)">
+                                            @HearthFormat.Money(entry.Amount)
+                                        </span>
+                                        @if (_confirmDeleteBalanceEntryId == entryId)
+                                        {
+                                            <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                                <MudButton Size="Size.Small"
+                                                           Variant="Variant.Filled"
+                                                           Color="Color.Error"
+                                                           Disabled="_deletingBalanceEntry"
+                                                           OnClick="() => DeleteBalanceEntryAsync(entryId)"
+                                                           data-testid="@($"confirm-delete-balance-entry-{entryId}")">
+                                                    Confirmar
+                                                </MudButton>
+                                                <MudButton Size="Size.Small"
+                                                           Variant="Variant.Text"
+                                                           Disabled="_deletingBalanceEntry"
+                                                           OnClick="() => _confirmDeleteBalanceEntryId = null">
+                                                    Cancelar
+                                                </MudButton>
+                                            </MudStack>
+                                        }
+                                        else
+                                        {
+                                            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                           Size="Size.Small"
+                                                           Class="hearth-action-btn is-danger"
+                                                           title="Excluir registro de saldo"
+                                                           aria-label="Excluir registro de saldo"
+                                                           Disabled="_deletingBalanceEntry"
+                                                           OnClick="() => _confirmDeleteBalanceEntryId = entryId"
+                                                           data-testid="@($"delete-balance-entry-{entryId}")" />
+                                        }
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        }
+        else if (_activeRow1Panel == Row1Panel.SetBalance)
+        {
+            <section class="hearth-card hearth-row1-tray-card" aria-label="Alterar saldo inicial" data-testid="set-balance-form">
+                <div class="hearth-row1-tray-head">
+                    <div>
+                        <h3 class="hearth-row1-tray-title">Alterar saldo inicial (@(TrackingStartDate.HasValue ? HearthFormat.Date(TrackingStartDate.Value) : "dia 1º"))</h3>
+                        <p class="hearth-card-meta">Único saldo manual da conta, referente ao dia 1º do mês de entrada (negativo, zero ou positivo). O SALDO atual é sempre calculado automaticamente a partir dele, sem afetar receitas, despesas ou resultado mensal.</p>
+                    </div>
+                </div>
+                <div class="hearth-inline-edit-row hearth-adjustment-form-row">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_definedBalanceAmount"
+                                     Label="@($"Saldo inicial ({(TrackingStartDate.HasValue ? HearthFormat.Date(TrackingStartDate.Value) : "dia 1º")})")"
+                                     Variant="Variant.Outlined"
+                                     Margin="Margin.Dense"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     Immediate="true"
+                                     Disabled="_savingSetBalance"
+                                     Class="hearth-inline-edit-field"
+                                     data-testid="set-balance-amount-input" />
+                    <MudTextField @bind-Value="_definedBalanceReason"
+                                  Label="Motivo (opcional)"
+                                  Variant="Variant.Outlined"
+                                  Margin="Margin.Dense"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_savingSetBalance"
+                                  Class="hearth-adjustment-reason-field"
+                                  data-testid="set-balance-reason-input" />
+                    <div class="hearth-inline-edit-actions">
+                        <button type="button"
+                                class="hearth-subtle-action is-primary"
+                                disabled="@_savingSetBalance"
+                                @onclick="SaveSetBalanceAsync"
+                                data-testid="save-set-balance-button">
+                            @(_savingSetBalance ? "Salvando…" : "Salvar saldo inicial")
+                        </button>
+                        <button type="button"
+                                class="hearth-subtle-action"
+                                disabled="@_savingSetBalance"
+                                @onclick="CancelSetBalance">
+                            Cancelar
+                        </button>
                     </div>
                 </div>
             </section>
         }
+
+        @* ROW 2 — 2 Columns (Performance & Distribution) *@
+        <div class="hearth-hub-row2" data-testid="dashboard-row-2">
+            <MonthlyResultChart Points="_dashboard.MonthlyResultHistory"
+                                SelectedMonth="_selectedMonth"
+                                MonthSelected="OnMonthChangedAsync" />
+
+            <CategorySpendingDonut Items="_dashboard.CategorySpending" />
+        </div>
+
+        @* ROW 3 — 3 Columns (Flow, Habit & Horizon) *@
+        <div class="hearth-hub-row3" data-testid="dashboard-row-3">
+            @* 1. Left — Atividades recentes *@
+            <section class="hearth-card hearth-activities-card" aria-labelledby="heading-recent-activities" data-testid="dashboard-recent-activities-card">
+                <div class="hearth-module-head">
+                    <h2 id="heading-recent-activities" class="hearth-card-title">Atividades recentes</h2>
+                    <a href="/atividades" class="hearth-inline-link" data-testid="recent-activities-view-all">Ver todas</a>
+                </div>
+
+                @if (_dashboard.RecentActivities.Count == 0)
+                {
+                    <EmptyState Compact="true"
+                                Title="Nenhuma atividade neste mês"
+                                Description="Use &quot;+ Novo lançamento&quot; para registrar receitas, despesas ou compras no cartão."
+                                TestId="recent-activities-empty-state" />
+                }
+                else
+                {
+                    <ul class="hearth-activity-list" data-testid="recent-activities-list">
+                        @foreach (var activity in _dashboard.RecentActivities)
+                        {
+                            var isIncome = activity.Amount >= 0m;
+                            var isPending = string.Equals(activity.StatusLabel, "Previsto", StringComparison.OrdinalIgnoreCase);
+                            <li class="hearth-activity-item">
+                                <span class="hearth-activity-icon" aria-hidden="true">
+                                    @RenderActivityIcon(activity.CategoryIcon)
+                                </span>
+                                <div class="hearth-activity-copy">
+                                    <span class="hearth-activity-desc">@activity.Description</span>
+                                    <span class="hearth-activity-meta">
+                                        <span class="hearth-activity-date hearth-money">@activity.Date.ToString("dd/MM", HearthFormat.PtBr)</span>
+                                        @if (isPending)
+                                        {
+                                            <span class="hearth-activity-status-tag">Previsto</span>
+                                        }
+                                    </span>
+                                </div>
+                                <strong class="hearth-activity-amount hearth-money @(isIncome ? "is-positive" : "is-danger")">
+                                    @(isIncome ? $"+{HearthFormat.Money(activity.Amount)}" : $"-{HearthFormat.Money(Math.Abs(activity.Amount))}")
+                                </strong>
+                            </li>
+                        }
+                    </ul>
+                }
+            </section>
+
+            @* 2. Center — Taxa de Poupança *@
+            <SavingsRateRing Percentage="flow.SavingsRatePercentage"
+                             HasActivity="flow.OwnMonthlyIncome > 0m" />
+
+            @* 3. Right — Estimativa do próximo mês (Strictly Isolated M + 1 Horizon Card) *@
+            <section class="hearth-card hearth-next-month-card" aria-labelledby="heading-next-month" data-testid="dashboard-next-month-card">
+                @if (nextMonth is null)
+                {
+                    <div class="hearth-next-month-head">
+                        <h2 id="heading-next-month" class="hearth-card-title">Estimativa do próximo mês</h2>
+                    </div>
+                    <EmptyState Compact="true"
+                                Title="Limite de calendário atingido"
+                                Description="Não há período posterior disponível para projeção." />
+                }
+                else
+                {
+                    var commitmentRatio = nextMonth.EstimatedIncome > 0m
+                        ? Math.Round((nextMonth.EstimatedCommitments / nextMonth.EstimatedIncome) * 100m, 1, MidpointRounding.AwayFromZero)
+                        : nextMonth.EstimatedCommitments > 0m ? 100m : 0m;
+                    var commitmentFillPct = Math.Clamp((double)commitmentRatio, 0.0, 100.0);
+                    var commitmentHigh = nextMonth.EstimatedIncome <= 0m
+                        ? nextMonth.EstimatedCommitments > 0m
+                        : commitmentRatio > 80m;
+
+                    <div class="hearth-next-month-head">
+                        <h2 id="heading-next-month" class="hearth-card-title">Estimativa do próximo mês</h2>
+                        <span class="hearth-next-month-badge" data-testid="next-month-badge">
+                            @HearthFormat.MonthYear(nextMonth.NextYearMonth)
+                        </span>
+                    </div>
+
+                    <div class="hearth-next-month-bar-block" data-testid="next-month-commitment-bar">
+                        <div class="hearth-next-month-bar-meta">
+                            <span>Compromissos vs. Entrada</span>
+                            <strong class="hearth-money @(commitmentHigh ? "is-danger" : "is-positive")">
+                                @(nextMonth.EstimatedIncome > 0m
+                                    ? $"{HearthFormat.Percentage(commitmentRatio)} comprometido"
+                                    : nextMonth.EstimatedCommitments > 0m ? "Sem entrada prevista" : "Sem compromissos")
+                            </strong>
+                        </div>
+                        <div class="hearth-next-month-track" aria-hidden="true">
+                            <span class="hearth-next-month-fill @(commitmentHigh ? "is-danger" : "is-positive")"
+                                  style="@($"width: {commitmentFillPct.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture)}%;")"></span>
+                        </div>
+                    </div>
+
+                    <dl class="hearth-next-month-table">
+                        <div class="hearth-next-month-row">
+                            <dt>
+                                <span class="hearth-nm-dot is-positive" aria-hidden="true"></span>
+                                Entrada estimada
+                            </dt>
+                            <dd class="hearth-money is-positive" data-testid="next-month-income">
+                                @HearthFormat.Money(nextMonth.EstimatedIncome)
+                            </dd>
+                        </div>
+                        <div class="hearth-next-month-row">
+                            <dt>
+                                <span class="hearth-nm-dot is-muted" aria-hidden="true"></span>
+                                Despesas fixas estimadas
+                            </dt>
+                            <dd class="hearth-money" data-testid="next-month-fixed">
+                                @HearthFormat.Money(nextMonth.EstimatedFixedExpenses)
+                            </dd>
+                        </div>
+                        <div class="hearth-next-month-row">
+                            <dt>
+                                <span class="hearth-nm-dot is-danger" aria-hidden="true"></span>
+                                Parcelas no cartão
+                            </dt>
+                            <dd class="hearth-money" data-testid="next-month-installments">
+                                @HearthFormat.Money(nextMonth.EstimatedCardInstallments)
+                            </dd>
+                        </div>
+                        @if (nextMonth.EstimatedDirectExpenses > 0m)
+                        {
+                            <div class="hearth-next-month-row">
+                                <dt>
+                                    <span class="hearth-nm-dot is-muted" aria-hidden="true"></span>
+                                    Gastos diretos agendados
+                                </dt>
+                                <dd class="hearth-money" data-testid="next-month-direct">
+                                    @HearthFormat.Money(nextMonth.EstimatedDirectExpenses)
+                                </dd>
+                            </div>
+                        }
+                        <div class="hearth-next-month-row hearth-next-month-row--outflows">
+                            <dt>Compromissos estimados</dt>
+                            <dd class="hearth-money" data-testid="next-month-expenses">
+                                @HearthFormat.Money(nextMonth.EstimatedCommitments)
+                            </dd>
+                        </div>
+                    </dl>
+
+                    <div class="hearth-next-month-summary-footer">
+                        <div class="hearth-nm-summary-cell">
+                            <span class="hearth-nm-summary-label">Resultado projetado</span>
+                            <strong class="hearth-nm-summary-value hearth-nm-summary-value--hero hearth-money @(nextMonth.ProjectedResult > 0m ? "is-positive" : nextMonth.ProjectedResult < 0m ? "is-danger" : null)"
+                                    data-testid="next-month-projected-result">
+                                @HearthFormat.Money(nextMonth.ProjectedResult)
+                            </strong>
+                        </div>
+                        <div class="hearth-nm-summary-divider" aria-hidden="true"></div>
+                        <div class="hearth-nm-summary-cell">
+                            <span class="hearth-nm-summary-label">Poupança estimada</span>
+                            <strong class="hearth-nm-summary-value hearth-money @(nextMonth.EstimatedSavingsRatePercentage >= 20m ? "is-positive" : nextMonth.EstimatedSavingsRatePercentage <= 0m && nextMonth.ProjectedResult < 0m ? "is-danger" : null)"
+                                    data-testid="next-month-savings-rate">
+                                @HearthFormat.Percentage(nextMonth.EstimatedSavingsRatePercentage)
+                            </strong>
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
     }
 </div>
 
@@ -768,45 +798,42 @@
 {
     private const int MaxVisibleConditions = 4;
 
+    private enum Row1Panel
+    {
+        None = 0,
+        BalanceComposition = 1,
+        SetBalance = 2,
+    }
+
+    private enum FlowCardView
+    {
+        Summary = 0,
+        Income = 1,
+        Expenses = 2,
+    }
+
     private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
     private DateOnly _realBalanceUntil;
 
-    private bool _includeCard = true;
-    private bool _includeFixed = true;
-    private bool _includeDirect = true;
     private Guid? _selectedConditionId;
     private Guid? _promotedConditionId;
     private bool _overflowOpen;
+    private bool _quickLaunchOpen;
     private IReadOnlyList<PurchaseConditionDto> _conditions = [];
 
-    private bool _showRealBalanceDetails;
-    private bool _showSurplusDetails;
-    private bool _editingInitialBalance;
-    private decimal _editInitialBalanceAmount;
-    private bool _savingInitialBalance;
+    private Row1Panel _activeRow1Panel = Row1Panel.None;
+    private FlowCardView _flowCardView = FlowCardView.Summary;
+    private decimal _definedBalanceAmount;
+    private string _definedBalanceReason = string.Empty;
+    private bool _savingSetBalance;
+    private Guid? _confirmDeleteBalanceEntryId;
+    private bool _deletingBalanceEntry;
 
-    private RealBalanceDto? _realBalance;
-    private MonthlySurplusDto? _monthlySurplus;
-    private ProjectedResultDto? _projectedResult;
-    private InvoiceSummaryDto? _invoiceSummary;
-    private CreditCardDto? _activeCard;
-    private BudgetStatusDto? _budgetStatus;
-    private CategorySpendingDto? _categorySpending;
+    private MonthlyDashboardDto? _dashboard;
     private bool _loading = true;
 
     public DashboardViewModel State =>
-        new(
-            _selectedMonth,
-            _realBalanceUntil,
-            _selectedConditionId,
-            _conditions,
-            _realBalance,
-            _monthlySurplus,
-            _invoiceSummary,
-            _projectedResult,
-            _activeCard,
-            _budgetStatus,
-            _categorySpending);
+        new(_selectedMonth, _realBalanceUntil, _selectedConditionId, _conditions, _dashboard);
 
     private string? ActiveConditionName =>
         _selectedConditionId.HasValue
@@ -819,14 +846,33 @@
         _realBalanceUntil = Clock.Today;
     }
 
+    protected override void OnAccountChanged()
+    {
+        _activeRow1Panel = Row1Panel.None;
+        _flowCardView = FlowCardView.Summary;
+        _definedBalanceAmount = 0m;
+        _definedBalanceReason = string.Empty;
+        _confirmDeleteBalanceEntryId = null;
+        _overflowOpen = false;
+        _quickLaunchOpen = false;
+    }
+
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
         _loading = true;
 
-        await LoadRealBalanceAsync(cancellationToken);
-        await LoadActiveCardAsync(cancellationToken);
+        if (TrackingStartPeriod is { } minMonth && _selectedMonth < minMonth)
+        {
+            _selectedMonth = minMonth;
+        }
+
+        if (TrackingStartDate is { } minDate && _realBalanceUntil < minDate)
+        {
+            _realBalanceUntil = Clock.Today >= minDate ? Clock.Today : minDate;
+        }
+
         await LoadConditionsAsync(cancellationToken);
-        await LoadMonthDataAsync(cancellationToken);
+        await LoadDashboardAsync(cancellationToken);
 
         _loading = false;
     }
@@ -868,47 +914,6 @@
                 ? "dashboard-condition-others"
                 : $"dashboard-condition-custom-{condition.Name}";
 
-    private static List<CashCompositionRow> GetCashCompositionRows(RealBalanceDto balance, bool includeZero)
-    {
-        CashCompositionRow[] all =
-        [
-            new(string.Empty, "Saldo inicial", balance.InitialBalance),
-            new("+", "Receitas recebidas", balance.Incomes),
-            new("-", "Gastos diretos", balance.DirectExpenses),
-            new("-", "Despesas fixas pagas", balance.FixedExpenses),
-            new("-", "Faturas pagas", balance.CardInvoices),
-        ];
-
-        return includeZero
-            ? [.. all]
-            : all.Where(row => row.Amount != 0m).ToList();
-    }
-
-    private async Task LoadRealBalanceAsync(CancellationToken cancellationToken)
-    {
-        var result = await Executor.ExecuteAsync<GetRealBalanceHandler, RealBalanceDto>(
-            (handler, ct) => handler.ExecuteAsync(new GetRealBalanceQuery(AccountId, _realBalanceUntil), ct),
-            cancellationToken: cancellationToken);
-
-        if (result.IsSuccess && result.Value is not null)
-        {
-            _realBalance = result.Value;
-        }
-    }
-
-    private async Task LoadActiveCardAsync(CancellationToken cancellationToken)
-    {
-        var result = await Executor.ExecuteAsync<GetActiveCreditCardHandler, CreditCardDto?>(
-            (handler, ct) => handler.ExecuteAsync(new GetActiveCreditCardQuery(AccountId), ct),
-            showErrorSnackbar: false,
-            cancellationToken: cancellationToken);
-
-        if (result.IsSuccess)
-        {
-            _activeCard = result.Value;
-        }
-    }
-
     private async Task LoadConditionsAsync(CancellationToken cancellationToken)
     {
         var result = await Executor.ExecuteAsync<ListPurchaseConditionsHandler, IReadOnlyList<PurchaseConditionDto>>(
@@ -921,153 +926,130 @@
         }
     }
 
-    private async Task LoadMonthDataAsync(CancellationToken cancellationToken)
+    private async Task LoadDashboardAsync(CancellationToken cancellationToken)
     {
-        var surplusResult = await Executor.ExecuteAsync<GetMonthlySurplusHandler, MonthlySurplusDto>(
+        var result = await Executor.ExecuteAsync<GetMonthlyDashboardHandler, MonthlyDashboardDto>(
             (handler, ct) => handler.ExecuteAsync(
-                new GetMonthlySurplusQuery(
+                new GetMonthlyDashboardQuery(
                     AccountId,
-                    _selectedMonth.Year,
-                    _selectedMonth.Month,
-                    ConditionId: _selectedConditionId),
-                ct),
-            cancellationToken: cancellationToken);
-
-        if (surplusResult.IsSuccess && surplusResult.Value is not null)
-        {
-            _monthlySurplus = surplusResult.Value;
-        }
-
-        var projectedResult = await Executor.ExecuteAsync<GetProjectedResultHandler, ProjectedResultDto>(
-            (handler, ct) => handler.ExecuteAsync(
-                new GetProjectedResultQuery(
-                    AccountId,
-                    _selectedMonth.Year,
-                    _selectedMonth.Month,
-                    _selectedConditionId),
-                ct),
-            cancellationToken: cancellationToken);
-
-        if (projectedResult.IsSuccess && projectedResult.Value is not null)
-        {
-            _projectedResult = projectedResult.Value;
-        }
-
-        var invoiceResult = await Executor.ExecuteAsync<GetInvoiceSummaryHandler, InvoiceSummaryDto>(
-            (handler, ct) => handler.ExecuteAsync(
-                new GetInvoiceSummaryQuery(
-                    AccountId,
-                    _selectedMonth.Year,
-                    _selectedMonth.Month,
+                    _selectedMonth,
                     _selectedConditionId,
-                    InvoiceMonthBasis.DueMonth),
+                    _realBalanceUntil),
                 ct),
             cancellationToken: cancellationToken);
 
-        if (invoiceResult.IsSuccess && invoiceResult.Value is not null)
+        if (result.IsSuccess && result.Value is not null)
         {
-            _invoiceSummary = invoiceResult.Value;
-        }
-
-        await LoadBudgetStatusAsync(cancellationToken);
-        await LoadCategorySpendingAsync(cancellationToken);
-    }
-
-    private async Task LoadBudgetStatusAsync(CancellationToken cancellationToken)
-    {
-        IReadOnlyList<Guid>? conditionIds = _selectedConditionId.HasValue
-            ? [_selectedConditionId.Value]
-            : null;
-
-        var budgetResult = await Executor.ExecuteAsync<GetBudgetStatusHandler, BudgetStatusDto>(
-            (handler, ct) => handler.ExecuteAsync(
-                new GetBudgetStatusQuery(
-                    AccountId,
-                    _selectedMonth.Year,
-                    _selectedMonth.Month,
-                    IncludeDirectExpenses: true,
-                    IncludeFixedExpenses: true,
-                    IncludeCardInstallments: true,
-                    IncludedConditionIds: conditionIds),
-                ct),
-            cancellationToken: cancellationToken);
-
-        if (budgetResult.IsSuccess && budgetResult.Value is not null)
-        {
-            _budgetStatus = budgetResult.Value;
+            _dashboard = result.Value;
         }
     }
 
-    private async Task LoadCategorySpendingAsync(CancellationToken cancellationToken)
+    private void ToggleBalanceComposition() =>
+        _activeRow1Panel = _activeRow1Panel == Row1Panel.BalanceComposition
+            ? Row1Panel.None
+            : Row1Panel.BalanceComposition;
+
+    private void CloseRow1Panel() =>
+        _activeRow1Panel = Row1Panel.None;
+
+    private void StartSetBalance()
     {
-        IReadOnlyList<Guid>? conditionIds = _selectedConditionId.HasValue
-            ? [_selectedConditionId.Value]
-            : null;
-
-        var spendingResult = await Executor.ExecuteAsync<GetExpensesByCategoryHandler, CategorySpendingDto>(
-            (handler, ct) => handler.ExecuteAsync(
-                new GetExpensesByCategoryQuery(
-                    AccountId,
-                    _selectedMonth.Year,
-                    _selectedMonth.Month,
-                    IncludeDirectExpenses: _includeDirect,
-                    IncludeFixedExpenses: _includeFixed,
-                    IncludeCardInstallments: _includeCard,
-                    IncludedConditionIds: conditionIds),
-                ct),
-            cancellationToken: cancellationToken);
-
-        if (spendingResult.IsSuccess && spendingResult.Value is not null)
+        if (_activeRow1Panel == Row1Panel.SetBalance)
         {
-            _categorySpending = spendingResult.Value;
+            _activeRow1Panel = Row1Panel.None;
+            return;
         }
+
+        _definedBalanceAmount = _dashboard?.Balance.InitialBalance ?? AccountContext.Current?.InitialBalance ?? 0m;
+        _definedBalanceReason = string.Empty;
+        _activeRow1Panel = Row1Panel.SetBalance;
     }
 
-    private void StartEditInitialBalance()
-    {
-        _editInitialBalanceAmount = _realBalance?.InitialBalance ?? AccountContext.Current?.InitialBalance ?? 0m;
-        _editingInitialBalance = true;
-    }
+    private void CancelSetBalance() =>
+        _activeRow1Panel = Row1Panel.None;
 
-    private void CancelEditInitialBalance()
+    private async Task SaveSetBalanceAsync()
     {
-        _editingInitialBalance = false;
-    }
+        if (_savingSetBalance)
+        {
+            return;
+        }
 
-    private async Task SaveInitialBalanceAsync()
-    {
-        _savingInitialBalance = true;
+        _savingSetBalance = true;
         try
         {
-            var isConfirmed = AccountContext.Current?.IsInitialBalanceConfirmed ?? true;
-            var result = isConfirmed
-                ? await Executor.ExecuteAsync<UpdateInitialBalanceHandler>(
-                    (handler, ct) => handler.ExecuteAsync(new UpdateInitialBalanceCommand(AccountId, _editInitialBalanceAmount), ct),
-                    successMessage: "Saldo inicial atualizado.",
-                    cancellationToken: ComponentCancellationToken)
-                : await Executor.ExecuteAsync<ConfirmInitialBalanceHandler>(
-                    (handler, ct) => handler.ExecuteAsync(new ConfirmInitialBalanceCommand(AccountId, _editInitialBalanceAmount, Skip: false), ct),
-                    successMessage: "Saldo inicial confirmado.",
-                    cancellationToken: ComponentCancellationToken);
+            var result = await Executor.ExecuteAsync<SetAccountBalanceHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new SetAccountBalanceCommand(
+                        AccountId,
+                        _definedBalanceAmount,
+                        string.IsNullOrWhiteSpace(_definedBalanceReason) ? null : _definedBalanceReason.Trim()),
+                    ct),
+                successMessage: "Saldo inicial atualizado com sucesso.",
+                cancellationToken: ComponentCancellationToken);
 
             if (result.IsSuccess)
             {
-                _editingInitialBalance = false;
-                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
-                await LoadRealBalanceAsync(ComponentCancellationToken);
-                await LoadMonthDataAsync(ComponentCancellationToken);
+                _activeRow1Panel = Row1Panel.None;
+                _definedBalanceReason = string.Empty;
+                await ReloadAccountContextAsync(AccountId, ComponentCancellationToken);
+                await LoadDashboardAsync(ComponentCancellationToken);
             }
         }
         finally
         {
-            _savingInitialBalance = false;
+            _savingSetBalance = false;
+        }
+    }
+
+    private async Task DeleteBalanceEntryAsync(Guid adjustmentId)
+    {
+        if (_deletingBalanceEntry)
+        {
+            return;
+        }
+
+        _deletingBalanceEntry = true;
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteBalanceAdjustmentHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteBalanceAdjustmentCommand(AccountId, adjustmentId), ct),
+                successMessage: "Registro de saldo excluído.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteBalanceEntryId = null;
+                await ReloadAccountContextAsync(AccountId, ComponentCancellationToken);
+                await LoadDashboardAsync(ComponentCancellationToken);
+            }
+        }
+        finally
+        {
+            _deletingBalanceEntry = false;
         }
     }
 
     private void ToggleConditionOverflow()
     {
         _overflowOpen = !_overflowOpen;
+        if (_overflowOpen)
+        {
+            _quickLaunchOpen = false;
+        }
     }
+
+    private void ToggleQuickLaunchMenu()
+    {
+        _quickLaunchOpen = !_quickLaunchOpen;
+        if (_quickLaunchOpen)
+        {
+            _overflowOpen = false;
+        }
+    }
+
+    private void CloseQuickLaunchMenu() =>
+        _quickLaunchOpen = false;
 
     private async Task SelectOverflowConditionAsync(Guid conditionId)
     {
@@ -1078,8 +1060,13 @@
 
     private async Task OnMonthChangedAsync(YearMonth month)
     {
+        if (TrackingStartPeriod is { } minMonth && month < minMonth)
+        {
+            return;
+        }
+
         _selectedMonth = month;
-        await LoadMonthDataAsync(ComponentCancellationToken);
+        await LoadDashboardAsync(ComponentCancellationToken);
     }
 
     private async Task OnRealBalanceDateChangedAsync(DateTime? date)
@@ -1089,68 +1076,56 @@
             return;
         }
 
-        _realBalanceUntil = HearthFormat.ToDateOnly(date.Value);
-        await LoadRealBalanceAsync(ComponentCancellationToken);
+        var selected = HearthFormat.ToDateOnly(date.Value);
+        if (selected > Clock.Today)
+        {
+            selected = Clock.Today;
+        }
+
+        if (TrackingStartDate is { } minDate && selected < minDate)
+        {
+            selected = minDate;
+        }
+
+        _realBalanceUntil = selected;
+        await LoadDashboardAsync(ComponentCancellationToken);
     }
 
     private async Task ResetRealBalanceDateAsync()
     {
         _realBalanceUntil = Clock.Today;
-        await LoadRealBalanceAsync(ComponentCancellationToken);
+        await LoadDashboardAsync(ComponentCancellationToken);
     }
 
     private async Task OnConditionFilterChangedAsync(Guid? conditionId)
     {
         _selectedConditionId = conditionId;
         _overflowOpen = false;
-        await LoadMonthDataAsync(ComponentCancellationToken);
+        await LoadDashboardAsync(ComponentCancellationToken);
     }
 
-    private async Task ToggleCardOriginAsync()
+    private static string GetInvoiceStatusLabel(InvoiceStatus status) => status switch
     {
-        _includeCard = !_includeCard;
-        await LoadCategorySpendingAsync(ComponentCancellationToken);
-    }
+        InvoiceStatus.Open => "Aberta",
+        InvoiceStatus.Closed => "Fechada",
+        InvoiceStatus.Paid => "Paga",
+        _ => string.Empty,
+    };
 
-    private async Task ToggleFixedOriginAsync()
+    private static string GetInvoiceStatusClass(InvoiceStatus status) => status switch
     {
-        _includeFixed = !_includeFixed;
-        await LoadCategorySpendingAsync(ComponentCancellationToken);
-    }
+        InvoiceStatus.Open => "is-open",
+        InvoiceStatus.Closed => "is-closed",
+        InvoiceStatus.Paid => "is-paid",
+        _ => string.Empty,
+    };
 
-    private async Task ToggleDirectOriginAsync()
+    private static RenderFragment RenderActivityIcon(string iconKey) => iconKey switch
     {
-        _includeDirect = !_includeDirect;
-        await LoadCategorySpendingAsync(ComponentCancellationToken);
-    }
-
-    private static string GetRealBalanceToneClass(decimal balance) =>
-        balance < 0m ? "is-danger" : "is-primary";
-
-    private static string GetRealBalancePillClass(decimal balance) =>
-        balance < 0m ? "is-danger" : "is-neutral";
-
-    private static string GetProjectedToneClass(decimal result) =>
-        result > 0m ? "is-positive" : result < 0m ? "is-danger" : "is-primary";
-
-    private static string GetProjectedPillClass(decimal result) =>
-        result > 0m ? "is-positive" : result < 0m ? "is-danger" : "is-neutral";
-
-    private static string GetInvoiceStatusLabel(InvoiceStatus? status) =>
-        status switch
-        {
-            InvoiceStatus.Paid => "Paga",
-            InvoiceStatus.Closed => "Fechada",
-            _ => "Em aberto",
-        };
-
-    private static string GetInvoiceStatusPillClass(InvoiceStatus? status) =>
-        status switch
-        {
-            InvoiceStatus.Paid => "is-positive",
-            InvoiceStatus.Closed => "is-info",
-            _ => "is-warning",
-        };
-
-    private sealed record CashCompositionRow(string Sign, string Label, decimal Amount);
+        "income" => @<svg viewBox="0 0 20 20" fill="none"><path d="M4 13.5L8.5 9L11.5 12L16 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /><path d="M12.5 6.5H16V10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>,
+        "card" => @<svg viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.5" /></svg>,
+        "fixed" => @<svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M6.5 3V6M13.5 3V6M3 8.5H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+        "shopping" or "food" => @<svg viewBox="0 0 20 20" fill="none"><path d="M5 7H15L14.2 15.5H5.8L5 7Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M7.5 7V5.8C7.5 4.5 8.6 3.5 10 3.5C11.4 3.5 12.5 4.5 12.5 5.8V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+        _ => @<svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5" /><path d="M10 7V13M7 10H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+    };
 }

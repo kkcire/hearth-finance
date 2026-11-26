@@ -1,20 +1,24 @@
 <div class="hearth-month-nav" role="group" aria-label="Navegação de mês">
     <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
-                   Size="Size.Medium"
+                   Size="Size.Small"
                    Variant="Variant.Text"
                    Class="hearth-month-nav-btn"
-                   title="Mês anterior"
+                   title="@(IsAtMinMonth ? "Início do acompanhamento atingido" : "Mês anterior")"
                    aria-label="Mês anterior"
                    OnClick="PreviousMonthAsync"
-                   Disabled="Disabled"
+                   Disabled="Disabled || IsAtMinMonth"
                    data-testid="month-prev" />
 
     <span class="hearth-month-nav-label" aria-live="polite" data-testid="month-label">
-        @HearthFormat.MonthYear(Month)
+        <svg class="hearth-month-nav-icon" viewBox="0 0 20 20" fill="none" aria-hidden="true" focusable="false">
+            <rect x="3" y="4.5" width="14" height="12.5" rx="2.2" stroke="currentColor" stroke-width="1.5" />
+            <path d="M6.5 2.8V5.5M13.5 2.8V5.5M3 8.5H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+        </svg>
+        <span>@HearthFormat.MonthYear(Month)</span>
     </span>
 
     <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
-                   Size="Size.Medium"
+                   Size="Size.Small"
                    Variant="Variant.Text"
                    Class="hearth-month-nav-btn"
                    title="Próximo mês"
@@ -30,13 +34,20 @@
     public YearMonth Month { get; set; } = default!;
 
     [Parameter]
+    public YearMonth? MinMonth { get; set; }
+
+    [Parameter]
     public EventCallback<YearMonth> MonthChanged { get; set; }
 
     [Parameter]
     public bool Disabled { get; set; }
 
+    private bool IsAtMinMonth => MinMonth is not null && Month <= MinMonth;
+
     private Task PreviousMonthAsync() =>
-        MonthChanged.InvokeAsync(Month.AddMonths(-1));
+        IsAtMinMonth
+            ? Task.CompletedTask
+            : MonthChanged.InvokeAsync(Month.AddMonths(-1));
 
     private Task NextMonthAsync() =>
         MonthChanged.InvokeAsync(Month.AddMonths(1));

@@ -78,14 +78,16 @@ public sealed class UseCaseExecutor
         catch (DomainException ex)
         {
             _logger.LogWarning(ex, "Domain rule violation in {Handler}.", typeof(THandler).Name);
-            ShowError(ex.Message, Severity.Warning, showErrorSnackbar);
-            return ExecutionResult<TResult>.BusinessFailure(ex.Message);
+            var message = TranslateBusinessMessage(ex.Message);
+            ShowError(message, Severity.Warning, showErrorSnackbar);
+            return ExecutionResult<TResult>.BusinessFailure(message);
         }
         catch (NotFoundException ex)
         {
             _logger.LogWarning(ex, "Resource not found in {Handler}.", typeof(THandler).Name);
-            ShowError(ex.Message, Severity.Warning, showErrorSnackbar);
-            return ExecutionResult<TResult>.BusinessFailure(ex.Message);
+            var message = TranslateBusinessMessage(ex.Message);
+            ShowError(message, Severity.Warning, showErrorSnackbar);
+            return ExecutionResult<TResult>.BusinessFailure(message);
         }
         catch (ArgumentNullException ex)
         {
@@ -96,8 +98,9 @@ public sealed class UseCaseExecutor
         catch (ArgumentException ex)
         {
             _logger.LogWarning(ex, "Validation error in {Handler}.", typeof(THandler).Name);
-            ShowError(ex.Message, Severity.Warning, showErrorSnackbar);
-            return ExecutionResult<TResult>.BusinessFailure(ex.Message);
+            var message = TranslateBusinessMessage(ex.Message);
+            ShowError(message, Severity.Warning, showErrorSnackbar);
+            return ExecutionResult<TResult>.BusinessFailure(message);
         }
         catch (Exception ex)
         {
@@ -150,6 +153,41 @@ public sealed class UseCaseExecutor
         {
             currentUser.Clear();
         }
+    }
+
+    private static string TranslateBusinessMessage(string message)
+    {
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            return UnexpectedErrorMessage;
+        }
+
+        if (message.StartsWith("No entry can be registered before the tracking start date", StringComparison.Ordinal))
+        {
+            return "A data informada não pode ser anterior ao início do acompanhamento da conta.";
+        }
+
+        if (message.StartsWith("No entry can be registered before the tracking start period", StringComparison.Ordinal))
+        {
+            return "O período informado não pode ser anterior ao início do acompanhamento da conta.";
+        }
+
+        if (message.StartsWith("The account balance cannot be defined on a future date", StringComparison.Ordinal))
+        {
+            return "Não é possível definir o saldo em uma data futura.";
+        }
+
+        if (message.StartsWith("The balance definition reason cannot exceed", StringComparison.Ordinal))
+        {
+            return "O motivo não pode ultrapassar 200 caracteres.";
+        }
+
+        if (message.StartsWith("Monetary amounts support at most 2 decimal places", StringComparison.Ordinal))
+        {
+            return "Informe um valor monetário com no máximo 2 casas decimais.";
+        }
+
+        return message;
     }
 
     private void ShowError(string message, Severity severity, bool showSnackbar)

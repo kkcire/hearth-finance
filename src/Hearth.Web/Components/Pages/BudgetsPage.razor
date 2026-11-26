@@ -14,15 +14,9 @@
 <PageTitle>Orçamentos — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Orçamentos</h1>
-            <p class="hearth-dash-subtitle">
-                Metas mensais por categoria pelo regime de competência — informativas, sem bloquear lançamentos.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Orçamentos"
+                Subtitle="Metas mensais por categoria pelo regime de competência — informativas, sem bloquear lançamentos.">
+        <Actions>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Class="hearth-btn-clean"
@@ -32,8 +26,8 @@
                        data-testid="toggle-create-budget">
                 @(_showCreateForm ? "Fechar formulário" : "Novo orçamento")
             </MudButton>
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     @if (_showCreateForm)
     {
@@ -300,12 +294,10 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
-                        <p class="hearth-empty-title">Nenhum orçamento cadastrado</p>
-                        <p class="hearth-empty-desc">
-                            Clique em "Novo orçamento" para definir metas mensais por categoria.
-                        </p>
-                    </div>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="Nenhum orçamento cadastrado"
+                                Description="Clique em &quot;Novo orçamento&quot; para definir metas mensais por categoria." />
                 </NoRecordsContent>
             </MudTable>
         </section>

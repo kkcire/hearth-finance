@@ -1,0 +1,315 @@
+@page "/atividades"
+@attribute [Authorize]
+@inherits AccountPageBase
+@using Hearth.Application.Activities.ListActivities
+@using Hearth.Application.PurchaseConditions
+@using Hearth.Application.PurchaseConditions.ListPurchaseConditions
+@using Hearth.Domain.ValueObjects
+@using Hearth.Web.Components.Shared
+
+<PageTitle>Atividades — Hearth Finance</PageTitle>
+
+<div class="hearth-page">
+    <PageHeader Title="Atividades"
+                Subtitle="Histórico unificado de receitas, gastos diretos, despesas fixas e parcelas do cartão.">
+        <Icon>
+            <svg viewBox="0 0 20 20" fill="none">
+                <path d="M4.5 5.5H15.5M4.5 10H15.5M4.5 14.5H11.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" />
+            </svg>
+        </Icon>
+    </PageHeader>
+
+    <div class="hearth-command-bar hearth-activities-command-bar">
+        <div class="hearth-command-controls">
+            @if (!_showAllMonths)
+            {
+                <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChangedAsync" Disabled="_loading" />
+            }
+
+            <MudSwitch T="bool"
+                       Value="_showAllMonths"
+                       ValueChanged="OnShowAllMonthsChangedAsync"
+                       Color="Color.Primary"
+                       Label="Todos os meses"
+                       data-testid="activities-all-months" />
+
+            <MudTextField @bind-Value="_searchText"
+                          Placeholder="Buscar descrição ou categoria…"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Clearable="true"
+                          Immediate="true"
+                          Class="hearth-search-input"
+                          aria-label="Filtrar atividades"
+                          data-testid="activities-search" />
+        </div>
+
+        @if (!_loading)
+        {
+            var filtered = FilteredActivities;
+            var totalInflows = filtered.Where(i => i.Amount > 0m).Sum(i => i.Amount);
+            var totalOutflows = filtered.Where(i => i.Amount < 0m).Sum(i => Math.Abs(i.Amount));
+
+            <div class="hearth-summary-metrics hearth-money">
+                <span class="hearth-summary-metric" data-testid="activities-count">@filtered.Count atividade(s)</span>
+                <span class="hearth-summary-metric is-positive" data-testid="activities-inflows-total">
+                    Entradas: <strong>@HearthFormat.Money(totalInflows)</strong>
+                </span>
+                <span class="hearth-summary-metric is-danger" data-testid="activities-outflows-total">
+                    Saídas: <strong>@HearthFormat.Money(totalOutflows)</strong>
+                </span>
+            </div>
+        }
+    </div>
+
+    <div class="hearth-activities-filter-bar">
+        <div class="hearth-condition-pill-row" role="group" aria-label="Filtrar por tipo de lançamento">
+            <button type="button"
+                    class="hearth-cond-pill @(_selectedMovementType is null ? "is-active" : null)"
+                    aria-pressed="@(_selectedMovementType is null ? "true" : "false")"
+                    @onclick="() => OnMovementTypeChangedAsync(null)"
+                    data-testid="activities-type-all">
+                Todas
+            </button>
+            <button type="button"
+                    class="hearth-cond-pill @(_selectedMovementType == ListActivitiesHandler.IncomeType ? "is-active" : null)"
+                    aria-pressed="@(_selectedMovementType == ListActivitiesHandler.IncomeType ? "true" : "false")"
+                    @onclick="() => OnMovementTypeChangedAsync(ListActivitiesHandler.IncomeType)"
+                    data-testid="activities-type-income">
+                Receitas
+            </button>
+            <button type="button"
+                    class="hearth-cond-pill @(_selectedMovementType == ListActivitiesHandler.DirectExpenseType ? "is-active" : null)"
+                    aria-pressed="@(_selectedMovementType == ListActivitiesHandler.DirectExpenseType ? "true" : "false")"
+                    @onclick="() => OnMovementTypeChangedAsync(ListActivitiesHandler.DirectExpenseType)"
+                    data-testid="activities-type-direct">
+                Gastos diretos
+            </button>
+            <button type="button"
+                    class="hearth-cond-pill @(_selectedMovementType == ListActivitiesHandler.FixedExpenseType ? "is-active" : null)"
+                    aria-pressed="@(_selectedMovementType == ListActivitiesHandler.FixedExpenseType ? "true" : "false")"
+                    @onclick="() => OnMovementTypeChangedAsync(ListActivitiesHandler.FixedExpenseType)"
+                    data-testid="activities-type-fixed">
+                Despesas fixas
+            </button>
+            <button type="button"
+                    class="hearth-cond-pill @(_selectedMovementType == ListActivitiesHandler.CardPurchaseType ? "is-active" : null)"
+                    aria-pressed="@(_selectedMovementType == ListActivitiesHandler.CardPurchaseType ? "true" : "false")"
+                    @onclick="() => OnMovementTypeChangedAsync(ListActivitiesHandler.CardPurchaseType)"
+                    data-testid="activities-type-card">
+                Cartão
+            </button>
+        </div>
+
+        @if ((_selectedMovementType is null || _selectedMovementType == ListActivitiesHandler.CardPurchaseType || _selectedMovementType == ListActivitiesHandler.IncomeType) && _conditions.Count > 0)
+        {
+            <div class="hearth-activities-condition-filter" role="group" aria-label="Filtrar lançamentos por condição">
+                <span class="hearth-condition-label">Condição:</span>
+                <div class="hearth-condition-pill-row">
+                    <button type="button"
+                            class="hearth-filter-pill hearth-filter-pill--sm @(_selectedConditionId is null ? "is-active" : null)"
+                            aria-pressed="@(_selectedConditionId is null ? "true" : "false")"
+                            @onclick="() => OnConditionChangedAsync(null)"
+                            data-testid="activities-condition-all">
+                        Todas
+                    </button>
+                    @foreach (var condition in _conditions)
+                    {
+                        var condId = condition.Id;
+                        var isActive = _selectedConditionId == condId;
+                        <button type="button"
+                                class="hearth-filter-pill hearth-filter-pill--sm @(isActive ? "is-active" : null)"
+                                aria-pressed="@(isActive ? "true" : "false")"
+                                @onclick="() => OnConditionChangedAsync(condId)"
+                                data-testid="@($"activities-condition-{condition.Name}")">
+                            @condition.Name
+                        </button>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    @if (_loading)
+    {
+        <div class="hearth-card hearth-skeleton-panel"></div>
+    }
+    else
+    {
+        <section class="hearth-table-shell" aria-label="Lista unificada de atividades" data-testid="activities-table">
+            <MudTable Items="FilteredActivities" Hover="true" Dense="true" Elevation="0" Class="hearth-data-table">
+                <HeaderContent>
+                    <MudTh Style="width: 112px;">Data</MudTh>
+                    <MudTh>Descrição</MudTh>
+                    <MudTh Style="width: 136px;">Tipo</MudTh>
+                    <MudTh>Categoria</MudTh>
+                    <MudTh Style="width: 116px;">Status</MudTh>
+                    <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    @{
+                        var isPositive = context.Amount >= 0m;
+                        var isEffective = string.Equals(context.StatusLabel, "Efetivado", StringComparison.OrdinalIgnoreCase);
+                    }
+                    <MudTd DataLabel="Data" Class="hearth-money hearth-cell-muted">@HearthFormat.Date(context.Date)</MudTd>
+                    <MudTd DataLabel="Descrição">
+                        <div class="hearth-activity-table-desc">
+                            <span class="hearth-activity-icon hearth-activity-icon--sm" aria-hidden="true">
+                                @RenderActivityIcon(context.CategoryIcon)
+                            </span>
+                            <span class="hearth-cell-title">@context.Description</span>
+                            @if (!string.IsNullOrWhiteSpace(context.InstallmentInfo))
+                            {
+                                <span class="hearth-installment-progress-tag" data-testid="activity-installment-badge">@context.InstallmentInfo</span>
+                            }
+                        </div>
+                    </MudTd>
+                    <MudTd DataLabel="Tipo">
+                        <span class="hearth-activity-type-tag">@FormatMovementType(context.MovementType)</span>
+                    </MudTd>
+                    <MudTd DataLabel="Categoria" Class="hearth-cell-muted">@context.CategoryName</MudTd>
+                    <MudTd DataLabel="Status">
+                        <span class="hearth-status-pill @(isEffective ? "is-positive" : "is-neutral")">@context.StatusLabel</span>
+                    </MudTd>
+                    <MudTd DataLabel="Valor" Class="@($"hearth-cell-amount {(isPositive ? "is-positive" : "is-danger")}")">
+                        @(isPositive ? $"+{HearthFormat.Money(context.Amount)}" : $"-{HearthFormat.Money(Math.Abs(context.Amount))}")
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="@(string.IsNullOrWhiteSpace(_searchText) ? "Nenhuma atividade encontrada neste período" : "Nenhuma atividade corresponde à busca")"
+                                Description="@(string.IsNullOrWhiteSpace(_searchText) ? "Altere o período ou o tipo selecionado para visualizar outros lançamentos." : "Tente outro termo ou limpe o campo de busca.")"
+                                TestId="activities-empty-state" />
+                </NoRecordsContent>
+            </MudTable>
+        </section>
+    }
+</div>
+
+@code
+{
+    private IReadOnlyList<ActivityItemDto> _activities = [];
+    private IReadOnlyList<PurchaseConditionDto> _conditions = [];
+
+    private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
+    private bool _showAllMonths;
+    private string? _selectedMovementType;
+    private Guid? _selectedConditionId;
+    private string _searchText = string.Empty;
+    private bool _loading = true;
+
+    private IReadOnlyList<ActivityItemDto> FilteredActivities
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(_searchText))
+            {
+                return _activities;
+            }
+
+            var term = _searchText.Trim();
+            return _activities
+                .Where(item => item.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
+                               || item.CategoryName.Contains(term, StringComparison.OrdinalIgnoreCase)
+                               || FormatMovementType(item.MovementType).Contains(term, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = YearMonth.From(Clock.Today);
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var conditionsResult = await Executor.ExecuteAsync<ListPurchaseConditionsHandler, IReadOnlyList<PurchaseConditionDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListPurchaseConditionsQuery(), ct),
+            cancellationToken: cancellationToken);
+
+        if (conditionsResult.IsSuccess && conditionsResult.Value is not null)
+        {
+            _conditions = conditionsResult.Value;
+        }
+
+        await LoadActivitiesAsync(cancellationToken);
+
+        _loading = false;
+    }
+
+    private async Task LoadActivitiesAsync(CancellationToken cancellationToken)
+    {
+        int? year = _showAllMonths ? null : _selectedMonth.Year;
+        int? month = _showAllMonths ? null : _selectedMonth.Month;
+
+        var result = await Executor.ExecuteAsync<ListActivitiesHandler, IReadOnlyList<ActivityItemDto>>(
+            (handler, ct) => handler.ExecuteAsync(
+                new ListActivitiesQuery(
+                    AccountId,
+                    year,
+                    month,
+                    _selectedConditionId,
+                    _selectedMovementType),
+                ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _activities = result.Value;
+        }
+    }
+
+    private async Task OnMonthChangedAsync(YearMonth month)
+    {
+        _selectedMonth = month;
+        await LoadActivitiesAsync(ComponentCancellationToken);
+    }
+
+    private async Task OnShowAllMonthsChangedAsync(bool showAll)
+    {
+        _showAllMonths = showAll;
+        await LoadActivitiesAsync(ComponentCancellationToken);
+    }
+
+    private async Task OnMovementTypeChangedAsync(string? movementType)
+    {
+        _selectedMovementType = movementType;
+        if (_selectedMovementType is not null
+            && _selectedMovementType != ListActivitiesHandler.CardPurchaseType
+            && _selectedMovementType != ListActivitiesHandler.IncomeType)
+        {
+            _selectedConditionId = null;
+        }
+
+        await LoadActivitiesAsync(ComponentCancellationToken);
+    }
+
+    private async Task OnConditionChangedAsync(Guid? conditionId)
+    {
+        _selectedConditionId = conditionId;
+        await LoadActivitiesAsync(ComponentCancellationToken);
+    }
+
+    private static string FormatMovementType(string movementType) => movementType switch
+    {
+        ListActivitiesHandler.IncomeType => "Receita",
+        ListActivitiesHandler.DirectExpenseType => "Gasto direto",
+        ListActivitiesHandler.FixedExpenseType => "Despesa fixa",
+        ListActivitiesHandler.CardPurchaseType => "Cartão",
+        _ => movementType,
+    };
+
+    private static RenderFragment RenderActivityIcon(string iconKey) => iconKey switch
+    {
+        "income" => @<svg viewBox="0 0 20 20" fill="none"><path d="M4 13.5L8.5 9L11.5 12L16 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /><path d="M12.5 6.5H16V10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /></svg>,
+        "card" => @<svg viewBox="0 0 20 20" fill="none"><rect x="2.5" y="4.5" width="15" height="11" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M2.5 8.2H17.5" stroke="currentColor" stroke-width="1.5" /></svg>,
+        "fixed" => @<svg viewBox="0 0 20 20" fill="none"><rect x="3" y="4.5" width="14" height="12.5" rx="2" stroke="currentColor" stroke-width="1.5" /><path d="M6.5 3V6M13.5 3V6M3 8.5H17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+        "shopping" or "food" => @<svg viewBox="0 0 20 20" fill="none"><path d="M5 7H15L14.2 15.5H5.8L5 7Z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round" /><path d="M7.5 7V5.8C7.5 4.5 8.6 3.5 10 3.5C11.4 3.5 12.5 4.5 12.5 5.8V7" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+        _ => @<svg viewBox="0 0 20 20" fill="none"><circle cx="10" cy="10" r="6.5" stroke="currentColor" stroke-width="1.5" /><path d="M10 7V13M7 10H13" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" /></svg>,
+    };
+}

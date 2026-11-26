@@ -6,6 +6,7 @@
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
 @using Hearth.Application.Accounts.CreateAccount
+@using Hearth.Domain
 
 <PageTitle>Nova conta — Hearth Finance</PageTitle>
 
@@ -33,16 +34,24 @@
                               Disabled="_saving"
                               data-testid="account-name-input" />
 
+                <MudTextField Value="@($"{HearthFormat.Date(_trackingStartDate)} — {HearthFormat.MonthYear(_trackingStartPeriod)}")"
+                              Label="Início do acompanhamento"
+                              Variant="Variant.Outlined"
+                              ReadOnly="true"
+                              HelperText="Definido automaticamente para o dia 1º do mês atual (horário de Brasília). Você já pode registrar lançamentos a partir desta data."
+                              Class="hearth-money"
+                              data-testid="tracking-start-period-readonly" />
+
                 <MudNumericField T="decimal"
                                  @bind-Value="_initialBalance"
-                                 Label="Saldo inicial"
+                                 Label="Saldo inicial (posição de caixa)"
                                  Variant="Variant.Outlined"
                                  Culture="@HearthFormat.PtBr"
                                  Format="N2"
                                  Adornment="Adornment.Start"
                                  AdornmentText="R$"
                                  HideSpinButtons="true"
-                                 HelperText="Pode ser zero ou negativo."
+                                 HelperText="@($"Saldo disponível em {HearthFormat.Date(_trackingStartDate)}. Pode ser negativo, zero ou positivo. É o único saldo manual da conta, não conta como receita e pode ser ajustado depois em Conta ou no Painel.")"
                                  Disabled="_saving"
                                  data-testid="initial-balance-input" />
 
@@ -91,12 +100,17 @@
     private MudForm? _form;
     private string _name = string.Empty;
     private decimal _initialBalance;
+    private DateOnly _trackingStartDate;
+    private YearMonth _trackingStartPeriod = YearMonth.Of(2026, 1);
     private bool _saving;
     private string? _errorMessage;
     private string? _userName;
 
     protected override async Task OnInitializedAsync()
     {
+        _trackingStartDate = BrasiliaTime.DeriveTrackingStartDate(Clock.UtcNow);
+        _trackingStartPeriod = YearMonth.From(_trackingStartDate);
+
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         if (HearthAuth.TryReadUser(authState.User, out _, out var name, out _))
         {

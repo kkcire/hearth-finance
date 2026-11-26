@@ -8,20 +8,16 @@
 @using Hearth.Application.Incomes.RegisterIncome
 @using Hearth.Application.Incomes.RevertIncomeToExpected
 @using Hearth.Application.Incomes.UpdateIncome
+@using Hearth.Application.PurchaseConditions
+@using Hearth.Application.PurchaseConditions.ListPurchaseConditions
 @using Hearth.Web.Components.Shared
 
 <PageTitle>Receitas — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Receitas</h1>
-            <p class="hearth-dash-subtitle">
-                Entradas previstas e recebimentos confirmados no saldo de caixa.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Receitas"
+                Subtitle="Entradas previstas e recebimentos confirmados no saldo de caixa.">
+        <Actions>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Class="hearth-btn-clean"
@@ -31,14 +27,14 @@
                        data-testid="new-income-button">
                 Nova receita
             </MudButton>
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     <div class="hearth-command-bar">
         <div class="hearth-command-controls">
             @if (!_showAllMonths)
             {
-                <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+                <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChanged" Disabled="_saving" />
             }
 
             <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
@@ -101,6 +97,23 @@
                                    Editable="true"
                                    Disabled="_saving"
                                    data-testid="income-expected-date-input" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid"
+                               @bind-Value="_conditionId"
+                               Label="Condição"
+                               Variant="Variant.Outlined"
+                               HelperText="Própria = sua renda pessoal; outras condições = reembolsos/repasses de terceiros."
+                               Disabled="_saving"
+                               data-testid="income-condition-select">
+                        @foreach (var condition in AvailableConditionsForForm)
+                        {
+                            <MudSelectItem T="Guid" Value="@condition.Id">
+                                @(condition.IsArchived ? $"{condition.Name} (Arquivada)" : condition.Name)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
                 </MudItem>
 
                 @if (!_editingId.HasValue)
@@ -192,6 +205,7 @@
                 <HeaderContent>
                     <MudTh Style="width: 120px;">Data prevista</MudTh>
                     <MudTh>Descrição</MudTh>
+                    <MudTh Style="width: 130px;">Condição</MudTh>
                     <MudTh Style="width: 200px;">Status</MudTh>
                     <MudTh Style="width: 150px; text-align: right;">Valor</MudTh>
                     <MudTh Style="width: 156px; text-align: right;">Ações</MudTh>
@@ -199,6 +213,9 @@
                 <RowTemplate>
                     <MudTd DataLabel="Data prevista" Class="hearth-money hearth-cell-muted">@HearthFormat.Date(context.ExpectedDate)</MudTd>
                     <MudTd DataLabel="Descrição" Class="hearth-cell-title">@context.Description</MudTd>
+                    <MudTd DataLabel="Condição">
+                        <span class="hearth-condition-chip">@GetConditionName(context.ConditionId)</span>
+                    </MudTd>
                     <MudTd DataLabel="Status">
                         @if (context.IsReceived)
                         {
@@ -279,12 +296,10 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
-                        <p class="hearth-empty-title">Nenhuma receita neste período</p>
-                        <p class="hearth-empty-desc">
-                            Navegue para outro mês ou registre uma nova entrada acima.
-                        </p>
-                    </div>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="Nenhuma receita neste período"
+                                Description="Navegue para outro mês ou registre uma nova entrada acima." />
                 </NoRecordsContent>
             </MudTable>
         </section>
@@ -294,6 +309,8 @@
 @code
 {
     private IReadOnlyList<IncomeDto> _incomes = [];
+    private IReadOnlyList<PurchaseConditionDto> _allConditions = [];
+    private Dictionary<Guid, string> _conditionNames = [];
     private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
     private bool _showAllMonths;
     private bool _loading = true;
@@ -301,15 +318,22 @@
 
     private bool _showForm;
     private Guid? _editingId;
+    private Guid? _editingOriginalConditionId;
     private string _description = string.Empty;
     private decimal _amount;
     private DateTime? _expectedDate;
+    private Guid _conditionId = SystemPurchaseConditions.OwnId;
     private bool _alreadyReceived;
     private DateTime? _receivedOn;
 
     private IncomeDto? _receivingIncome;
     private DateTime? _receiveDate;
     private Guid? _confirmDeleteId;
+
+    private IReadOnlyList<PurchaseConditionDto> AvailableConditionsForForm =>
+        _allConditions
+            .Where(condition => !condition.IsArchived || condition.Id == _editingOriginalConditionId)
+            .ToList();
 
     private IReadOnlyList<IncomeDto> FilteredIncomes =>
         _showAllMonths
@@ -331,9 +355,19 @@
             (handler, ct) => handler.ExecuteAsync(new ListIncomesQuery(AccountId), ct),
             cancellationToken: cancellationToken);
 
+        var conditionsResult = await Executor.ExecuteAsync<ListPurchaseConditionsHandler, IReadOnlyList<PurchaseConditionDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListPurchaseConditionsQuery(IncludeArchived: true), ct),
+            cancellationToken: cancellationToken);
+
         if (result.IsSuccess && result.Value is not null)
         {
             _incomes = result.Value;
+        }
+
+        if (conditionsResult.IsSuccess && conditionsResult.Value is not null)
+        {
+            _allConditions = conditionsResult.Value;
+            _conditionNames = _allConditions.ToDictionary(c => c.Id, c => c.Name);
         }
 
         _loading = false;
@@ -347,9 +381,11 @@
         _receivingIncome = null;
         _confirmDeleteId = null;
         _editingId = null;
+        _editingOriginalConditionId = null;
         _description = string.Empty;
         _amount = 0m;
         _expectedDate = HearthFormat.ToDateTime(Clock.Today);
+        _conditionId = SystemPurchaseConditions.OwnId;
         _alreadyReceived = false;
         _receivedOn = HearthFormat.ToDateTime(Clock.Today);
         _showForm = true;
@@ -360,9 +396,11 @@
         _receivingIncome = null;
         _confirmDeleteId = null;
         _editingId = income.Id;
+        _editingOriginalConditionId = income.ConditionId;
         _description = income.Description;
         _amount = income.Amount;
         _expectedDate = HearthFormat.ToDateTime(income.ExpectedDate);
+        _conditionId = income.ConditionId;
         _alreadyReceived = false;
         _showForm = true;
     }
@@ -371,6 +409,7 @@
     {
         _showForm = false;
         _editingId = null;
+        _editingOriginalConditionId = null;
     }
 
     private async Task SaveAsync()
@@ -391,7 +430,7 @@
                 var id = _editingId.Value;
                 var result = await Executor.ExecuteAsync<UpdateIncomeHandler>(
                     (handler, ct) => handler.ExecuteAsync(
-                        new UpdateIncomeCommand(id, expectedDate, _amount, _description.Trim()), ct),
+                        new UpdateIncomeCommand(id, expectedDate, _amount, _description.Trim(), _conditionId), ct),
                     successMessage: "Receita atualizada.",
                     cancellationToken: ComponentCancellationToken);
 
@@ -408,7 +447,7 @@
 
                 var result = await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
                     (handler, ct) => handler.ExecuteAsync(
-                        new RegisterIncomeCommand(AccountId, expectedDate, _amount, _description.Trim(), received), ct),
+                        new RegisterIncomeCommand(AccountId, expectedDate, _amount, _description.Trim(), received, _conditionId), ct),
                     successMessage: "Receita registrada.",
                     cancellationToken: ComponentCancellationToken);
 
@@ -425,6 +464,9 @@
             _saving = false;
         }
     }
+
+    private string GetConditionName(Guid conditionId) =>
+        _conditionNames.GetValueOrDefault(conditionId, "Própria");
 
     private void StartReceive(IncomeDto income)
     {

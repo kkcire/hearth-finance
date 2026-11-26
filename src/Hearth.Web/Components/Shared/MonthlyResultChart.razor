@@ -1,0 +1,554 @@
+@using System.Globalization
+@using Hearth.Application.Reports.GetMonthlyDashboard
+@using Hearth.Domain.ValueObjects
+@using Hearth.Web.Services
+@using Microsoft.AspNetCore.Components.Web
+
+<section class="hearth-card hearth-result-chart-card" aria-labelledby="heading-monthly-result-chart" data-testid="monthly-result-chart">
+    <div class="hearth-result-chart-head">
+        <div>
+            <h2 id="heading-monthly-result-chart" class="hearth-card-title">Evolução do Resultado Mensal</h2>
+            <p class="hearth-card-meta" data-testid="chart-subtitle">
+                Resultado líquido mensal frente ao Ponto de Equilíbrio (R$ 0)
+            </p>
+        </div>
+
+        <div class="hearth-result-chart-legend" aria-label="Legenda do gráfico de resultado mensal">
+            <span class="hearth-legend-item">
+                <span class="hearth-mr-swatch is-income" aria-hidden="true"></span>
+                Saudável
+            </span>
+            <span class="hearth-legend-item">
+                <span class="hearth-mr-swatch is-warning" aria-hidden="true"></span>
+                Atenção (equilíbrio)
+            </span>
+            <span class="hearth-legend-item">
+                <span class="hearth-mr-swatch is-expense" aria-hidden="true"></span>
+                Déficit
+            </span>
+            <span class="hearth-legend-divider" aria-hidden="true"></span>
+            <span class="hearth-legend-item">
+                <span class="hearth-mr-swatch is-projection" aria-hidden="true"></span>
+                Projeção
+            </span>
+        </div>
+    </div>
+
+    @if (Points.Count > 0)
+    {
+        var chart = BuildLayout(Points);
+        var hoveredBar = _hoveredIndex.HasValue && _hoveredIndex.Value >= 0 && _hoveredIndex.Value < chart.Bars.Count
+            ? chart.Bars[_hoveredIndex.Value]
+            : null;
+
+        <div class="hearth-result-chart-stage" @onmouseleave="ClearHover">
+            <svg class="hearth-result-chart-svg"
+                 viewBox="0 0 680 256"
+                 role="img"
+                 aria-label="@BuildAccessibleSummary()">
+                <defs>
+                    <linearGradient id="hearth-mr-grad-healthy" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#62C878" stop-opacity="0.92" />
+                        <stop offset="100%" stop-color="#62C878" stop-opacity="0.46" />
+                    </linearGradient>
+                    <linearGradient id="hearth-mr-grad-warning" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#F59E0B" stop-opacity="0.92" />
+                        <stop offset="100%" stop-color="#F59E0B" stop-opacity="0.46" />
+                    </linearGradient>
+                    <linearGradient id="hearth-mr-grad-deficit" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stop-color="#EF6B63" stop-opacity="0.46" />
+                        <stop offset="100%" stop-color="#EF6B63" stop-opacity="0.92" />
+                    </linearGradient>
+                </defs>
+
+                @* Non-interactive visual layers *@
+                <g class="hearth-chart-visuals" pointer-events="none">
+                    @foreach (var tick in chart.YAxisTicks)
+                    {
+                        var isZeroTick = tick.Value == 0m;
+                        if (!isZeroTick)
+                        {
+                            <line x1="@F(PlotLeft)" y1="@F(tick.Y)" x2="@F(PlotRight)" y2="@F(tick.Y)"
+                                  class="hearth-chart-gridline" />
+                        }
+
+                        @RenderSvgText(
+                            PlotLeft - 10,
+                            tick.Y + 4,
+                            isZeroTick ? "hearth-chart-yaxis-label is-zero" : "hearth-chart-yaxis-label",
+                            tick.Label,
+                            "end")
+                    }
+
+                    @* Subtle vertical highlight band for hovered month *@
+                    @if (hoveredBar is not null)
+                    {
+                        <rect x="@F(hoveredBar.ColLeft)"
+                              y="@F(PlotTop)"
+                              width="@F(hoveredBar.ColWidth)"
+                              height="@F(PlotBottom - PlotTop)"
+                              rx="8"
+                              class="hearth-mr-hover-band" />
+                    }
+
+                    @* Single net monthly result bar per month, colored strictly by BreakEvenStatus *@
+                    @foreach (var bar in chart.Bars)
+                    {
+                        var isSelected = bar.Point.YearMonth == SelectedMonth;
+                        var statusClass = GetStatusClass(bar.Point.BreakEvenStatus);
+                        var kindClass = bar.Point.IsProjection ? "is-projection" : "is-historical";
+                        var barKey = $"{bar.Point.YearMonth.Year:D4}-{bar.Point.YearMonth.Month:D2}";
+
+                        @if (bar.Point.BreakEvenStatus == BreakEvenStatus.NoActivity)
+                        {
+                            <rect x="@F(bar.BarX)"
+                                  y="@F(chart.ZeroY - 1.5)"
+                                  width="@F(bar.BarWidth)"
+                                  height="3.0"
+                                  rx="1.5"
+                                  class="hearth-mr-bar is-empty @(isSelected ? "is-selected" : null)"
+                                  data-bar="@barKey"
+                                  data-status="@bar.Point.BreakEvenStatus.ToString()" />
+                        }
+                        else
+                        {
+                            <rect x="@F(bar.BarX)"
+                                  y="@F(bar.BarY)"
+                                  width="@F(bar.BarWidth)"
+                                  height="@F(bar.BarHeight)"
+                                  rx="6"
+                                  class="hearth-mr-bar @statusClass @kindClass @(isSelected ? "is-selected" : null)"
+                                  data-bar="@barKey"
+                                  data-status="@bar.Point.BreakEvenStatus.ToString()" />
+                        }
+                    }
+
+                    @* Horizontal R$ 0 Break-even reference line *@
+                    <line x1="@F(PlotLeft)" y1="@F(chart.ZeroY)" x2="@F(PlotRight)" y2="@F(chart.ZeroY)"
+                          class="hearth-mr-breakeven-line"
+                          data-testid="chart-breakeven-line" />
+
+                    @* Focus guide + X-axis month labels *@
+                    @for (var i = 0; i < chart.Bars.Count; i++)
+                    {
+                        var bar = chart.Bars[i];
+                        var isSelected = bar.Point.YearMonth == SelectedMonth;
+                        var isHovered = _hoveredIndex == i;
+
+                        @if (isSelected || isHovered)
+                        {
+                            <line x1="@F(bar.CenterX)" y1="@F(PlotTop)" x2="@F(bar.CenterX)" y2="@F(PlotBottom)"
+                                  class="hearth-mr-focus-guide" />
+                        }
+
+                        @RenderSvgText(
+                            bar.CenterX,
+                            PlotBottom + 22,
+                            isSelected || isHovered ? "hearth-chart-axis-label is-selected" : "hearth-chart-axis-label",
+                            ShortAxisMonthLabel(bar.Point.YearMonth))
+                    }
+                </g>
+
+                @* Topmost contiguous non-overlapping column hit targets *@
+                <g class="hearth-chart-hit-layer">
+                    @for (var i = 0; i < chart.Bars.Count; i++)
+                    {
+                        var index = i;
+                        var bar = chart.Bars[i];
+                        var targetMonth = bar.Point.YearMonth;
+                        var isSelected = targetMonth == SelectedMonth;
+
+                        <rect x="@F(bar.ColLeft)"
+                              y="0"
+                              width="@F(bar.ColWidth)"
+                              height="@F(SvgHeight)"
+                              class="hearth-chart-hit-column"
+                              tabindex="0"
+                              role="button"
+                              aria-pressed="@(isSelected ? "true" : "false")"
+                              aria-label="@BuildBarAriaLabel(bar.Point)"
+                              data-testid="@($"chart-hit-{targetMonth.Year:D4}-{targetMonth.Month:D2}")"
+                              @onmouseenter="() => SetHover(index)"
+                              @onfocus="() => SetHover(index)"
+                              @onblur="ClearHover"
+                              @onclick="() => OnSelectMonthAsync(targetMonth)"
+                              @onkeydown="(e) => OnBarKeyDownAsync(e, targetMonth)" />
+                    }
+                </g>
+            </svg>
+
+            @if (hoveredBar is not null)
+            {
+                var p = hoveredBar.Point;
+                var xPct = Math.Clamp((hoveredBar.CenterX / SvgWidth) * 100.0, 0.0, 100.0);
+                var alignClass = xPct <= 24.0
+                    ? "is-align-left"
+                    : xPct >= 76.0
+                        ? "is-align-right"
+                        : "is-align-center";
+                var posStyle = alignClass switch
+                {
+                    "is-align-left" => $"left: {Math.Max(2.0, xPct).ToString("0.##", CultureInfo.InvariantCulture)}%;",
+                    "is-align-right" => $"right: {Math.Max(2.0, 100.0 - xPct).ToString("0.##", CultureInfo.InvariantCulture)}%;",
+                    _ => $"left: {xPct.ToString("0.##", CultureInfo.InvariantCulture)}%;",
+                };
+                var placeBottom = hoveredBar.ValueY < 108.0;
+
+                <div class="hearth-chart-tooltip @alignClass @(placeBottom ? "is-bottom" : "is-top")"
+                     style="@posStyle"
+                     role="status"
+                     aria-live="polite"
+                     data-testid="monthly-result-tooltip">
+                    <div class="hearth-chart-tooltip-head">
+                        <span class="hearth-mr-dot @GetStatusClass(p.BreakEvenStatus)" aria-hidden="true"></span>
+                        <span class="hearth-chart-tooltip-month">@HearthFormat.MonthYear(p.YearMonth)</span>
+                        <span class="hearth-chart-tooltip-kind">@(p.IsProjection ? "Projeção" : "Histórico")</span>
+                    </div>
+
+                    @if (p.BreakEvenStatus == BreakEvenStatus.NoActivity)
+                    {
+                        <div class="hearth-chart-tooltip-empty">Sem movimentações registradas</div>
+                    }
+                    else
+                    {
+                        <div class="hearth-chart-tooltip-status-row">
+                            <span class="hearth-chart-tooltip-status @GetStatusClass(p.BreakEvenStatus)" data-testid="tooltip-status-label">
+                                @GetStatusLabel(p.BreakEvenStatus)
+                            </span>
+                        </div>
+                        <div class="hearth-chart-tooltip-primary hearth-money">
+                            <span>Resultado</span>
+                            <strong class="@GetResultToneClass(p.BreakEvenStatus)">@HearthFormat.Money(p.Result)</strong>
+                        </div>
+                        <div class="hearth-chart-tooltip-grid hearth-money">
+                            <span class="hearth-chart-tooltip-metric">
+                                <span>Receitas</span>
+                                <strong class="is-positive">@HearthFormat.Money(p.Income)</strong>
+                            </span>
+                            <span class="hearth-chart-tooltip-metric">
+                                <span>Despesas</span>
+                                <strong class="is-danger">@HearthFormat.Money(p.Expenses)</strong>
+                            </span>
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        <EmptyState Compact="true"
+                    Title="Sem dados suficientes para o resultado mensal"
+                    Description="Registre receitas e despesas para acompanhar o desempenho mensal frente ao ponto de equilíbrio."
+                    TestId="monthly-result-empty-state" />
+    }
+</section>
+
+@code
+{
+    private const double SvgWidth = 680;
+    private const double SvgHeight = 256;
+    private const double PlotLeft = 78;
+    private const double PlotRight = 664;
+    private const double PlotTop = 22;
+    private const double PlotBottom = 218;
+
+    private int? _hoveredIndex;
+    private bool _suppressNextRender;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DashboardMonthlyResultPointDto> Points { get; set; } = [];
+
+    [Parameter, EditorRequired]
+    public YearMonth SelectedMonth { get; set; } = YearMonth.Of(2026, 1);
+
+    [Parameter]
+    public EventCallback<YearMonth> MonthSelected { get; set; }
+
+    protected override void OnParametersSet()
+    {
+        _suppressNextRender = false;
+        if (_hoveredIndex.HasValue && _hoveredIndex.Value >= Points.Count)
+        {
+            _hoveredIndex = null;
+        }
+    }
+
+    protected override bool ShouldRender()
+    {
+        if (_suppressNextRender)
+        {
+            _suppressNextRender = false;
+            return false;
+        }
+
+        return true;
+    }
+
+    private void SetHover(int index)
+    {
+        if (_hoveredIndex == index)
+        {
+            _suppressNextRender = true;
+            return;
+        }
+
+        _hoveredIndex = index;
+        _suppressNextRender = false;
+    }
+
+    private void ClearHover()
+    {
+        if (_hoveredIndex is null)
+        {
+            _suppressNextRender = true;
+            return;
+        }
+
+        _hoveredIndex = null;
+        _suppressNextRender = false;
+    }
+
+    private async Task OnSelectMonthAsync(YearMonth month)
+    {
+        _suppressNextRender = false;
+        if (MonthSelected.HasDelegate)
+        {
+            await MonthSelected.InvokeAsync(month);
+        }
+    }
+
+    private async Task OnBarKeyDownAsync(KeyboardEventArgs e, YearMonth month)
+    {
+        if (e.Key is "Enter" or " " or "Spacebar")
+        {
+            await OnSelectMonthAsync(month);
+        }
+    }
+
+    private string BuildAccessibleSummary()
+    {
+        if (Points.Count == 0)
+        {
+            return "Gráfico de evolução do resultado mensal sem dados.";
+        }
+
+        return $"Resultado líquido mensal de {ShortAxisMonthLabel(Points[0].YearMonth)} a {ShortAxisMonthLabel(Points[^1].YearMonth)} frente ao ponto de equilíbrio (R$ 0).";
+    }
+
+    private static string BuildBarAriaLabel(DashboardMonthlyResultPointDto point) =>
+        point.BreakEvenStatus == BreakEvenStatus.NoActivity
+            ? $"{HearthFormat.MonthYear(point.YearMonth)}: sem movimentações"
+            : $"{HearthFormat.MonthYear(point.YearMonth)} ({GetStatusLabel(point.BreakEvenStatus)}): resultado {HearthFormat.Money(point.Result)}, receitas {HearthFormat.Money(point.Income)}, despesas {HearthFormat.Money(point.Expenses)}";
+
+    private static ChartLayout BuildLayout(IReadOnlyList<DashboardMonthlyResultPointDto> points)
+    {
+        var dataMin = Math.Min(0m, points.Min(p => p.Result));
+        var dataMax = Math.Max(0m, points.Max(p => p.Result));
+
+        var scale = ComputeNiceScale(dataMin, dataMax);
+        var plotHeight = PlotBottom - PlotTop;
+
+        double MapY(decimal value)
+        {
+            var ratio = (double)((value - scale.Min) / (scale.Max - scale.Min));
+            return PlotBottom - (ratio * plotHeight);
+        }
+
+        var zeroY = MapY(0m);
+        var slotWidth = (PlotRight - PlotLeft) / points.Count;
+        var barWidth = Math.Min(82.0, Math.Max(8.0, Math.Clamp(slotWidth * 0.44, 42.0, slotWidth * 0.65)));
+
+        var bars = new List<BarGeometry>(points.Count);
+        for (var i = 0; i < points.Count; i++)
+        {
+            var colLeft = PlotLeft + (i * slotWidth);
+            var centerX = colLeft + (slotWidth / 2.0);
+            var valueY = MapY(points[i].Result);
+            var rawHeight = Math.Abs(zeroY - valueY);
+            var barHeight = points[i].BreakEvenStatus == BreakEvenStatus.NoActivity
+                ? 3.0
+                : Math.Max(6.0, rawHeight);
+            var barY = points[i].Result >= 0m
+                ? zeroY - barHeight
+                : zeroY;
+
+            bars.Add(new BarGeometry(
+                points[i],
+                colLeft,
+                slotWidth,
+                centerX,
+                centerX - (barWidth / 2.0),
+                barY,
+                barWidth,
+                barHeight,
+                valueY));
+        }
+
+        var ticks = scale.TickValues
+            .Select(v => new YAxisTick(v, MapY(v), FormatAxisCurrency(v)))
+            .ToList();
+
+        return new ChartLayout(zeroY, bars, ticks);
+    }
+
+    internal static NiceScale ComputeNiceScale(decimal dataMin, decimal dataMax)
+    {
+        if (dataMin == 0m && dataMax == 0m)
+        {
+            return new NiceScale(-500m, 1000m, 500m, [1000m, 500m, 0m, -500m]);
+        }
+
+        var rawSpan = dataMax - dataMin;
+        var paddedMax = dataMax > 0m ? dataMax + (rawSpan * 0.12m) : 0m;
+        var paddedMin = dataMin < 0m ? dataMin - (rawSpan * 0.12m) : 0m;
+        var span = Math.Max(1m, paddedMax - paddedMin);
+
+        const int targetIntervals = 4;
+        var roughStep = span / targetIntervals;
+        var step = SnapToNiceStep(roughStep);
+
+        var scaleMax = paddedMax > 0m ? Math.Ceiling(paddedMax / step) * step : 0m;
+        var scaleMin = paddedMin < 0m ? Math.Floor(paddedMin / step) * step : 0m;
+
+        if (scaleMax == scaleMin)
+        {
+            scaleMax = step;
+        }
+
+        var ticks = new List<decimal>();
+        for (var v = scaleMax; v >= scaleMin; v -= step)
+        {
+            ticks.Add(v);
+            if (ticks.Count > 12)
+            {
+                break;
+            }
+        }
+
+        if (!ticks.Contains(0m) && scaleMin <= 0m && scaleMax >= 0m)
+        {
+            ticks.Add(0m);
+            ticks = [.. ticks.OrderByDescending(x => x)];
+        }
+
+        return new NiceScale(scaleMin, scaleMax, step, ticks);
+    }
+
+    private static decimal SnapToNiceStep(decimal roughStep)
+    {
+        if (roughStep <= 0m)
+        {
+            return 100m;
+        }
+
+        var magnitude = (decimal)Math.Pow(10, Math.Floor(Math.Log10((double)roughStep)));
+        var fraction = roughStep / magnitude;
+
+        var niceFraction = fraction switch
+        {
+            <= 1m => 1m,
+            <= 2m => 2m,
+            <= 2.5m => 2.5m,
+            <= 5m => 5m,
+            _ => 10m,
+        };
+
+        return Math.Max(1m, niceFraction * magnitude);
+    }
+
+    private static string GetStatusClass(BreakEvenStatus status) => status switch
+    {
+        BreakEvenStatus.Healthy => "is-healthy",
+        BreakEvenStatus.BreakEvenWarning => "is-warning",
+        BreakEvenStatus.Deficit => "is-deficit",
+        _ => "is-empty",
+    };
+
+    private static string GetStatusLabel(BreakEvenStatus status) => status switch
+    {
+        BreakEvenStatus.Healthy => "Saudável",
+        BreakEvenStatus.BreakEvenWarning => "Atenção (equilíbrio)",
+        BreakEvenStatus.Deficit => "Déficit",
+        _ => "Sem movimentações",
+    };
+
+    private static string GetResultToneClass(BreakEvenStatus status) => status switch
+    {
+        BreakEvenStatus.Healthy => "is-positive",
+        BreakEvenStatus.BreakEvenWarning => "is-warning",
+        BreakEvenStatus.Deficit => "is-danger",
+        _ => string.Empty,
+    };
+
+    private static string ShortAxisMonthLabel(YearMonth month)
+    {
+        var label = new DateOnly(month.Year, month.Month, 1).ToString("MMM", HearthFormat.PtBr).TrimEnd('.');
+        return char.ToUpper(label[0], HearthFormat.PtBr) + label[1..];
+    }
+
+    private static string FormatAxisCurrency(decimal value)
+    {
+        if (value == 0m)
+        {
+            return "R$ 0";
+        }
+
+        var sign = value < 0m ? "-" : string.Empty;
+        var abs = Math.Abs(value);
+
+        if (abs >= 1_000_000m)
+        {
+            var millions = abs / 1_000_000m;
+            var formatted = millions % 1m == 0m
+                ? millions.ToString("0", HearthFormat.PtBr)
+                : millions.ToString("0.#", HearthFormat.PtBr);
+            return $"{sign}R$ {formatted}M";
+        }
+
+        if (abs >= 10_000m)
+        {
+            var thousands = abs / 1_000m;
+            var formatted = thousands % 1m == 0m
+                ? thousands.ToString("0", HearthFormat.PtBr)
+                : thousands.ToString("0.#", HearthFormat.PtBr);
+            return $"{sign}R$ {formatted}k";
+        }
+
+        return $"{sign}R$ {Math.Round(abs, 0, MidpointRounding.AwayFromZero).ToString("N0", HearthFormat.PtBr)}";
+    }
+
+    private static RenderFragment RenderSvgText(double x, double y, string cssClass, string content, string anchor = "middle") => builder =>
+    {
+        builder.OpenElement(0, "text");
+        builder.AddAttribute(1, "x", F(x));
+        builder.AddAttribute(2, "y", F(y));
+        builder.AddAttribute(3, "text-anchor", anchor);
+        builder.AddAttribute(4, "class", cssClass);
+        builder.AddContent(5, content);
+        builder.CloseElement();
+    };
+
+    private static string F(double value) =>
+        value.ToString("0.00", CultureInfo.InvariantCulture);
+
+    internal sealed record NiceScale(decimal Min, decimal Max, decimal Step, IReadOnlyList<decimal> TickValues);
+
+    private sealed record YAxisTick(decimal Value, double Y, string Label);
+
+    private sealed record BarGeometry(
+        DashboardMonthlyResultPointDto Point,
+        double ColLeft,
+        double ColWidth,
+        double CenterX,
+        double BarX,
+        double BarY,
+        double BarWidth,
+        double BarHeight,
+        double ValueY);
+
+    private sealed record ChartLayout(
+        double ZeroY,
+        IReadOnlyList<BarGeometry> Bars,
+        IReadOnlyList<YAxisTick> YAxisTicks);
+}

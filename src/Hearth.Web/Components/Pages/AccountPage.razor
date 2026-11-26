@@ -2,22 +2,17 @@
 @attribute [Authorize]
 @inherits AccountPageBase
 @using Hearth.Application.Accounts
+@using Hearth.Application.Accounts.DeleteBalanceAdjustment
 @using Hearth.Application.Accounts.GetAccount
 @using Hearth.Application.Accounts.RenameAccount
-@using Hearth.Application.Accounts.UpdateInitialBalance
+@using Hearth.Application.Accounts.SetAccountBalance
 
 <PageTitle>Conta — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Conta</h1>
-            <p class="hearth-dash-subtitle">
-                Identificação da conta ativa e ajuste do saldo inicial.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Conta"
+                Subtitle="Identificação da conta ativa, início do acompanhamento e ajuste do saldo inicial (dia 1º).">
+        <Actions>
             <MudButton Variant="Variant.Outlined"
                        Color="Color.Default"
                        Class="hearth-btn-clean"
@@ -26,8 +21,8 @@
                        data-testid="new-account-button">
                 Nova conta
             </MudButton>
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     @if (_loading)
     {
@@ -55,6 +50,22 @@
                               Disabled="_savingName"
                               data-testid="rename-account-input" />
 
+                <MudTextField Value="@($"{HearthFormat.Date(_account.TrackingStartDate)} — {HearthFormat.MonthYear(_account.TrackingStartPeriod)}")"
+                              Label="Início do acompanhamento"
+                              Variant="Variant.Outlined"
+                              ReadOnly="true"
+                              HelperText="Imutável. Definido automaticamente no dia 1º do mês de criação da conta."
+                              Class="hearth-money"
+                              data-testid="initial-balance-date-readonly" />
+
+                <MudTextField Value="@HearthFormat.Money(_account.InitialBalance)"
+                              Label="@($"Saldo inicial ({HearthFormat.Date(_account.TrackingStartDate)})")"
+                              Variant="Variant.Outlined"
+                              ReadOnly="true"
+                              HelperText="Único saldo manual da conta, referente ao dia 1º do mês de entrada. Edite no painel ao lado."
+                              Class="hearth-money"
+                              data-testid="initial-balance-readonly" />
+
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-auto">
                     <MudButton Variant="Variant.Outlined"
                                Color="Color.Default"
@@ -67,44 +78,107 @@
                 </MudStack>
             </section>
 
-            <section class="hearth-form-panel" aria-labelledby="heading-account-balance">
+            <section class="hearth-form-panel" aria-labelledby="heading-account-balance" data-testid="account-set-balance-section">
                 <div>
                     <h2 id="heading-account-balance" class="hearth-card-title">Saldo inicial</h2>
-                    <p class="hearth-card-meta">Base de partida do cálculo do saldo real de caixa.</p>
+                    <p class="hearth-card-meta">
+                        Único saldo manual da conta, sempre referente ao dia 1º do mês de entrada (@HearthFormat.Date(_account.TrackingStartDate)). Pode ser negativo, zero ou positivo. O SALDO atual é calculado automaticamente a partir dele, sem alterar receitas, despesas ou resultado mensal.
+                    </p>
                 </div>
 
                 <MudNumericField T="decimal"
-                                 @bind-Value="_initialBalance"
-                                 Label="Saldo inicial"
+                                 @bind-Value="_definedBalance"
+                                 Label="@($"Saldo inicial ({HearthFormat.Date(_account.TrackingStartDate)})")"
                                  Variant="Variant.Outlined"
                                  Culture="@HearthFormat.PtBr"
                                  Format="N2"
                                  Adornment="Adornment.Start"
                                  AdornmentText="R$"
                                  HideSpinButtons="true"
+                                 Immediate="true"
+                                 HelperText="Informe o saldo real que você tinha no dia 1º do mês de entrada (negativo, zero ou positivo)."
                                  Disabled="_savingBalance"
-                                 data-testid="update-balance-input" />
+                                 data-testid="account-set-balance-input" />
 
-                <MudTextField Value="@HearthFormat.Date(_account.InitialBalanceDate)"
-                              Label="Data do saldo inicial"
+                <MudTextField @bind-Value="_balanceReason"
+                              Label="Motivo (opcional)"
                               Variant="Variant.Outlined"
-                              ReadOnly="true"
-                              HelperText="Imutável para preservar a fronteira de caixa dos lançamentos."
-                              Class="hearth-money"
-                              data-testid="initial-balance-date-readonly" />
+                              MaxLength="@DomainValidation.MaxDescriptionLength"
+                              Immediate="true"
+                              Disabled="_savingBalance"
+                              data-testid="account-set-balance-reason-input" />
 
                 <MudStack Row="true" Justify="Justify.FlexEnd" Class="mt-auto">
                     <MudButton Variant="Variant.Filled"
                                Color="Color.Primary"
                                Class="hearth-btn-clean"
-                               OnClick="SaveInitialBalanceAsync"
+                               OnClick="SetBalanceAsync"
                                Disabled="_savingBalance"
-                               data-testid="update-balance-submit">
-                        @(_savingBalance ? "Salvando…" : "Atualizar saldo")
+                               data-testid="account-set-balance-submit">
+                        @(_savingBalance ? "Salvando…" : "Salvar saldo inicial")
                     </MudButton>
                 </MudStack>
             </section>
         </div>
+
+        @if (_account.BalanceAdjustments is { Count: > 0 } balanceHistory)
+        {
+            <section class="hearth-card mt-4" aria-labelledby="heading-account-balance-history" data-testid="account-balance-history-log">
+                <div class="hearth-card-head">
+                    <div>
+                        <h2 id="heading-account-balance-history" class="hearth-card-title">Histórico de alterações do saldo inicial</h2>
+                        <p class="hearth-card-meta">Registros exclusivos de controle de caixa (dia 1º) — não entram como receita, despesa ou resultado mensal.</p>
+                    </div>
+                </div>
+                <div class="hearth-adjustments-list">
+                    @foreach (var entry in balanceHistory.OrderByDescending(e => e.CreatedAt))
+                    {
+                        var entryId = entry.Id;
+                        <div class="hearth-adjustment-row" data-testid="account-balance-history-item">
+                            <div>
+                                <span class="hearth-adjustment-reason">@(string.IsNullOrWhiteSpace(entry.Reason) ? "Saldo inicial atualizado" : entry.Reason)</span>
+                                <span class="hearth-adjustment-date">Saldo inicial · @HearthFormat.Date(entry.Date)</span>
+                            </div>
+                            <div class="hearth-adjustment-row-right">
+                                <span class="hearth-money @(entry.Amount > 0m ? "hearth-money--positive" : entry.Amount < 0m ? "hearth-money--negative" : null)">
+                                    @HearthFormat.Money(entry.Amount)
+                                </span>
+                                @if (_confirmDeleteBalanceEntryId == entryId)
+                                {
+                                    <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                                        <MudButton Size="Size.Small"
+                                                   Variant="Variant.Filled"
+                                                   Color="Color.Error"
+                                                   Disabled="_deletingBalanceEntry"
+                                                   OnClick="() => DeleteBalanceEntryAsync(entryId)"
+                                                   data-testid="@($"confirm-delete-balance-entry-{entryId}")">
+                                            Confirmar
+                                        </MudButton>
+                                        <MudButton Size="Size.Small"
+                                                   Variant="Variant.Text"
+                                                   Disabled="_deletingBalanceEntry"
+                                                   OnClick="() => _confirmDeleteBalanceEntryId = null">
+                                            Cancelar
+                                        </MudButton>
+                                    </MudStack>
+                                }
+                                else
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                                   Size="Size.Small"
+                                                   Class="hearth-action-btn is-danger"
+                                                   title="Excluir registro de saldo"
+                                                   aria-label="Excluir registro de saldo"
+                                                   Disabled="_deletingBalanceEntry"
+                                                   OnClick="() => _confirmDeleteBalanceEntryId = entryId"
+                                                   data-testid="@($"delete-balance-entry-{entryId}")" />
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            </section>
+        }
     }
 </div>
 
@@ -112,11 +186,21 @@
 {
     private AccountDto? _account;
     private string _name = string.Empty;
-    private decimal _initialBalance;
+    private decimal _definedBalance;
+    private string _balanceReason = string.Empty;
 
     private bool _loading = true;
     private bool _savingName;
     private bool _savingBalance;
+    private Guid? _confirmDeleteBalanceEntryId;
+    private bool _deletingBalanceEntry;
+
+    protected override void OnAccountChanged()
+    {
+        _definedBalance = 0m;
+        _balanceReason = string.Empty;
+        _confirmDeleteBalanceEntryId = null;
+    }
 
     protected override async Task LoadDataAsync(CancellationToken cancellationToken)
     {
@@ -138,7 +222,7 @@
     {
         _account = account;
         _name = account.Name;
-        _initialBalance = account.InitialBalance;
+        _definedBalance = account.InitialBalance;
     }
 
     private async Task SaveNameAsync()
@@ -159,10 +243,7 @@
 
             if (result.IsSuccess)
             {
-                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
-            }
-            else
-            {
+                await ReloadAccountContextAsync(AccountId, ComponentCancellationToken);
                 await LoadDataAsync(ComponentCancellationToken);
             }
         }
@@ -172,7 +253,7 @@
         }
     }
 
-    private async Task SaveInitialBalanceAsync()
+    private async Task SetBalanceAsync()
     {
         if (_savingBalance)
         {
@@ -183,23 +264,55 @@
 
         try
         {
-            var result = await Executor.ExecuteAsync<UpdateInitialBalanceHandler>(
-                (handler, ct) => handler.ExecuteAsync(new UpdateInitialBalanceCommand(AccountId, _initialBalance), ct),
-                successMessage: "Saldo inicial atualizado.",
+            var result = await Executor.ExecuteAsync<SetAccountBalanceHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new SetAccountBalanceCommand(
+                        AccountId,
+                        _definedBalance,
+                        string.IsNullOrWhiteSpace(_balanceReason) ? null : _balanceReason.Trim()),
+                    ct),
+                successMessage: "Saldo inicial atualizado com sucesso.",
                 cancellationToken: ComponentCancellationToken);
 
             if (result.IsSuccess)
             {
-                await AccountContext.ReloadAsync(AccountId, ComponentCancellationToken);
-            }
-            else
-            {
+                _balanceReason = string.Empty;
+                await ReloadAccountContextAsync(AccountId, ComponentCancellationToken);
                 await LoadDataAsync(ComponentCancellationToken);
             }
         }
         finally
         {
             _savingBalance = false;
+        }
+    }
+
+    private async Task DeleteBalanceEntryAsync(Guid adjustmentId)
+    {
+        if (_deletingBalanceEntry)
+        {
+            return;
+        }
+
+        _deletingBalanceEntry = true;
+
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteBalanceAdjustmentHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteBalanceAdjustmentCommand(AccountId, adjustmentId), ct),
+                successMessage: "Registro de saldo excluído.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteBalanceEntryId = null;
+                await ReloadAccountContextAsync(AccountId, ComponentCancellationToken);
+                await LoadDataAsync(ComponentCancellationToken);
+            }
+        }
+        finally
+        {
+            _deletingBalanceEntry = false;
         }
     }
 }

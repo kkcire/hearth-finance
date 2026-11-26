@@ -1,0 +1,201 @@
+@using System.Globalization
+@using Hearth.Application.Reports.GetMonthlyDashboard
+@using Hearth.Web.Services
+
+<section class="hearth-card hearth-donut-card" aria-labelledby="heading-category-spending" data-testid="dashboard-category-spending-card">
+    <div class="hearth-module-head">
+        <div>
+            <h2 id="heading-category-spending" class="hearth-card-title">Gastos por categoria</h2>
+            <p class="hearth-card-meta">Clique em uma categoria para ver a composição</p>
+        </div>
+
+        <a href="/orcamentos" class="hearth-inline-link">Orçamentos</a>
+    </div>
+
+    @if (Items.Count == 0)
+    {
+        <EmptyState Compact="true"
+                    Title="Sem gastos registrados neste mês"
+                    Description="Registre despesas diretas, fixas ou compras no cartão para ver a distribuição por categoria."
+                    TestId="category-spending-empty-state" />
+    }
+    else
+    {
+        var totalSpent = Items.Sum(i => i.AmountSpent);
+        var slices = BuildDonutSlices(Items, totalSpent);
+        var expandedCategory = _expandedCategoryId.HasValue
+            ? Items.FirstOrDefault(i => i.CategoryId == _expandedCategoryId.Value)
+            : null;
+
+        <div class="hearth-donut-body">
+            <div class="hearth-donut-chart-wrap">
+                <svg class="hearth-donut-svg" viewBox="0 0 216 216" role="img" aria-label="@($"Total de gastos por categoria: {HearthFormat.Money(totalSpent)}")">
+                    <circle cx="108" cy="108" r="78" class="hearth-donut-track" />
+                    @foreach (var slice in slices)
+                    {
+                        var categoryId = slice.Item.CategoryId;
+                        var isDimmed = expandedCategory is not null && expandedCategory.CategoryId != categoryId;
+                        <circle cx="108"
+                                cy="108"
+                                r="78"
+                                class="hearth-donut-segment @(isDimmed ? "is-dimmed" : null)"
+                                stroke="@slice.Item.HexColor"
+                                stroke-dasharray="@($"{F(slice.ArcLength)} {F(Circumference)}")"
+                                stroke-dashoffset="@F(-slice.Offset)"
+                                @onclick="() => ToggleCategory(categoryId)" />
+                    }
+                </svg>
+
+                <div class="hearth-donut-center">
+                    <span class="hearth-donut-center-label">
+                        @(expandedCategory is not null ? expandedCategory.CategoryName : "Total")
+                    </span>
+                    <strong class="hearth-donut-center-value hearth-money" data-testid="spending-total">
+                        @HearthFormat.Money(expandedCategory is not null ? expandedCategory.AmountSpent : totalSpent)
+                    </strong>
+                </div>
+            </div>
+
+            <ul class="hearth-donut-legend" data-testid="spending-categories-list">
+                @foreach (var item in Items)
+                {
+                    var categoryId = item.CategoryId;
+                    var isExpanded = _expandedCategoryId == categoryId;
+                    <li class="hearth-donut-legend-row">
+                        <button type="button"
+                                class="hearth-donut-legend-btn @(isExpanded ? "is-active" : null)"
+                                aria-expanded="@(isExpanded ? "true" : "false")"
+                                @onclick="() => ToggleCategory(categoryId)"
+                                data-testid="@($"category-toggle-{categoryId}")">
+                            <span class="hearth-donut-legend-left">
+                                <span class="hearth-donut-swatch" style="background-color: @item.HexColor;" aria-hidden="true"></span>
+                                <span class="hearth-donut-name">@item.CategoryName</span>
+                                @if (item.BudgetUsagePercentage is > 100m)
+                                {
+                                    <span class="hearth-donut-budget-alert" data-testid="budget-exceeded-badge">@HearthFormat.Percentage(item.BudgetUsagePercentage.Value)</span>
+                                }
+                            </span>
+                            <span class="hearth-donut-legend-right hearth-money">
+                                <span class="hearth-donut-amount">@HearthFormat.Money(item.AmountSpent)</span>
+                                <span class="hearth-donut-pct">@HearthFormat.Percentage(item.ShareOfTotalSpending)</span>
+                                <svg class="hearth-donut-chevron @(isExpanded ? "is-open" : null)" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                                    <path d="M4.5 6.5L8 10L11.5 6.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                                </svg>
+                            </span>
+                        </button>
+                    </li>
+                }
+            </ul>
+        </div>
+
+        @if (expandedCategory is not null)
+        {
+            var entries = expandedCategory.Entries ?? [];
+            <div class="hearth-category-composition" data-testid="category-composition-panel">
+                <div class="hearth-category-composition-head">
+                    <div class="hearth-category-composition-title">
+                        <span class="hearth-donut-swatch" style="background-color: @expandedCategory.HexColor;" aria-hidden="true"></span>
+                        <strong>Composição — @expandedCategory.CategoryName</strong>
+                        <span class="hearth-category-composition-count">
+                            @entries.Count @(entries.Count == 1 ? "lançamento" : "lançamentos")
+                        </span>
+                    </div>
+                    <button type="button"
+                            class="hearth-inline-text-btn"
+                            @onclick="CloseCategory"
+                            data-testid="close-category-composition">
+                        Fechar
+                    </button>
+                </div>
+
+                @if (entries.Count == 0)
+                {
+                    <p class="hearth-category-composition-empty">Sem lançamentos detalhados para esta categoria.</p>
+                }
+                else
+                {
+                    <ul class="hearth-category-composition-list" data-testid="@($"category-entries-{expandedCategory.CategoryId}")">
+                        @foreach (var entry in entries)
+                        {
+                            <li class="hearth-category-composition-row">
+                                <div class="hearth-category-composition-info">
+                                    <span class="hearth-category-composition-desc">
+                                        @entry.Description
+                                        @if (!string.IsNullOrWhiteSpace(entry.InstallmentLabel))
+                                        {
+                                            <span class="hearth-installment-progress-tag">@entry.InstallmentLabel</span>
+                                        }
+                                    </span>
+                                    <span class="hearth-category-composition-meta">
+                                        <span class="hearth-category-origin-tag">@entry.OriginLabel</span>
+                                        <span class="hearth-money">@entry.Date.ToString("dd/MM", HearthFormat.PtBr)</span>
+                                    </span>
+                                </div>
+                                <strong class="hearth-category-composition-amount hearth-money">
+                                    @HearthFormat.Money(entry.Amount)
+                                </strong>
+                            </li>
+                        }
+                    </ul>
+                }
+            </div>
+        }
+    }
+</section>
+
+@code
+{
+    private const double Radius = 78.0;
+    private const double Circumference = 2.0 * Math.PI * Radius;
+
+    private Guid? _expandedCategoryId;
+
+    [Parameter, EditorRequired]
+    public IReadOnlyList<DashboardCategorySpendingItemDto> Items { get; set; } = [];
+
+    protected override void OnParametersSet()
+    {
+        if (_expandedCategoryId.HasValue && Items.All(i => i.CategoryId != _expandedCategoryId.Value))
+        {
+            _expandedCategoryId = null;
+        }
+    }
+
+    private void ToggleCategory(Guid categoryId) =>
+        _expandedCategoryId = _expandedCategoryId == categoryId ? null : categoryId;
+
+    private void CloseCategory() =>
+        _expandedCategoryId = null;
+
+    private static IReadOnlyList<DonutSlice> BuildDonutSlices(
+        IReadOnlyList<DashboardCategorySpendingItemDto> items,
+        decimal totalSpent)
+    {
+        if (totalSpent <= 0m)
+        {
+            return [];
+        }
+
+        var slices = new List<DonutSlice>(items.Count);
+        var offset = 0.0;
+        var gap = items.Count > 1 ? 2.6 : 0.0;
+
+        foreach (var item in items)
+        {
+            var rawArc = (double)(item.AmountSpent / totalSpent) * Circumference;
+            var arc = Math.Max(0.5, rawArc - gap);
+            slices.Add(new DonutSlice(item, arc, offset));
+            offset += rawArc;
+        }
+
+        return slices;
+    }
+
+    private static string F(double value) =>
+        value.ToString("0.00", CultureInfo.InvariantCulture);
+
+    private sealed record DonutSlice(
+        DashboardCategorySpendingItemDto Item,
+        double ArcLength,
+        double Offset);
+}

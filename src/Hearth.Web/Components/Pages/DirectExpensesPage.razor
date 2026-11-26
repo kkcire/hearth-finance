@@ -13,15 +13,9 @@
 <PageTitle>Gastos Diretos — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Gastos diretos</h1>
-            <p class="hearth-dash-subtitle">
-                Saídas à vista em conta, Pix ou débito que impactam o caixa na data do lançamento.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Gastos diretos"
+                Subtitle="Saídas à vista em conta, Pix ou débito que impactam o caixa na data do lançamento.">
+        <Actions>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Class="hearth-btn-clean"
@@ -31,17 +25,29 @@
                        data-testid="new-direct-expense-button">
                 Novo gasto
             </MudButton>
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     <div class="hearth-command-bar">
         <div class="hearth-command-controls">
             @if (!_showAllMonths)
             {
-                <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+                <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChanged" Disabled="_saving" />
             }
 
             <MudSwitch T="bool" @bind-Value="_showAllMonths" Color="Color.Primary" Label="Todos os meses" />
+
+            <MudTextField @bind-Value="_searchText"
+                          Placeholder="Buscar descrição ou categoria…"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Adornment="Adornment.Start"
+                          AdornmentIcon="@Icons.Material.Filled.Search"
+                          Clearable="true"
+                          Immediate="true"
+                          Class="hearth-search-input"
+                          aria-label="Filtrar gastos diretos"
+                          data-testid="direct-expense-search" />
         </div>
 
         @if (!_loading)
@@ -200,12 +206,10 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
-                        <p class="hearth-empty-title">Nenhum gasto direto neste período</p>
-                        <p class="hearth-empty-desc">
-                            Navegue para outro mês ou registre um novo lançamento acima.
-                        </p>
-                    </div>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="@(string.IsNullOrWhiteSpace(_searchText) ? "Nenhum gasto direto neste período" : "Nenhum gasto encontrado para a busca")"
+                                Description="@(string.IsNullOrWhiteSpace(_searchText) ? "Navegue para outro mês ou registre um novo lançamento acima." : "Tente outro termo ou limpe o filtro de busca.")" />
                 </NoRecordsContent>
             </MudTable>
         </section>
@@ -220,6 +224,7 @@
 
     private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
     private bool _showAllMonths;
+    private string _searchText = string.Empty;
     private bool _loading = true;
     private bool _saving;
 
@@ -240,12 +245,25 @@
             .Where(category => !category.IsArchived || category.Id == _editingOriginalCategoryId)
             .ToList();
 
-    private IReadOnlyList<DirectExpenseDto> FilteredExpenses =>
-        _showAllMonths
-            ? _expenses
-            : _expenses
-                .Where(item => item.Date.Year == _selectedMonth.Year && item.Date.Month == _selectedMonth.Month)
-                .ToList();
+    private IReadOnlyList<DirectExpenseDto> FilteredExpenses
+    {
+        get
+        {
+            IEnumerable<DirectExpenseDto> query = _showAllMonths
+                ? _expenses
+                : _expenses.Where(item => item.Date.Year == _selectedMonth.Year && item.Date.Month == _selectedMonth.Month);
+
+            if (!string.IsNullOrWhiteSpace(_searchText))
+            {
+                var term = _searchText.Trim();
+                query = query.Where(item =>
+                    item.Description.Contains(term, StringComparison.OrdinalIgnoreCase)
+                    || GetCategoryName(item.CategoryId).Contains(term, StringComparison.OrdinalIgnoreCase));
+            }
+
+            return query.ToList();
+        }
+    }
 
     protected override void OnInitialized()
     {

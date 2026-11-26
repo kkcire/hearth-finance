@@ -12,23 +12,17 @@
 <PageTitle>Categorias — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Categorias</h1>
-            <p class="hearth-dash-subtitle">
-                Organize lançamentos e orçamentos; arquive categorias fora de uso para preservar o histórico.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Categorias"
+                Subtitle="Organize lançamentos e orçamentos; arquive categorias fora de uso para preservar o histórico.">
+        <Actions>
             <MudSwitch T="bool"
                        Value="_showArchived"
                        ValueChanged="ToggleArchivedAsync"
                        Color="Color.Primary"
                        Label="Mostrar arquivadas"
                        data-testid="toggle-archived" />
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     <section class="hearth-form-panel" aria-label="Criar nova categoria">
         <MudGrid Spacing="2" Class="align-center">
@@ -185,12 +179,10 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
-                        <p class="hearth-empty-title">Nenhuma categoria encontrada</p>
-                        <p class="hearth-empty-desc">
-                            Adicione uma nova categoria acima ou exiba categorias arquivadas.
-                        </p>
-                    </div>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="Nenhuma categoria encontrada"
+                                Description="Adicione uma nova categoria acima ou exiba categorias arquivadas." />
                 </NoRecordsContent>
             </MudTable>
         </section>

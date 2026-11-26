@@ -1,4 +1,4 @@
-﻿<MudNavMenu Class="py-2 hearth-nav-menu">
+﻿<MudNavMenu Class="py-3 hearth-nav-menu" aria-label="Navegação principal">
     <MudNavLink Href="/" Match="NavLinkMatch.All" Icon="@Icons.Material.Filled.Dashboard">
         Painel
     </MudNavLink>
@@ -7,7 +7,10 @@
         Cartão
     </MudNavLink>
 
-    <MudNavGroup Title="Lançamentos" Icon="@Icons.Material.Filled.SwapHoriz" Expanded="true">
+    <MudNavGroup Title="Lançamentos" Icon="@Icons.Material.Filled.SwapHoriz" Expanded="true" Class="hearth-nav-group">
+        <MudNavLink Href="/atividades" Icon="@Icons.Material.Filled.ReceiptLong">
+            Atividades
+        </MudNavLink>
         <MudNavLink Href="/gastos-diretos" Icon="@Icons.Material.Filled.Payments">
             Gastos Diretos
         </MudNavLink>
@@ -19,7 +22,7 @@
         </MudNavLink>
     </MudNavGroup>
 
-    <MudNavGroup Title="Planejamento" Icon="@Icons.Material.Filled.PieChart" Expanded="true">
+    <MudNavGroup Title="Planejamento" Icon="@Icons.Material.Filled.PieChart" Expanded="true" Class="hearth-nav-group">
         <MudNavLink Href="/orcamentos" Icon="@Icons.Material.Filled.TrackChanges">
             Orçamentos
         </MudNavLink>
@@ -28,7 +31,7 @@
         </MudNavLink>
     </MudNavGroup>
 
-    <MudDivider Class="my-2" />
+    <MudDivider Class="my-3 hearth-nav-divider" />
 
     <MudNavLink Href="/conta" Icon="@Icons.Material.Filled.ManageAccounts">
         Conta

@@ -18,15 +18,9 @@
 <PageTitle>Despesas Fixas — Hearth Finance</PageTitle>
 
 <div class="hearth-page">
-    <header class="hearth-page-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Despesas fixas</h1>
-            <p class="hearth-dash-subtitle">
-                Assinaturas e contas recorrentes com controle mensal de pagamento e vigência.
-            </p>
-        </div>
-
-        <div class="hearth-page-header-actions">
+    <PageHeader Title="Despesas fixas"
+                Subtitle="Assinaturas e contas recorrentes com controle mensal de pagamento e vigência.">
+        <Actions>
             <MudButton Variant="Variant.Filled"
                        Color="Color.Primary"
                        Class="hearth-btn-clean"
@@ -36,12 +30,12 @@
                        data-testid="new-fixed-expense-button">
                 Nova despesa fixa
             </MudButton>
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     <div class="hearth-command-bar">
         <div class="hearth-command-controls">
-            <MonthNavigator Month="_selectedMonth" MonthChanged="OnMonthChanged" Disabled="_saving" />
+            <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChanged" Disabled="_saving" />
             <MudSwitch T="bool" @bind-Value="_showInactiveInMonth" Color="Color.Primary" Label="Mostrar inativas no mês" />
         </div>
 
@@ -374,12 +368,10 @@
                     </MudTd>
                 </RowTemplate>
                 <NoRecordsContent>
-                    <div class="hearth-empty-state hearth-empty-state--compact ma-4">
-                        <p class="hearth-empty-title">Nenhuma despesa fixa em @HearthFormat.MonthYear(_selectedMonth)</p>
-                        <p class="hearth-empty-desc">
-                            Ative "Mostrar inativas no mês" ou cadastre uma nova assinatura acima.
-                        </p>
-                    </div>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="@($"Nenhuma despesa fixa em {HearthFormat.MonthYear(_selectedMonth)}")"
+                                Description="Ative &quot;Mostrar inativas no mês&quot; ou cadastre uma nova assinatura acima." />
                 </NoRecordsContent>
             </MudTable>
         </section>

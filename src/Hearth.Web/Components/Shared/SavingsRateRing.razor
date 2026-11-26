@@ -1,0 +1,132 @@
+@using System.Globalization
+@using Hearth.Web.Services
+
+<section class="hearth-card hearth-savings-card" aria-labelledby="heading-savings-rate" data-testid="dashboard-savings-rate-card">
+    <div class="hearth-savings-head">
+        <h2 id="heading-savings-rate" class="hearth-card-title">Taxa de Poupança</h2>
+        <span class="hearth-savings-status-pill @GetStatusClass()" data-testid="savings-rate-status-cue">
+            @GetStatusLabel()
+        </span>
+    </div>
+
+    @{
+        var clamped = HasActivity ? Math.Clamp((double)Percentage, 0.0, 100.0) : 0.0;
+        var dashArray = (clamped / 100.0) * Circumference;
+        var ariaLabel = HasActivity
+            ? $"Taxa de poupança: {HearthFormat.Percentage(Percentage)} — {GetStatusLabel()}"
+            : "Taxa de poupança: Sem dados";
+    }
+
+    <div class="hearth-savings-ring-wrap">
+        <svg class="hearth-savings-ring-svg"
+             viewBox="0 0 156 156"
+             role="img"
+             aria-label="@ariaLabel">
+            <circle cx="78" cy="78" r="60" class="hearth-savings-ring-track" />
+            @if (clamped > 0.0)
+            {
+                <circle cx="78"
+                        cy="78"
+                        r="60"
+                        class="hearth-savings-ring-progress"
+                        stroke-dasharray="@($"{F(dashArray)} {F(Circumference)}")" />
+            }
+        </svg>
+
+        <div class="hearth-savings-ring-center">
+            <strong class="hearth-savings-ring-value hearth-money" data-testid="savings-rate-value">
+                @(HasActivity ? HearthFormat.Percentage(Percentage) : "—")
+            </strong>
+        </div>
+    </div>
+
+    <div class="hearth-savings-footer">
+        <p class="hearth-savings-caption">
+            Percentual da sua renda própria que sobra após as despesas, sem distorção por reembolsos de terceiros.
+        </p>
+
+        <button type="button"
+                class="hearth-savings-info-btn"
+                aria-expanded="@(_showExplanation ? "true" : "false")"
+                aria-controls="savings-rate-explanation"
+                @onclick="ToggleExplanation"
+                data-testid="savings-rate-info-toggle">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="10" cy="10" r="7.5" stroke="currentColor" stroke-width="1.5" />
+                <path d="M10 9V13.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                <circle cx="10" cy="6.6" r="0.9" fill="currentColor" />
+            </svg>
+            <span>@(_showExplanation ? "Ocultar explicação" : "O que é isso?")</span>
+        </button>
+
+        @if (_showExplanation)
+        {
+            <div id="savings-rate-explanation" class="hearth-savings-explanation" data-testid="savings-rate-explanation">
+                <p class="hearth-savings-why">
+                    A <strong>taxa de poupança</strong> mede quanto da sua <strong>renda própria</strong> (condição Própria) sobra após as despesas para reservas, investimentos e patrimônio. Reembolsos e repasses de terceiros não inflam a base do cálculo.
+                </p>
+                <p class="hearth-savings-formula">
+                    <strong>Fórmula:</strong> ((Receitas &minus; Despesas Totais) &divide; Renda Própria) &times; 100
+                </p>
+                <p class="hearth-savings-why">
+                    Define a velocidade da acumulação de riqueza: percentuais acima de <strong>20%</strong> da renda própria já geram impacto relevante no longo prazo e aceleram a independência financeira.
+                </p>
+                <div class="hearth-savings-bands">
+                    <span class="hearth-savings-band is-attention">&lt; 10% Atenção</span>
+                    <span class="hearth-savings-band is-balanced">10–20% Equilibrada</span>
+                    <span class="hearth-savings-band is-healthy">&ge; 20% Saudável</span>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+@code
+{
+    private const double Radius = 60.0;
+    private const double Circumference = 2.0 * Math.PI * Radius;
+
+    private bool _showExplanation;
+
+    [Parameter]
+    public decimal Percentage { get; set; }
+
+    [Parameter]
+    public bool HasActivity { get; set; } = true;
+
+    private void ToggleExplanation() =>
+        _showExplanation = !_showExplanation;
+
+    private string GetStatusLabel()
+    {
+        if (!HasActivity)
+        {
+            return "Sem dados";
+        }
+
+        return Percentage switch
+        {
+            >= 20m => "Saudável",
+            >= 10m => "Equilibrada",
+            _ => "Atenção",
+        };
+    }
+
+    private string GetStatusClass()
+    {
+        if (!HasActivity)
+        {
+            return "is-neutral";
+        }
+
+        return Percentage switch
+        {
+            >= 20m => "is-healthy",
+            >= 10m => "is-balanced",
+            _ => "is-attention",
+        };
+    }
+
+    private static string F(double value) =>
+        value.ToString("0.00", CultureInfo.InvariantCulture);
+}

@@ -29,15 +29,9 @@
 <PageTitle>Cartão — Hearth Finance</PageTitle>
 
 <div class="hearth-card-page">
-    <header class="hearth-dash-header">
-        <div class="hearth-dash-title-group">
-            <h1 class="hearth-dash-title">Cartão de crédito</h1>
-            <p class="hearth-dash-subtitle">
-                Limite, fatura por vencimento e compras do seu cartão em um só lugar.
-            </p>
-        </div>
-
-        <div class="hearth-card-page-actions">
+    <PageHeader Title="Cartão de crédito"
+                Subtitle="Limite, fatura por vencimento e compras do seu cartão em um só lugar.">
+        <Actions>
             @if (_activeCard is not null)
             {
                 <MudButton Variant="Variant.Filled"
@@ -62,8 +56,8 @@
                     Cadastrar cartão
                 </MudButton>
             }
-        </div>
-    </header>
+        </Actions>
+    </PageHeader>
 
     @if (_loading)
     {
@@ -605,7 +599,7 @@
                                          Min="1"
                                          Max="@Math.Max(1, _installmentCount)"
                                          Immediate="true"
-                                         HelperText="> 1: anteriores já pagas"
+                                         HelperText="Parcelas a partir do mês inicial sempre entram na fatura"
                                          Disabled="_saving"
                                          data-testid="purchase-initial-installment-input" />
                     </MudItem>
@@ -876,7 +870,7 @@
 
                     @if (_activeTab == CardTab.Invoice)
                     {
-                        <MonthNavigator Month="_selectedCycle" MonthChanged="OnCycleChangedAsync" Disabled="_loadingInvoice" />
+                        <MonthNavigator Month="_selectedCycle" MinMonth="TrackingStartPeriod" MonthChanged="OnCycleChangedAsync" Disabled="_loadingInvoice" />
                     }
                     else
                     {
@@ -1175,7 +1169,11 @@
                                                                 <td>
                                                                     @if (installment.IsPreviouslyPaid)
                                                                     {
-                                                                        <span class="hearth-status-pill is-neutral">Já paga</span>
+                                                                        <span class="hearth-status-pill is-neutral">Já paga (fora do período)</span>
+                                                                    }
+                                                                    else if (installment.DueDate <= Clock.Today)
+                                                                    {
+                                                                        <span class="hearth-status-pill is-positive">Fatura paga</span>
                                                                     }
                                                                     else
                                                                     {
@@ -2212,7 +2210,8 @@
         var minDueDate = AccountContext.Current?.InitialBalanceDate;
 
         var draftUsage = 0m;
-        for (var i = _initialInstallment - 1; i < splits.Count; i++)
+        var startIndex = minDueDate.HasValue ? 0 : _initialInstallment - 1;
+        for (var i = startIndex; i < splits.Count; i++)
         {
             var dueDate = firstCycle.AddCycles(i).DueDate;
             if (dueDate > Clock.Today && (minDueDate is null || dueDate >= minDueDate.Value))

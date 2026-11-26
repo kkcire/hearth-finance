@@ -1,0 +1,34 @@
+<div class="hearth-empty-state @(Compact ? "hearth-empty-state--compact" : null) @CssClass" data-testid="@TestId">
+    <p class="hearth-empty-title">@Title</p>
+    @if (!string.IsNullOrWhiteSpace(Description))
+    {
+        <p class="hearth-empty-desc">@Description</p>
+    }
+    @if (Action is not null)
+    {
+        <div class="hearth-empty-action">
+            @Action
+        </div>
+    }
+</div>
+
+@code
+{
+    [Parameter, EditorRequired]
+    public string Title { get; set; } = string.Empty;
+
+    [Parameter]
+    public string? Description { get; set; }
+
+    [Parameter]
+    public bool Compact { get; set; }
+
+    [Parameter]
+    public string? CssClass { get; set; }
+
+    [Parameter]
+    public string? TestId { get; set; }
+
+    [Parameter]
+    public RenderFragment? Action { get; set; }
+}
