@@ -30,10 +30,8 @@ public class DeleteIncomeHandlerTests
         _handler = new DeleteIncomeHandler(_accountAccess, _incomes, _unitOfWork);
     }
 
-    [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task ExecuteAsync_ExistingIncome_DeletesWhetherExpectedOrReceived(bool received)
+    [Fact]
+    public async Task ExecuteAsync_ExistingIncome_DeletesAndSaves()
     {
         var income = Income.Create(
             Guid.NewGuid(),
@@ -41,11 +39,6 @@ public class DeleteIncomeHandlerTests
             new DateOnly(2026, 10, 28),
             Money.FromDecimal(5000.00m),
             "Salário");
-
-        if (received)
-        {
-            income.MarkAsReceived(new DateOnly(2026, 10, 28), new DateOnly(2026, 12, 31));
-        }
 
         await _incomes.AddAsync(income);
 

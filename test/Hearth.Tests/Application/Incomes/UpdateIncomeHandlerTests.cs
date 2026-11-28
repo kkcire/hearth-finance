@@ -28,7 +28,7 @@ public class UpdateIncomeHandlerTests
         _handler = new UpdateIncomeHandler(_accountAccess, _incomes, _conditions, _unitOfWork);
     }
 
-    private async Task<(Account Account, Income Income)> SeedAsync(bool received = false)
+    private async Task<(Account Account, Income Income)> SeedAsync(DateOnly? date = null)
     {
         var account = Account.Create(
             Guid.NewGuid(),
@@ -41,14 +41,9 @@ public class UpdateIncomeHandlerTests
         var income = Income.Create(
             Guid.NewGuid(),
             account.Id,
-            new DateOnly(2026, 10, 28),
+            date ?? new DateOnly(2026, 10, 28),
             Money.FromDecimal(5000.00m),
             "Salário");
-
-        if (received)
-        {
-            income.MarkAsReceived(new DateOnly(2026, 10, 30), new DateOnly(2026, 11, 20));
-        }
 
         await _incomes.AddAsync(income);
 
@@ -56,9 +51,9 @@ public class UpdateIncomeHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ExpectedIncome_UpdatesAllFieldsAndSaves()
+    public async Task ExecuteAsync_ExistingIncome_UpdatesAllFieldsFreelyEvenWhenDateIsInThePast()
     {
-        var (_, income) = await SeedAsync(received: false);
+        var (_, income) = await SeedAsync(date: new DateOnly(2026, 10, 28));
 
         await _handler.ExecuteAsync(new UpdateIncomeCommand(
             income.Id,
@@ -68,44 +63,9 @@ public class UpdateIncomeHandlerTests
 
         var saved = await _incomes.GetByIdAsync(income.Id);
         Assert.NotNull(saved);
-        Assert.Equal(new DateOnly(2026, 11, 5), saved.ExpectedDate);
+        Assert.Equal(new DateOnly(2026, 11, 5), saved.Date);
         Assert.Equal(Money.FromDecimal(5500.25m), saved.Amount);
         Assert.Equal("Salário atualizado", saved.Description);
-        Assert.False(saved.IsReceived);
-        Assert.Equal(1, _incomes.UpdateCount);
-        Assert.Equal(1, _unitOfWork.SaveChangesCount);
-    }
-
-    [Fact]
-    public async Task ExecuteAsync_ReceivedIncome_AllowsDescriptionChangeOnly_AndBlocksAmountOrExpectedDateChanges()
-    {
-        var (_, income) = await SeedAsync(received: true);
-
-        await _handler.ExecuteAsync(new UpdateIncomeCommand(
-            income.Id,
-            income.ExpectedDate,
-            income.Amount.Amount,
-            "  Salário outubro  "));
-
-        Assert.Equal("Salário outubro", income.Description);
-        Assert.True(income.IsReceived);
-        Assert.Equal(1, _incomes.UpdateCount);
-        Assert.Equal(1, _unitOfWork.SaveChangesCount);
-
-        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(new UpdateIncomeCommand(
-            income.Id,
-            income.ExpectedDate,
-            5500.25m,
-            "Salário outubro")));
-
-        await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(new UpdateIncomeCommand(
-            income.Id,
-            new DateOnly(2026, 11, 5),
-            income.Amount.Amount,
-            "Salário outubro")));
-
-        Assert.Equal(Money.FromDecimal(5000.00m), income.Amount);
-        Assert.Equal(new DateOnly(2026, 10, 28), income.ExpectedDate);
         Assert.Equal(1, _incomes.UpdateCount);
         Assert.Equal(1, _unitOfWork.SaveChangesCount);
     }
@@ -125,14 +85,14 @@ public class UpdateIncomeHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ExpectedDateBeforeInitialBalanceDate_ThrowsDomainExceptionAndDoesNotSave()
+    public async Task ExecuteAsync_DateBeforeInitialBalanceDate_ThrowsDomainExceptionAndDoesNotSave()
     {
         var (_, income) = await SeedAsync();
 
         await Assert.ThrowsAsync<DomainException>(() => _handler.ExecuteAsync(
             new UpdateIncomeCommand(income.Id, InitialDate.AddDays(-1), 5000.00m, "Salário")));
 
-        Assert.Equal(new DateOnly(2026, 10, 28), income.ExpectedDate);
+        Assert.Equal(new DateOnly(2026, 10, 28), income.Date);
         Assert.Equal(0, _incomes.UpdateCount);
         Assert.Equal(0, _unitOfWork.SaveChangesCount);
     }
@@ -156,15 +116,15 @@ public class UpdateIncomeHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ReceivedIncome_AllowsConditionChangeWithoutBreakingCashRule()
+    public async Task ExecuteAsync_UpdatesConditionWithoutAffectingOtherFields()
     {
-        var (_, income) = await SeedAsync(received: true);
+        var (_, income) = await SeedAsync();
         var pai = PurchaseCondition.CreateForUser(Guid.NewGuid(), FakeCurrentUser.DefaultUserId, "Pai");
         await _conditions.AddAsync(pai);
 
         await _handler.ExecuteAsync(new UpdateIncomeCommand(
             income.Id,
-            income.ExpectedDate,
+            income.Date,
             income.Amount.Amount,
             income.Description,
             ConditionId: pai.Id));

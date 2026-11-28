@@ -1,3 +1,4 @@
+using Hearth.Domain;
 using Hearth.Domain.Entities;
 using Hearth.Domain.Exceptions;
 using Hearth.Domain.ValueObjects;
@@ -7,23 +8,22 @@ namespace Hearth.Tests.Domain.Entities;
 
 public class IncomeTests
 {
-    private static readonly DateOnly DefaultExpectedDate = new(2026, 10, 28);
-    private static readonly DateOnly DefaultToday = new(2026, 12, 31);
+    private static readonly DateOnly DefaultDate = new(2026, 10, 28);
 
     private static Money M(decimal amount) => Money.FromDecimal(amount);
 
-    private static DateOnly? D(int year, int month, int day) => new DateOnly(year, month, day);
-
     private static Income NewIncome(
-        DateOnly? expectedDate = null,
+        DateOnly? date = null,
         decimal amount = 5000.00m,
-        string description = "Salário") =>
+        string description = "Salário",
+        Guid? conditionId = null) =>
         Income.Create(
             Guid.NewGuid(),
             Guid.NewGuid(),
-            expectedDate ?? DefaultExpectedDate,
+            date ?? DefaultDate,
             M(amount),
-            description);
+            description,
+            conditionId);
 
     // ---------- Create ----------
 
@@ -33,37 +33,52 @@ public class IncomeTests
         var id = Guid.NewGuid();
         var accountId = Guid.NewGuid();
 
-        var income = Income.Create(id, accountId, DefaultExpectedDate, M(5000.00m), "  Salário  ");
+        var income = Income.Create(id, accountId, DefaultDate, M(5000.00m), "  Salário  ");
 
         Assert.Equal(id, income.Id);
         Assert.Equal(accountId, income.AccountId);
-        Assert.Equal(DefaultExpectedDate, income.ExpectedDate);
+        Assert.Equal(DefaultDate, income.Date);
+        Assert.Equal(YearMonth.Of(2026, 10), income.Month);
         Assert.Equal(M(5000.00m), income.Amount);
         Assert.Equal("Salário", income.Description);
+        Assert.Equal(SystemPurchaseConditions.OwnId, income.ConditionId);
+        Assert.True(income.IsOwn);
     }
 
     [Fact]
-    public void Create_AlwaysStartsAsExpected()
+    public void Create_WithAccount_EnforcesTrackingStartBoundary()
     {
-        var income = NewIncome();
+        var account = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(1000m), TestTime.UtcOn(2026, 11, 15));
 
-        Assert.False(income.IsReceived);
-        Assert.Null(income.ReceivedOn);
-        Assert.Null(income.ReceivedMonth);
+        Assert.Throws<DomainException>(() => Income.Create(
+            Guid.NewGuid(), account, new DateOnly(2026, 10, 31), M(1000m), "Antes"));
+
+        var onStart = Income.Create(
+            Guid.NewGuid(), account, new DateOnly(2026, 11, 1), M(1000m), "No início");
+
+        Assert.Equal(account.Id, onStart.AccountId);
+        Assert.Equal(new DateOnly(2026, 11, 1), onStart.Date);
     }
 
     [Fact]
     public void Create_EmptyId_Throws()
     {
         Assert.Throws<ArgumentException>(() => Income.Create(
-            Guid.Empty, Guid.NewGuid(), DefaultExpectedDate, M(10m), "x"));
+            Guid.Empty, Guid.NewGuid(), DefaultDate, M(10m), "x"));
     }
 
     [Fact]
     public void Create_EmptyAccountId_Throws()
     {
         Assert.Throws<ArgumentException>(() => Income.Create(
-            Guid.NewGuid(), Guid.Empty, DefaultExpectedDate, M(10m), "x"));
+            Guid.NewGuid(), Guid.Empty, DefaultDate, M(10m), "x"));
+    }
+
+    [Fact]
+    public void Create_EmptyConditionId_Throws()
+    {
+        Assert.Throws<ArgumentException>(() => NewIncome(conditionId: Guid.Empty));
     }
 
     [Theory]
@@ -90,7 +105,7 @@ public class IncomeTests
         Assert.ThrowsAny<ArgumentException>(() => NewIncome(description: description!));
     }
 
-    // ---------- ExpectedMonth ----------
+    // ---------- Month ----------
 
     [Theory]
     [InlineData(2026, 10, 1, 2026, 10)]
@@ -98,228 +113,80 @@ public class IncomeTests
     [InlineData(2026, 12, 31, 2026, 12)]
     [InlineData(2027, 1, 1, 2027, 1)]
     [InlineData(2028, 2, 29, 2028, 2)]
-    public void ExpectedMonth_IsTheCalendarMonthOfTheExpectedDate(
+    public void Month_IsTheCalendarMonthOfTheDate(
         int year, int month, int day, int expectedYear, int expectedMonth)
     {
-        var income = NewIncome(expectedDate: new DateOnly(year, month, day));
+        var income = NewIncome(date: new DateOnly(year, month, day));
 
-        Assert.Equal(YearMonth.Of(expectedYear, expectedMonth), income.ExpectedMonth);
+        Assert.Equal(YearMonth.Of(expectedYear, expectedMonth), income.Month);
     }
 
-    // ---------- MarkAsReceived ----------
+    // ---------- IsReceivedOn ----------
 
     [Fact]
-    public void MarkAsReceived_FromExpected_BecomesReceivedAndReturnsTrue()
+    public void IsReceivedOn_ReturnsTrueWhenDateIsBeforeOrEqualToReferenceDate_AndFalseWhenFuture()
     {
-        var income = NewIncome();
+        var income = NewIncome(date: new DateOnly(2026, 10, 28));
 
-        var changed = income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        Assert.True(changed);
-        Assert.True(income.IsReceived);
-        Assert.Equal(D(2026, 10, 28), income.ReceivedOn);
-        Assert.Equal(YearMonth.Of(2026, 10), income.ReceivedMonth);
+        Assert.False(income.IsReceivedOn(new DateOnly(2026, 10, 27)));
+        Assert.True(income.IsReceivedOn(new DateOnly(2026, 10, 28)));
+        Assert.True(income.IsReceivedOn(new DateOnly(2026, 10, 29)));
     }
 
     [Fact]
-    public void MarkAsReceived_OnToday_Succeeds_AndFutureDate_ThrowsDomainExceptionAndKeepsExpected()
+    public void IsReceivedOn_HandlesMinAndMaxDateBoundaries()
     {
-        var today = new DateOnly(2026, 10, 28);
-        var onToday = NewIncome();
-        Assert.True(onToday.MarkAsReceived(today, today));
-        Assert.Equal(today, onToday.ReceivedOn);
+        var minIncome = NewIncome(date: DateOnly.MinValue);
+        var maxIncome = NewIncome(date: DateOnly.MaxValue);
 
-        var future = NewIncome();
-        Assert.Throws<DomainException>(() => future.MarkAsReceived(today.AddDays(1), today));
-        Assert.False(future.IsReceived);
-        Assert.Null(future.ReceivedOn);
+        Assert.True(minIncome.IsReceivedOn(DateOnly.MinValue));
+        Assert.True(minIncome.IsReceivedOn(DateOnly.MaxValue));
+        Assert.False(maxIncome.IsReceivedOn(DateOnly.MaxValue.AddDays(-1)));
+        Assert.True(maxIncome.IsReceivedOn(DateOnly.MaxValue));
+    }
+
+    // ---------- UpdateDate ----------
+
+    [Fact]
+    public void UpdateDate_ChangesTheDateAndMonth_WithoutEditLocksEvenWhenPreviouslyInThePast()
+    {
+        var today = new DateOnly(2026, 11, 20);
+        var income = NewIncome(date: new DateOnly(2026, 10, 28));
+        Assert.True(income.IsReceivedOn(today));
+
+        income.UpdateDate(new DateOnly(2026, 12, 5));
+
+        Assert.Equal(new DateOnly(2026, 12, 5), income.Date);
+        Assert.Equal(YearMonth.Of(2026, 12), income.Month);
+        Assert.False(income.IsReceivedOn(today));
     }
 
     [Fact]
-    public void MarkAsReceived_Twice_WithTheSameDate_ReturnsFalseAndKeepsTheState()
+    public void UpdateDate_WithAccount_EnforcesTrackingStartBoundary()
     {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
+        var account = Account.Create(
+            Guid.NewGuid(), Guid.NewGuid(), "Conta", M(1000m), TestTime.UtcOn(2026, 11, 15));
+        var income = Income.Create(Guid.NewGuid(), account, new DateOnly(2026, 11, 10), M(1000m), "Salário");
 
-        var changed = income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
+        Assert.Throws<DomainException>(() => income.UpdateDate(account, new DateOnly(2026, 10, 31)));
+        Assert.Equal(new DateOnly(2026, 11, 10), income.Date);
 
-        Assert.False(changed);
-        Assert.True(income.IsReceived);
-        Assert.Equal(D(2026, 10, 28), income.ReceivedOn);
-    }
-
-    [Fact]
-    public void MarkAsReceived_Twice_WithAnotherDate_KeepsTheOriginalDate()
-    {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        var changed = income.MarkAsReceived(new DateOnly(2026, 11, 5), DefaultToday);
-
-        Assert.False(changed);
-        Assert.Equal(D(2026, 10, 28), income.ReceivedOn);
-        Assert.Equal(YearMonth.Of(2026, 10), income.ReceivedMonth);
-    }
-
-    [Fact]
-    public void MarkAsReceived_RepeatedManyTimes_NeverChangesTheFirstDate()
-    {
-        var income = NewIncome();
-        Assert.True(income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday));
-
-        for (var day = 1; day <= 28; day++)
-        {
-            Assert.False(income.MarkAsReceived(new DateOnly(2026, 12, day), DefaultToday));
-        }
-
-        Assert.Equal(D(2026, 10, 28), income.ReceivedOn);
-    }
-
-    [Fact]
-    public void MarkAsReceived_InAnotherMonthThanExpected_KeepsEachRegimeOnItsOwnMonth()
-    {
-        // Expected on 28/10, received on 02/11: October by accrual, November by cash.
-        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
-
-        income.MarkAsReceived(new DateOnly(2026, 11, 2), DefaultToday);
-
-        Assert.Equal(YearMonth.Of(2026, 10), income.ExpectedMonth);
-        Assert.Equal(YearMonth.Of(2026, 11), income.ReceivedMonth);
-    }
-
-    [Fact]
-    public void MarkAsReceived_BeforeTheExpectedDate_IsAccepted()
-    {
-        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
-
-        var changed = income.MarkAsReceived(new DateOnly(2026, 9, 30), DefaultToday);
-
-        Assert.True(changed);
-        Assert.Equal(YearMonth.Of(2026, 9), income.ReceivedMonth);
-        Assert.Equal(YearMonth.Of(2026, 10), income.ExpectedMonth);
-    }
-
-    [Fact]
-    public void MarkAsReceived_AcceptsTheLimitsOfTheSupportedDates()
-    {
-        var first = NewIncome();
-        var last = NewIncome();
-
-        first.MarkAsReceived(DateOnly.MinValue, DateOnly.MaxValue);
-        last.MarkAsReceived(DateOnly.MaxValue, DateOnly.MaxValue);
-
-        Assert.Equal(YearMonth.Of(1, 1), first.ReceivedMonth);
-        Assert.Equal(YearMonth.Of(9999, 12), last.ReceivedMonth);
-    }
-
-    // ---------- RevertToExpected ----------
-
-    [Fact]
-    public void RevertToExpected_FromReceived_BecomesExpectedAndReturnsTrue()
-    {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        var changed = income.RevertToExpected();
-
-        Assert.True(changed);
-        Assert.False(income.IsReceived);
-        Assert.Null(income.ReceivedOn);
-        Assert.Null(income.ReceivedMonth);
-    }
-
-    [Fact]
-    public void RevertToExpected_Twice_ReturnsFalseTheSecondTime()
-    {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        Assert.True(income.RevertToExpected());
-        Assert.False(income.RevertToExpected());
-
-        Assert.False(income.IsReceived);
-    }
-
-    [Fact]
-    public void RevertToExpected_WhenNeverReceived_ReturnsFalseAndChangesNothing()
-    {
-        var income = NewIncome();
-
-        var changed = income.RevertToExpected();
-
-        Assert.False(changed);
-        Assert.False(income.IsReceived);
-        Assert.Null(income.ReceivedOn);
-    }
-
-    [Fact]
-    public void AfterReverting_CanBeEditedAndMarkedAgainWithAnotherDate()
-    {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-        income.RevertToExpected();
-
-        income.UpdateAmount(M(5250.00m));
-        income.UpdateExpectedDate(new DateOnly(2026, 11, 1));
-        var changed = income.MarkAsReceived(new DateOnly(2026, 11, 3), DefaultToday);
-
-        Assert.True(changed);
-        Assert.Equal(M(5250.00m), income.Amount);
-        Assert.Equal(new DateOnly(2026, 11, 1), income.ExpectedDate);
-        Assert.Equal(D(2026, 11, 3), income.ReceivedOn);
-        Assert.Equal(YearMonth.Of(2026, 11), income.ReceivedMonth);
-    }
-
-    // ---------- UpdateExpectedDate ----------
-
-    [Fact]
-    public void UpdateExpectedDate_ChangesTheDateAndTheExpectedMonth()
-    {
-        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
-
-        income.UpdateExpectedDate(new DateOnly(2026, 11, 5));
-
-        Assert.Equal(new DateOnly(2026, 11, 5), income.ExpectedDate);
-        Assert.Equal(YearMonth.Of(2026, 11), income.ExpectedMonth);
-    }
-
-    [Fact]
-    public void UpdateExpectedDate_AfterReceived_ThrowsDomainExceptionAndPreservesDate()
-    {
-        var income = NewIncome(expectedDate: new DateOnly(2026, 10, 28));
-        income.MarkAsReceived(new DateOnly(2026, 10, 30), DefaultToday);
-
-        Assert.Throws<DomainException>(() => income.UpdateExpectedDate(new DateOnly(2026, 11, 5)));
-
-        Assert.Equal(new DateOnly(2026, 10, 28), income.ExpectedDate);
-        Assert.Equal(YearMonth.Of(2026, 10), income.ExpectedMonth);
-        Assert.True(income.IsReceived);
-        Assert.Equal(D(2026, 10, 30), income.ReceivedOn);
+        income.UpdateDate(account, new DateOnly(2026, 11, 1));
+        Assert.Equal(new DateOnly(2026, 11, 1), income.Date);
     }
 
     // ---------- UpdateAmount ----------
 
     [Fact]
-    public void UpdateAmount_ChangesTheAmount_WhileExpected()
+    public void UpdateAmount_ChangesTheAmount_EvenWhenDateIsInThePast()
     {
-        var income = NewIncome(amount: 5000.00m);
+        var today = new DateOnly(2026, 11, 20);
+        var income = NewIncome(date: new DateOnly(2026, 10, 28), amount: 5000.00m);
+        Assert.True(income.IsReceivedOn(today));
 
         income.UpdateAmount(M(5230.45m));
 
         Assert.Equal(M(5230.45m), income.Amount);
-    }
-
-    [Fact]
-    public void UpdateAmount_AfterReceived_ThrowsDomainExceptionAndPreservesAmount()
-    {
-        var income = NewIncome(amount: 5000.00m);
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        Assert.Throws<DomainException>(() => income.UpdateAmount(M(5230.45m)));
-
-        Assert.Equal(M(5000.00m), income.Amount);
-        Assert.True(income.IsReceived);
-        Assert.Equal(D(2026, 10, 28), income.ReceivedOn);
     }
 
     [Theory]
@@ -334,7 +201,7 @@ public class IncomeTests
         Assert.Equal(M(5000.00m), income.Amount);
     }
 
-    // ---------- UpdateDescription ----------
+    // ---------- UpdateDescription & UpdateCondition ----------
 
     [Fact]
     public void UpdateDescription_ChangesAndTrims()
@@ -344,18 +211,6 @@ public class IncomeTests
         income.UpdateDescription("  Pix da mãe  ");
 
         Assert.Equal("Pix da mãe", income.Description);
-    }
-
-    [Fact]
-    public void UpdateDescription_AfterReceived_KeepsTheState()
-    {
-        var income = NewIncome();
-        income.MarkAsReceived(new DateOnly(2026, 10, 28), DefaultToday);
-
-        income.UpdateDescription("Salário outubro");
-
-        Assert.Equal("Salário outubro", income.Description);
-        Assert.True(income.IsReceived);
     }
 
     [Theory]
@@ -371,10 +226,24 @@ public class IncomeTests
         Assert.Equal("Salário", income.Description);
     }
 
+    [Fact]
+    public void UpdateCondition_ChangesConditionAndIsOwn()
+    {
+        var income = NewIncome();
+        Assert.True(income.IsOwn);
+
+        var otherConditionId = Guid.NewGuid();
+        income.UpdateCondition(otherConditionId);
+
+        Assert.Equal(otherConditionId, income.ConditionId);
+        Assert.False(income.IsOwn);
+        Assert.Throws<ArgumentException>(() => income.UpdateCondition(Guid.Empty));
+    }
+
     // ---------- Independence between fields ----------
 
     [Fact]
-    public void Updates_DoNotAffectTheIdentityOrTheExpectedDate()
+    public void Updates_DoNotAffectTheIdentityOrTheDate()
     {
         var income = NewIncome();
         var id = income.Id;
@@ -382,81 +251,31 @@ public class IncomeTests
 
         income.UpdateAmount(M(10.00m));
         income.UpdateDescription("Outra");
-        income.MarkAsReceived(new DateOnly(2026, 11, 2), DefaultToday);
-        income.RevertToExpected();
+        income.UpdateCondition(SystemPurchaseConditions.OthersId);
 
         Assert.Equal(id, income.Id);
         Assert.Equal(accountId, income.AccountId);
-        Assert.Equal(DefaultExpectedDate, income.ExpectedDate);
+        Assert.Equal(DefaultDate, income.Date);
     }
 
     // ---------- Main invariants ----------
 
     [Fact]
-    public void IsReceived_IsTrueExactlyWhenReceivedOnHasAValue_ForARandomSequenceOfOperations()
+    public void MonthAndIsReceivedOn_AlwaysMatchDate_ForEveryDayOfALeapAndANonLeapYear()
     {
-        var random = new Random(20261025);
-        var income = NewIncome();
-        var maxToday = new DateOnly(2028, 12, 31);
-
-        // A simple model of what the entity must do, to compare against.
-        var modelReceivedOn = (DateOnly?)null;
-
-        for (var step = 0; step < 5000; step++)
-        {
-            var context = $"step={step}";
-
-            if (random.Next(2) == 0)
-            {
-                var date = new DateOnly(2026, 1, 1).AddDays(random.Next(0, 730));
-                var expectedChange = modelReceivedOn is null;
-
-                var changed = income.MarkAsReceived(date, maxToday);
-
-                if (expectedChange)
-                {
-                    modelReceivedOn = date;
-                }
-
-                Assert.True(changed == expectedChange, $"Wrong result of MarkAsReceived: {context}");
-            }
-            else
-            {
-                var expectedChange = modelReceivedOn is not null;
-
-                var changed = income.RevertToExpected();
-
-                modelReceivedOn = null;
-
-                Assert.True(changed == expectedChange, $"Wrong result of RevertToExpected: {context}");
-            }
-
-            Assert.True(
-                income.IsReceived == income.ReceivedOn.HasValue,
-                $"IsReceived disagrees with ReceivedOn: {context}");
-            Assert.True(
-                income.ReceivedOn == modelReceivedOn,
-                $"ReceivedOn differs from the model: {context}");
-            Assert.True(
-                income.ReceivedMonth is null == modelReceivedOn is null,
-                $"ReceivedMonth presence differs from the model: {context}");
-        }
-    }
-
-    [Fact]
-    public void ReceivedMonth_AlwaysMatchesTheReceivedDate_ForEveryDayOfALeapAndANonLeapYear()
-    {
+        var referenceDate = new DateOnly(2028, 2, 29);
         var lastDate = new DateOnly(2028, 12, 31);
 
         for (var date = new DateOnly(2027, 1, 1); date <= lastDate; date = date.AddDays(1))
         {
-            var income = NewIncome();
-
-            income.MarkAsReceived(date, lastDate);
+            var income = NewIncome(date: date);
 
             Assert.True(
-                income.ReceivedMonth == YearMonth.Of(date.Year, date.Month),
-                $"ReceivedMonth does not match the date {date:yyyy-MM-dd}");
+                income.Month == YearMonth.Of(date.Year, date.Month),
+                $"Month does not match the date {date:yyyy-MM-dd}");
+            Assert.True(
+                income.IsReceivedOn(referenceDate) == (date <= referenceDate),
+                $"IsReceivedOn disagrees with Date <= referenceDate for {date:yyyy-MM-dd}");
         }
     }
 }

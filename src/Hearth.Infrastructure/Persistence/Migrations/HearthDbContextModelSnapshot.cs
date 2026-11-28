@@ -413,6 +413,52 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.ToTable("fixed_expenses", (string)null);
                 });
 
+            modelBuilder.Entity("Hearth.Domain.Entities.FixedIncome", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<Guid>("AccountId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("account_id");
+
+                    b.Property<Guid>("ConditionId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid")
+                        .HasDefaultValue(new Guid("01900000-0000-7000-8000-000000000201"))
+                        .HasColumnName("condition_id");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("description");
+
+                    b.Property<int?>("EndMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("end_month");
+
+                    b.Property<int>("ExpectedDayOfMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("expected_day_of_month");
+
+                    b.Property<int>("StartMonth")
+                        .HasColumnType("integer")
+                        .HasColumnName("start_month");
+
+                    b.HasKey("Id")
+                        .HasName("pk_fixed_incomes");
+
+                    b.HasIndex("AccountId")
+                        .HasDatabaseName("ix_fixed_incomes_account_id");
+
+                    b.HasIndex("ConditionId")
+                        .HasDatabaseName("ix_fixed_incomes_condition_id");
+
+                    b.ToTable("fixed_incomes", (string)null);
+                });
+
             modelBuilder.Entity("Hearth.Domain.Entities.Income", b =>
                 {
                     b.Property<Guid>("Id")
@@ -434,19 +480,15 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                         .HasDefaultValue(new Guid("01900000-0000-7000-8000-000000000201"))
                         .HasColumnName("condition_id");
 
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date")
+                        .HasColumnName("date");
+
                     b.Property<string>("Description")
                         .IsRequired()
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)")
                         .HasColumnName("description");
-
-                    b.Property<DateOnly>("ExpectedDate")
-                        .HasColumnType("date")
-                        .HasColumnName("expected_date");
-
-                    b.Property<DateOnly?>("ReceivedOn")
-                        .HasColumnType("date")
-                        .HasColumnName("received_on");
 
                     b.HasKey("Id")
                         .HasName("pk_incomes");
@@ -454,8 +496,8 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.HasIndex("ConditionId")
                         .HasDatabaseName("ix_incomes_condition_id");
 
-                    b.HasIndex("AccountId", "ExpectedDate")
-                        .HasDatabaseName("ix_incomes_account_id_expected_date");
+                    b.HasIndex("AccountId", "Date")
+                        .HasDatabaseName("ix_incomes_account_id_date");
 
                     b.ToTable("incomes", (string)null);
                 });
@@ -805,6 +847,81 @@ namespace Hearth.Infrastructure.Persistence.Migrations
                     b.Navigation("_amountHistory");
 
                     b.Navigation("_payments");
+                });
+
+            modelBuilder.Entity("Hearth.Domain.Entities.FixedIncome", b =>
+                {
+                    b.HasOne("Hearth.Domain.Entities.Account", null)
+                        .WithMany()
+                        .HasForeignKey("AccountId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_fixed_incomes_accounts_account_id");
+
+                    b.HasOne("Hearth.Domain.Entities.PurchaseCondition", null)
+                        .WithMany()
+                        .HasForeignKey("ConditionId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired()
+                        .HasConstraintName("fk_fixed_incomes_purchase_conditions_condition_id");
+
+                    b.OwnsMany("Hearth.Domain.ValueObjects.FixedIncomeAmountChange", "_amountHistory", b1 =>
+                        {
+                            b1.Property<Guid>("fixed_income_id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("fixed_income_id");
+
+                            b1.Property<int>("EffectiveFrom")
+                                .HasColumnType("integer")
+                                .HasColumnName("effective_from");
+
+                            b1.Property<decimal>("Amount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("amount");
+
+                            b1.HasKey("fixed_income_id", "EffectiveFrom")
+                                .HasName("pk_fixed_income_amount_changes");
+
+                            b1.ToTable("fixed_income_amount_changes", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("fixed_income_id")
+                                .HasConstraintName("fk_fixed_income_amount_changes_fixed_incomes_fixed_income_id");
+                        });
+
+                    b.OwnsMany("Hearth.Domain.ValueObjects.FixedIncomeReceipt", "_receipts", b1 =>
+                        {
+                            b1.Property<Guid>("fixed_income_id")
+                                .HasColumnType("uuid")
+                                .HasColumnName("fixed_income_id");
+
+                            b1.Property<int>("Month")
+                                .HasColumnType("integer")
+                                .HasColumnName("month");
+
+                            b1.Property<decimal>("ActualAmount")
+                                .HasPrecision(18, 2)
+                                .HasColumnType("numeric(18,2)")
+                                .HasColumnName("actual_amount");
+
+                            b1.Property<DateOnly>("ReceivedOn")
+                                .HasColumnType("date")
+                                .HasColumnName("received_on");
+
+                            b1.HasKey("fixed_income_id", "Month")
+                                .HasName("pk_fixed_income_receipts");
+
+                            b1.ToTable("fixed_income_receipts", (string)null);
+
+                            b1.WithOwner()
+                                .HasForeignKey("fixed_income_id")
+                                .HasConstraintName("fk_fixed_income_receipts_fixed_incomes_fixed_income_id");
+                        });
+
+                    b.Navigation("_amountHistory");
+
+                    b.Navigation("_receipts");
                 });
 
             modelBuilder.Entity("Hearth.Domain.Entities.Income", b =>

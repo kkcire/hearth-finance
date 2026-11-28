@@ -1,46 +1,87 @@
 @using System.Globalization
 @using Hearth.Web.Services
 
-<section class="hearth-card hearth-savings-card" aria-labelledby="heading-savings-rate" data-testid="dashboard-savings-rate-card">
+@{
+    var statusClass = GetStatusClass();
+    var statusLabel = GetStatusLabel();
+    var clamped = HasActivity && !IsDeficit ? Math.Clamp((double)Percentage, 0.0, 100.0) : 0.0;
+    var dashArray = (clamped / 100.0) * Circumference;
+    var ariaLabel = HasActivity
+        ? $"Taxa de poupança: {HearthFormat.Percentage(Percentage)} — {statusLabel}"
+        : "Taxa de poupança: Sem dados";
+}
+
+<section class="hearth-card hearth-savings-card @(IsDeficit ? "is-deficit" : null)"
+         aria-labelledby="heading-savings-rate"
+         data-testid="dashboard-savings-rate-card">
     <div class="hearth-savings-head">
         <h2 id="heading-savings-rate" class="hearth-card-title">Taxa de Poupança</h2>
-        <span class="hearth-savings-status-pill @GetStatusClass()" data-testid="savings-rate-status-cue">
-            @GetStatusLabel()
+        <span class="hearth-savings-status-pill @statusClass" data-testid="savings-rate-status-cue">
+            @statusLabel
         </span>
     </div>
-
-    @{
-        var clamped = HasActivity ? Math.Clamp((double)Percentage, 0.0, 100.0) : 0.0;
-        var dashArray = (clamped / 100.0) * Circumference;
-        var ariaLabel = HasActivity
-            ? $"Taxa de poupança: {HearthFormat.Percentage(Percentage)} — {GetStatusLabel()}"
-            : "Taxa de poupança: Sem dados";
-    }
 
     <div class="hearth-savings-ring-wrap">
         <svg class="hearth-savings-ring-svg"
              viewBox="0 0 156 156"
              role="img"
              aria-label="@ariaLabel">
-            <circle cx="78" cy="78" r="60" class="hearth-savings-ring-track" />
-            @if (clamped > 0.0)
+            <circle cx="78"
+                    cy="78"
+                    r="60"
+                    class="hearth-savings-ring-track @(IsDeficit ? "is-deficit" : IsBreakEven || IsZeroSavings ? "is-attention" : null)" />
+            @if (IsDeficit)
             {
                 <circle cx="78"
                         cy="78"
                         r="60"
-                        class="hearth-savings-ring-progress"
+                        class="hearth-savings-ring-progress is-deficit" />
+            }
+            else if (IsBreakEven || IsZeroSavings)
+            {
+                <circle cx="78"
+                        cy="78"
+                        r="60"
+                        class="hearth-savings-ring-progress is-zero-alert" />
+            }
+            else if (clamped > 0.0)
+            {
+                <circle cx="78"
+                        cy="78"
+                        r="60"
+                        class="hearth-savings-ring-progress @statusClass"
                         stroke-dasharray="@($"{F(dashArray)} {F(Circumference)}")" />
             }
         </svg>
 
         <div class="hearth-savings-ring-center">
-            <strong class="hearth-savings-ring-value hearth-money" data-testid="savings-rate-value">
+            <strong class="hearth-savings-ring-value hearth-money @(IsDeficit ? "is-deficit" : IsBreakEven || IsZeroSavings ? "is-attention" : null)"
+                    data-testid="savings-rate-value">
                 @(HasActivity ? HearthFormat.Percentage(Percentage) : "—")
             </strong>
         </div>
     </div>
 
     <div class="hearth-savings-footer">
+        @if (IsDeficit)
+        {
+            <p class="hearth-savings-alert is-deficit" role="status" data-testid="savings-rate-alert">
+                Déficit de <strong class="hearth-money">@HearthFormat.Money(Math.Abs(MonthlyResult!.Value))</strong> no mês — despesas superaram a renda.
+            </p>
+        }
+        else if (IsBreakEven)
+        {
+            <p class="hearth-savings-alert is-attention" role="status" data-testid="savings-rate-alert">
+                Empate no mês — 100% da renda comprometida, sem sobra para poupança.
+            </p>
+        }
+        else if (IsZeroSavings)
+        {
+            <p class="hearth-savings-alert is-attention" role="status" data-testid="savings-rate-alert">
+                Poupança zerada no mês — margem insuficiente para reserva.
+            </p>
+        }
+
         <p class="hearth-savings-caption">
             Percentual da sua renda própria que sobra após as despesas, sem distorção por reembolsos de terceiros.
         </p>
@@ -72,6 +113,7 @@
                     Define a velocidade da acumulação de riqueza: percentuais acima de <strong>20%</strong> da renda própria já geram impacto relevante no longo prazo e aceleram a independência financeira.
                 </p>
                 <div class="hearth-savings-bands">
+                    <span class="hearth-savings-band is-deficit">Déficit</span>
                     <span class="hearth-savings-band is-attention">&lt; 10% Atenção</span>
                     <span class="hearth-savings-band is-balanced">10–20% Equilibrada</span>
                     <span class="hearth-savings-band is-healthy">&ge; 20% Saudável</span>
@@ -94,6 +136,15 @@
     [Parameter]
     public bool HasActivity { get; set; } = true;
 
+    [Parameter]
+    public decimal? MonthlyResult { get; set; }
+
+    private bool IsDeficit => HasActivity && MonthlyResult is < 0m;
+
+    private bool IsBreakEven => HasActivity && MonthlyResult is 0m;
+
+    private bool IsZeroSavings => HasActivity && !IsDeficit && !IsBreakEven && Percentage <= 0m;
+
     private void ToggleExplanation() =>
         _showExplanation = !_showExplanation;
 
@@ -102,6 +153,16 @@
         if (!HasActivity)
         {
             return "Sem dados";
+        }
+
+        if (IsDeficit)
+        {
+            return "Déficit";
+        }
+
+        if (IsBreakEven)
+        {
+            return "No limite";
         }
 
         return Percentage switch
@@ -117,6 +178,16 @@
         if (!HasActivity)
         {
             return "is-neutral";
+        }
+
+        if (IsDeficit)
+        {
+            return "is-deficit";
+        }
+
+        if (IsBreakEven)
+        {
+            return "is-attention";
         }
 
         return Percentage switch

@@ -57,30 +57,42 @@ public sealed class EntriesPagesTests : WebTestBase
     }
 
     [Fact]
-    public async Task IncomesPage_CreateReceiveRevertAndDelete()
+    public async Task IncomesPage_CreateEditDateDerivesStatusAndDelete()
     {
+        Clock.Today = new DateOnly(2026, 11, 20);
         var accountId = await SeedAccountAsync();
         Render<MudPopoverProvider>();
         var cut = Render<IncomesPage>();
 
         await cut.Find("[data-testid='new-income-button']").ClickAsync();
+        // Single date picker only — no secondary received date or manual receive/revert controls
+        Assert.NotEmpty(cut.FindAll("input[data-testid='income-date-input']"));
+        Assert.Empty(cut.FindAll("input[data-testid='income-received-date-input']"));
+        Assert.Empty(cut.FindAll("[data-testid='receive-income-panel']"));
+
         cut.Find("input[data-testid='income-description-input']").Input("Salário");
         cut.Find("input[data-testid='income-amount-input']").Change("5.500,00");
         await cut.Find("[data-testid='save-income']").ClickAsync();
 
         var income = Assert.Single(await Incomes.GetByAccountAsync(accountId));
-        Assert.False(income.IsReceived);
+        Assert.Equal(Clock.Today, income.Date);
+        Assert.True(income.IsReceivedOn(Clock.Today));
         Assert.Equal(Money.FromDecimal(5500m), income.Amount);
+        Assert.Equal("Recebida", cut.Find($"[data-testid='income-status-{income.Id}']").TextContent.Trim());
+        Assert.Empty(cut.FindAll($"[data-testid='receive-income-{income.Id}']"));
+        Assert.Empty(cut.FindAll($"[data-testid='revert-income-{income.Id}']"));
 
-        await cut.Find($"[data-testid='receive-income-{income.Id}']").ClickAsync();
-        await cut.Find("[data-testid='confirm-receive-submit']").ClickAsync();
+        // Edit date to future (25/11/2026) and change amount freely -> status flips to "Prevista"
+        await cut.Find($"[data-testid='edit-income-{income.Id}']").ClickAsync();
+        cut.Find("input[data-testid='income-amount-input']").Change("5.800,00");
+        cut.Find("input[data-testid='income-date-input']").Change("25/11/2026");
+        await cut.Find("[data-testid='save-income']").ClickAsync();
 
-        var received = await Incomes.GetByIdAsync(income.Id);
-        Assert.True(received!.IsReceived);
-
-        await cut.Find($"[data-testid='revert-income-{income.Id}']").ClickAsync();
-        var reverted = await Incomes.GetByIdAsync(income.Id);
-        Assert.False(reverted!.IsReceived);
+        var updated = await Incomes.GetByIdAsync(income.Id);
+        Assert.Equal(new DateOnly(2026, 11, 25), updated!.Date);
+        Assert.Equal(Money.FromDecimal(5800m), updated.Amount);
+        Assert.False(updated.IsReceivedOn(Clock.Today));
+        Assert.Equal("Prevista", cut.Find($"[data-testid='income-status-{income.Id}']").TextContent.Trim());
 
         await cut.Find($"[data-testid='delete-income-{income.Id}']").ClickAsync();
         await cut.Find($"[data-testid='confirm-delete-income-{income.Id}']").ClickAsync();
@@ -147,5 +159,55 @@ public sealed class EntriesPagesTests : WebTestBase
         Assert.Contains("Padaria Central", cut.Markup);
         Assert.DoesNotContain("Uber Aeroporto", cut.Markup);
         Assert.Contains("65,00", cut.Find("[data-testid='direct-expenses-total']").TextContent);
+    }
+
+    [Fact]
+    public async Task FixedIncomesPage_CreateConfirmWithBonusRevertAdjustAmountAndDelete()
+    {
+        Clock.Today = new DateOnly(2026, 11, 20);
+        var accountId = await SeedAccountAsync(initialBalanceDate: new DateOnly(2026, 10, 1));
+        Render<MudPopoverProvider>();
+        var cut = Render<FixedIncomesPage>();
+
+        // Create recurring salary R$ 4.000,00
+        await cut.Find("[data-testid='new-fixed-income-button']").ClickAsync();
+        cut.Find("input[data-testid='fixed-income-description-input']").Input("Salário CLT");
+        cut.Find("input[data-testid='fixed-income-amount-input']").Change("4.000,00");
+        await cut.Find("[data-testid='create-fixed-income-submit']").ClickAsync();
+
+        var created = Assert.Single(await FixedIncomes.GetByAccountAsync(accountId));
+        Assert.Equal("Salário CLT", created.Description);
+        Assert.Equal("Prevista", cut.Find($"[data-testid='fixed-income-status-{created.Id}']").TextContent.Trim());
+
+        // Confirm receipt with R$ 400 bonus (4.400,00)
+        await cut.Find($"[data-testid='confirm-fixed-income-{created.Id}']").ClickAsync();
+        cut.Find("input[data-testid='confirm-fixed-income-amount-input']").Change("4.400,00");
+        await cut.Find("[data-testid='confirm-fixed-income-submit']").ClickAsync();
+
+        var confirmed = await FixedIncomes.GetByIdAsync(created.Id);
+        var receipt = confirmed!.GetReceiptFor(YearMonth.Of(2026, 11));
+        Assert.NotNull(receipt);
+        Assert.Equal(Money.FromDecimal(4400m), receipt!.ActualAmount);
+        Assert.Equal("Recebida", cut.Find($"[data-testid='fixed-income-status-{created.Id}']").TextContent.Trim());
+        Assert.Contains("4.400,00", cut.Find($"[data-testid='fixed-income-actual-{created.Id}']").TextContent);
+
+        // Revert receipt -> returns to "Prevista"
+        await cut.Find($"[data-testid='revert-fixed-income-{created.Id}']").ClickAsync();
+        Assert.Equal("Prevista", cut.Find($"[data-testid='fixed-income-status-{created.Id}']").TextContent.Trim());
+
+        // Edit details + apply salary adjustment to R$ 4.500,00
+        await cut.Find($"[data-testid='edit-fixed-income-{created.Id}']").ClickAsync();
+        cut.Find("input[data-testid='edit-fixed-income-description-input']").Input("Salário Atualizado");
+        cut.Find("input[data-testid='edit-fixed-income-amount-input']").Change("4.500,00");
+        await cut.Find("[data-testid='save-fixed-income-update']").ClickAsync();
+
+        var updated = await FixedIncomes.GetByIdAsync(created.Id);
+        Assert.Equal("Salário Atualizado", updated!.Description);
+        Assert.Equal(Money.FromDecimal(4500m), updated.GetExpectedAmountFor(YearMonth.Of(2026, 11)));
+
+        // Delete
+        await cut.Find($"[data-testid='delete-fixed-income-{created.Id}']").ClickAsync();
+        await cut.Find($"[data-testid='confirm-delete-fixed-income-{created.Id}']").ClickAsync();
+        Assert.Empty(await FixedIncomes.GetByAccountAsync(accountId));
     }
 }

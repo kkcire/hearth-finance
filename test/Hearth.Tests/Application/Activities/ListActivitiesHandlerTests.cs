@@ -16,6 +16,7 @@ public sealed class ListActivitiesHandlerTests
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryIncomeRepository _incomes = new();
+    private readonly InMemoryFixedIncomeRepository _fixedIncomes = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
@@ -29,6 +30,7 @@ public sealed class ListActivitiesHandlerTests
             _accountAccess,
             _categories,
             _incomes,
+            _fixedIncomes,
             _directExpenses,
             _fixedExpenses,
             _purchases,
@@ -51,8 +53,14 @@ public sealed class ListActivitiesHandlerTests
         var rule = CardBillingRule.Of(2, 14);
 
         var income = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(3000m), "Salário");
-        income.MarkAsReceived(new DateOnly(2026, 11, 5), _clock.Today);
         await _incomes.AddAsync(income);
+        var futureIncome = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 28), Money.FromDecimal(400m), "Freela futuro");
+        await _incomes.AddAsync(futureIncome);
+
+        var fixedIncome = FixedIncome.Create(
+            Guid.NewGuid(), account.Id, YearMonth.Of(2026, 11), null, 10, Money.FromDecimal(1200m), "Aluguel Fixo");
+        fixedIncome.ConfirmReceipt(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 11), Money.FromDecimal(1250m), _clock.Today);
+        await _fixedIncomes.AddAsync(fixedIncome);
 
         await _directExpenses.AddAsync(DirectExpense.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(150m), "Mercado", SystemCategories.FoodId));
@@ -71,10 +79,28 @@ public sealed class ListActivitiesHandlerTests
             Guid.NewGuid(), account.Id, cardId, new DateOnly(2026, 11, 10), Money.FromDecimal(200m), 1, 1, rule,
             SystemPurchaseConditions.OthersId, "Presente", SystemCategories.ShoppingId));
 
-        // Filter Nov 2026 -> 4 items (Salário, Mercado, Internet, Monitor 1/3)
+        // Filter Nov 2026 -> 6 items (Salário, Freela futuro, Aluguel Fixo, Mercado, Internet, Monitor 1/3)
         var novItems = await _handler.ExecuteAsync(new ListActivitiesQuery(account.Id, 2026, 11));
-        Assert.Equal(4, novItems.Count);
+        Assert.Equal(6, novItems.Count);
         Assert.True(novItems.Zip(novItems.Skip(1)).All(pair => pair.First.Date >= pair.Second.Date));
+
+        var fixedIncomeNov = Assert.Single(novItems, i => i.Description == "Aluguel Fixo");
+        Assert.Equal(1250m, fixedIncomeNov.Amount);
+        Assert.Equal(new DateOnly(2026, 11, 11), fixedIncomeNov.Date);
+        Assert.Equal("Efetivado", fixedIncomeNov.StatusLabel);
+        Assert.Equal(ListActivitiesHandler.FixedIncomeType, fixedIncomeNov.MovementType);
+
+        var decFixedIncomes = await _handler.ExecuteAsync(new ListActivitiesQuery(
+            account.Id, 2026, 12, MovementType: ListActivitiesHandler.FixedIncomeType));
+        var fixedIncomeDec = Assert.Single(decFixedIncomes);
+        Assert.Equal(1200m, fixedIncomeDec.Amount);
+        Assert.Equal("Previsto", fixedIncomeDec.StatusLabel);
+
+        var salaryNov = Assert.Single(novItems, i => i.Description == "Salário");
+        Assert.Equal("Efetivado", salaryNov.StatusLabel);
+
+        var futureIncomeNov = Assert.Single(novItems, i => i.Description == "Freela futuro");
+        Assert.Equal("Previsto", futureIncomeNov.StatusLabel);
 
         var monitorNov = Assert.Single(novItems, i => i.Description == "Monitor");
         Assert.Equal("1/3", monitorNov.InstallmentInfo);
@@ -93,9 +119,9 @@ public sealed class ListActivitiesHandlerTests
         Assert.Equal("2/3", monitorDec.InstallmentInfo);
         Assert.Equal("Previsto", monitorDec.StatusLabel);
 
-        // Filter All Months (Year = null, Month = null) -> includes all 3 Monitor installments + Presente + Income + Direct + Fixed
+        // Filter All Months (Year = null, Month = null) -> includes all 3 Monitor installments + Presente + 2 Incomes + 1 FixedIncome + Direct + Fixed
         var allItems = await _handler.ExecuteAsync(new ListActivitiesQuery(account.Id));
-        Assert.Equal(7, allItems.Count);
+        Assert.Equal(9, allItems.Count);
     }
 
     [Fact]

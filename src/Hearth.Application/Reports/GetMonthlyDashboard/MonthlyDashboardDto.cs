@@ -99,4 +99,6 @@ public sealed record DashboardNextMonthEstimateDto(
     decimal EstimatedDirectExpenses,
     decimal EstimatedCommitments,
     decimal ProjectedResult,
-    decimal EstimatedSavingsRatePercentage);
+    decimal EstimatedSavingsRatePercentage,
+    decimal? ProjectedOpeningBalance = null,
+    decimal? ProjectedEndingBalance = null);

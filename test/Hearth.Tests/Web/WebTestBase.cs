@@ -36,6 +36,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
     internal InMemoryCreditCardRepository CreditCards { get; } = new();
     internal InMemoryCreditCardPurchaseRepository CreditCardPurchases { get; } = new();
     internal InMemoryIncomeRepository Incomes { get; } = new();
+    internal InMemoryFixedIncomeRepository FixedIncomes { get; } = new();
     internal FakeUnitOfWork UnitOfWork { get; } = new();
     internal FakeClock Clock { get; } = new(new DateOnly(2026, 11, 20));
 
@@ -59,6 +60,7 @@ public abstract class WebTestBase : BunitContext, IAsyncLifetime
         Services.AddSingleton<ICreditCardRepository>(CreditCards);
         Services.AddSingleton<ICreditCardPurchaseRepository>(CreditCardPurchases);
         Services.AddSingleton<IIncomeRepository>(Incomes);
+        Services.AddSingleton<IFixedIncomeRepository>(FixedIncomes);
         Services.AddSingleton<IUnitOfWork>(UnitOfWork);
         Services.AddSingleton<IClock>(Clock);
 

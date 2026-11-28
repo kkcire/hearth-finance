@@ -32,7 +32,8 @@ public static class MonthlyDashboardCalculator
         IEnumerable<FixedExpense> fixedExpenses,
         IEnumerable<CreditCardPurchase> purchases,
         Guid? conditionId = null,
-        int historyMonths = DefaultHistoryMonths)
+        int historyMonths = DefaultHistoryMonths,
+        IEnumerable<FixedIncome>? fixedIncomes = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(selectedMonth);
@@ -66,6 +67,9 @@ public static class MonthlyDashboardCalculator
         var clampedHistoryMonths = Math.Min(historyMonths, MaxHistoryMonths);
 
         var accountIncomes = incomes.Where(i => i.AccountId == account.Id).ToList();
+        var accountFixedIncomes = fixedIncomes is null
+            ? []
+            : fixedIncomes.Where(i => i.AccountId == account.Id).ToList();
         var accountDirect = directExpenses.Where(d => d.AccountId == account.Id).ToList();
         var accountFixed = fixedExpenses.Where(f => f.AccountId == account.Id).ToList();
         var accountPurchases = purchases.Where(p => p.AccountId == account.Id).ToList();
@@ -77,7 +81,8 @@ public static class MonthlyDashboardCalculator
             accountIncomes,
             accountDirect,
             accountFixed,
-            accountPurchases);
+            accountPurchases,
+            accountFixedIncomes);
 
         var currentCalendarMonth = YearMonth.From(today);
 
@@ -99,7 +104,8 @@ public static class MonthlyDashboardCalculator
             accountDirect,
             accountFixed,
             accountPurchases,
-            conditionId);
+            conditionId,
+            accountFixedIncomes);
 
         // 4. Recent months isolated history ending at selectedMonth (clamped to account.TrackingStartPeriod)
         var history = BuildHistoryWindow(
@@ -111,17 +117,35 @@ public static class MonthlyDashboardCalculator
             accountDirect,
             accountFixed,
             accountPurchases,
-            conditionId);
+            conditionId,
+            accountFixedIncomes);
 
-        // 5. Strictly isolated next-month estimate (M + 1; null at 9999-12)
+        // 5. Next-month estimate (M + 1; null at 9999-12). Carries projected cash balance only
+        // when viewing the current calendar month without a condition filter.
+        Money? realBalanceToday = selectedMonth == currentCalendarMonth && !conditionId.HasValue
+            ? (asOfDate == today
+                ? balance.Balance
+                : RealBalanceCalculator.Calculate(
+                    account,
+                    today,
+                    accountIncomes,
+                    accountDirect,
+                    accountFixed,
+                    accountPurchases,
+                    accountFixedIncomes).Balance)
+            : null;
+
         var nextMonthEstimate = CalculateNextMonthEstimate(
             account,
             selectedMonth,
+            today,
             accountIncomes,
             accountDirect,
             accountFixed,
             accountPurchases,
-            conditionId);
+            conditionId,
+            realBalanceToday,
+            accountFixedIncomes);
 
         return new MonthlyDashboardSnapshot(
             balance,
@@ -263,7 +287,8 @@ public static class MonthlyDashboardCalculator
         IReadOnlyCollection<DirectExpense> accountDirect,
         IReadOnlyCollection<FixedExpense> accountFixed,
         IReadOnlyCollection<CreditCardPurchase> accountPurchases,
-        Guid? conditionId)
+        Guid? conditionId,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(month);
@@ -294,13 +319,17 @@ public static class MonthlyDashboardCalculator
 
         var eligibleIncomes = accountIncomes
             .Where(income => income.AccountId == account.Id
-                             && income.ExpectedMonth == month
-                             && account.CanRegisterOn(income.ExpectedDate)
+                             && income.Month == month
+                             && account.CanRegisterOn(income.Date)
                              && (!conditionId.HasValue || income.ConditionId == conditionId.Value))
             .ToList();
 
-        var monthlyIncome = Money.Sum(eligibleIncomes.Select(income => income.Amount));
-        var ownMonthlyIncome = Money.Sum(eligibleIncomes.Where(income => income.IsOwn).Select(income => income.Amount));
+        var (fixedIncomeTotal, ownFixedIncomeTotal) = SumEffectiveFixedIncomesForMonth(
+            account, month, accountFixedIncomes, conditionId);
+
+        var monthlyIncome = Money.Sum(eligibleIncomes.Select(income => income.Amount)) + fixedIncomeTotal;
+        var ownMonthlyIncome = Money.Sum(eligibleIncomes.Where(income => income.IsOwn).Select(income => income.Amount))
+            + ownFixedIncomeTotal;
 
         var directTotal = Money.Sum(
             accountDirect
@@ -343,11 +372,14 @@ public static class MonthlyDashboardCalculator
     public static NextMonthEstimate? CalculateNextMonthEstimate(
         Account account,
         YearMonth selectedMonth,
+        DateOnly today,
         IReadOnlyCollection<Income> accountIncomes,
         IReadOnlyCollection<DirectExpense> accountDirect,
         IReadOnlyCollection<FixedExpense> accountFixed,
         IReadOnlyCollection<CreditCardPurchase> accountPurchases,
-        Guid? conditionId)
+        Guid? conditionId,
+        Money? realBalanceToday = null,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(selectedMonth);
@@ -366,14 +398,20 @@ public static class MonthlyDashboardCalculator
         var nextMonthIncomes = account.CanRegisterInMonth(nextMonth)
             ? accountIncomes
                 .Where(income => income.AccountId == account.Id
-                                 && income.ExpectedMonth == nextMonth
-                                 && account.CanRegisterOn(income.ExpectedDate)
+                                 && income.Month == nextMonth
+                                 && account.CanRegisterOn(income.Date)
                                  && (!conditionId.HasValue || income.ConditionId == conditionId.Value))
                 .ToList()
             : [];
 
-        var estimatedIncome = Money.Sum(nextMonthIncomes.Select(income => income.Amount));
-        var estimatedOwnIncome = Money.Sum(nextMonthIncomes.Where(income => income.IsOwn).Select(income => income.Amount));
+        var (nextMonthFixedIncomeTotal, nextMonthOwnFixedIncomeTotal) = account.CanRegisterInMonth(nextMonth)
+            ? SumEffectiveFixedIncomesForMonth(account, nextMonth, accountFixedIncomes, conditionId)
+            : (Money.Zero, Money.Zero);
+
+        var estimatedOneOffIncome = Money.Sum(nextMonthIncomes.Select(income => income.Amount));
+        var estimatedIncome = estimatedOneOffIncome + nextMonthFixedIncomeTotal;
+        var estimatedOwnIncome = Money.Sum(nextMonthIncomes.Where(income => income.IsOwn).Select(income => income.Amount))
+            + nextMonthOwnFixedIncomeTotal;
 
         var estimatedFixed = account.CanRegisterInMonth(nextMonth)
             ? Money.Sum(
@@ -398,6 +436,55 @@ public static class MonthlyDashboardCalculator
         var projectedResult = estimatedIncome - estimatedCommitments;
         var estimatedSavingsRate = CalculateSavingsRate(estimatedIncome, estimatedCommitments, estimatedOwnIncome);
 
+        Money? projectedOpeningBalance = null;
+        Money? projectedEndingBalance = null;
+
+        var currentCalendarMonth = YearMonth.From(today);
+        if (selectedMonth == currentCalendarMonth && !conditionId.HasValue)
+        {
+            var cashToday = realBalanceToday ?? RealBalanceCalculator.Calculate(
+                account,
+                today,
+                accountIncomes,
+                accountDirect,
+                accountFixed,
+                accountPurchases,
+                accountFixedIncomes).Balance;
+
+            var pendingCurrentMonthNet = CalculateUnsettledCurrentMonthNet(
+                account,
+                currentCalendarMonth,
+                today,
+                accountIncomes,
+                accountDirect,
+                accountFixed,
+                accountPurchases,
+                accountFixedIncomes);
+
+            projectedOpeningBalance = cashToday + pendingCurrentMonthNet;
+
+            var unsettledNextFixedIncomes = account.CanRegisterInMonth(nextMonth)
+                ? SumUnsettledFixedIncomesForMonth(account, nextMonth, today, accountFixedIncomes)
+                : Money.Zero;
+
+            var unsettledNextFixed = account.CanRegisterInMonth(nextMonth)
+                ? Money.Sum(
+                    accountFixed
+                        .Where(expense => expense.AccountId == account.Id
+                                          && !IsSettledByDate(account, expense.PaidOn(nextMonth), today))
+                        .Select(expense => expense.AmountIn(nextMonth))
+                        .Where(amount => amount.HasValue)
+                        .Select(amount => amount!.Value))
+                : Money.Zero;
+
+            projectedEndingBalance = projectedOpeningBalance.Value
+                + estimatedOneOffIncome
+                + unsettledNextFixedIncomes
+                - unsettledNextFixed
+                - estimatedInstallments
+                - estimatedDirect;
+        }
+
         return new NextMonthEstimate(
             nextMonth,
             estimatedIncome,
@@ -406,8 +493,149 @@ public static class MonthlyDashboardCalculator
             estimatedDirect,
             estimatedCommitments,
             projectedResult,
-            estimatedSavingsRate);
+            estimatedSavingsRate,
+            projectedOpeningBalance,
+            projectedEndingBalance);
     }
+
+    private static Money CalculateUnsettledCurrentMonthNet(
+        Account account,
+        YearMonth currentMonth,
+        DateOnly today,
+        IReadOnlyCollection<Income> accountIncomes,
+        IReadOnlyCollection<DirectExpense> accountDirect,
+        IReadOnlyCollection<FixedExpense> accountFixed,
+        IReadOnlyCollection<CreditCardPurchase> accountPurchases,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes)
+    {
+        if (!account.CanRegisterInMonth(currentMonth))
+        {
+            return Money.Zero;
+        }
+
+        var pendingOneOffIncomes = Money.Sum(
+            accountIncomes
+                .Where(income => income.AccountId == account.Id
+                                 && income.Month == currentMonth
+                                 && account.CanRegisterOn(income.Date)
+                                 && !income.IsReceivedOn(today))
+                .Select(income => income.Amount));
+
+        var pendingFixedIncomes = SumUnsettledFixedIncomesForMonth(
+            account, currentMonth, today, accountFixedIncomes);
+
+        var pendingIncomes = pendingOneOffIncomes + pendingFixedIncomes;
+
+        var pendingDirect = Money.Sum(
+            accountDirect
+                .Where(expense => expense.AccountId == account.Id
+                                  && expense.Month == currentMonth
+                                  && account.CanRegisterOn(expense.Date)
+                                  && expense.Date > today)
+                .Select(expense => expense.Amount));
+
+        var pendingFixed = Money.Sum(
+            accountFixed
+                .Where(expense => expense.AccountId == account.Id
+                                  && !IsSettledByDate(account, expense.PaidOn(currentMonth), today))
+                .Select(expense => expense.AmountIn(currentMonth))
+                .Where(amount => amount.HasValue)
+                .Select(amount => amount!.Value));
+
+        var pendingCard = SumEligibleInstallments(
+            account,
+            accountPurchases,
+            conditionId: null,
+            cycle => cycle.DueMonth == currentMonth && cycle.DueDate > today);
+
+        return pendingIncomes - pendingDirect - pendingFixed - pendingCard;
+    }
+
+    private static (Money Total, Money OwnTotal) SumEffectiveFixedIncomesForMonth(
+        Account account,
+        YearMonth month,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes,
+        Guid? conditionId)
+    {
+        if (accountFixedIncomes is null || accountFixedIncomes.Count == 0)
+        {
+            return (Money.Zero, Money.Zero);
+        }
+
+        var total = Money.Zero;
+        var ownTotal = Money.Zero;
+
+        foreach (var fixedIncome in accountFixedIncomes)
+        {
+            if (fixedIncome.AccountId != account.Id
+                || (conditionId.HasValue && fixedIncome.ConditionId != conditionId.Value))
+            {
+                continue;
+            }
+
+            var receipt = fixedIncome.GetReceiptFor(month);
+            Money amount;
+            if (receipt is not null)
+            {
+                amount = receipt.ActualAmount;
+            }
+            else if (fixedIncome.IsActiveIn(month))
+            {
+                amount = fixedIncome.GetExpectedAmountFor(month);
+            }
+            else
+            {
+                continue;
+            }
+
+            total += amount;
+            if (fixedIncome.IsOwn)
+            {
+                ownTotal += amount;
+            }
+        }
+
+        return (total, ownTotal);
+    }
+
+    private static Money SumUnsettledFixedIncomesForMonth(
+        Account account,
+        YearMonth month,
+        DateOnly today,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes)
+    {
+        if (accountFixedIncomes is null || accountFixedIncomes.Count == 0)
+        {
+            return Money.Zero;
+        }
+
+        var total = Money.Zero;
+        foreach (var fixedIncome in accountFixedIncomes)
+        {
+            if (fixedIncome.AccountId != account.Id)
+            {
+                continue;
+            }
+
+            var receipt = fixedIncome.GetReceiptFor(month);
+            if (receipt is not null)
+            {
+                if (!IsSettledByDate(account, receipt.ReceivedOn, today))
+                {
+                    total += receipt.ActualAmount;
+                }
+            }
+            else if (fixedIncome.IsActiveIn(month))
+            {
+                total += fixedIncome.GetExpectedAmountFor(month);
+            }
+        }
+
+        return total;
+    }
+
+    private static bool IsSettledByDate(Account account, DateOnly? settledOn, DateOnly cutoff) =>
+        settledOn is { } date && account.CanRegisterOn(date) && date <= cutoff;
 
     private static IReadOnlyList<MonthlyFlowSummary> BuildHistoryWindow(
         Account account,
@@ -418,7 +646,8 @@ public static class MonthlyDashboardCalculator
         IReadOnlyCollection<DirectExpense> accountDirect,
         IReadOnlyCollection<FixedExpense> accountFixed,
         IReadOnlyCollection<CreditCardPurchase> accountPurchases,
-        Guid? conditionId)
+        Guid? conditionId,
+        IReadOnlyCollection<FixedIncome>? accountFixedIncomes)
     {
         var initialMonth = account.TrackingStartPeriod;
         if (selectedMonth < initialMonth)
@@ -441,7 +670,8 @@ public static class MonthlyDashboardCalculator
                 accountDirect,
                 accountFixed,
                 accountPurchases,
-                conditionId));
+                conditionId,
+                accountFixedIncomes));
 
             if (month == selectedMonth)
             {

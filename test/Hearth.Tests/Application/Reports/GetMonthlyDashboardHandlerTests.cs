@@ -18,6 +18,7 @@ public sealed class GetMonthlyDashboardHandlerTests
     private readonly InMemoryCategoryRepository _categories = new();
     private readonly InMemoryCategoryBudgetRepository _budgets = new();
     private readonly InMemoryIncomeRepository _incomes = new();
+    private readonly InMemoryFixedIncomeRepository _fixedIncomes = new();
     private readonly InMemoryDirectExpenseRepository _directExpenses = new();
     private readonly InMemoryFixedExpenseRepository _fixedExpenses = new();
     private readonly InMemoryCreditCardPurchaseRepository _purchases = new();
@@ -33,6 +34,7 @@ public sealed class GetMonthlyDashboardHandlerTests
             _categories,
             _budgets,
             _incomes,
+            _fixedIncomes,
             _directExpenses,
             _fixedExpenses,
             _purchases,
@@ -137,7 +139,7 @@ public sealed class GetMonthlyDashboardHandlerTests
         Assert.Contains(dto.RecentActivities, a => a.Description == "Internet e Luz" && a.MovementType == "FixedExpense");
         Assert.True(dto.RecentActivities.Zip(dto.RecentActivities.Skip(1)).All(pair => pair.First.Date >= pair.Second.Date));
 
-        // 7. Next Month Estimate (Jan 2027 strictly isolated: 2000 - (470.99 fixed + 265.99 card) = 1263.02, SavingsRate = 63.2%)
+        // 7. Next Month Estimate (Jan 2027 strictly isolated; balance projection is null because Dec != current month Nov and condition is filtered)
         Assert.NotNull(dto.NextMonthEstimate);
         Assert.Equal(YearMonth.Of(2027, 1), dto.NextMonthEstimate!.NextYearMonth);
         Assert.Equal(2000.00m, dto.NextMonthEstimate.EstimatedIncome);
@@ -147,6 +149,20 @@ public sealed class GetMonthlyDashboardHandlerTests
         Assert.Equal(736.98m, dto.NextMonthEstimate.EstimatedCommitments);
         Assert.Equal(1263.02m, dto.NextMonthEstimate.ProjectedResult);
         Assert.Equal(63.2m, dto.NextMonthEstimate.EstimatedSavingsRatePercentage);
+        Assert.Null(dto.NextMonthEstimate.ProjectedOpeningBalance);
+        Assert.Null(dto.NextMonthEstimate.ProjectedEndingBalance);
+
+        // Viewing current calendar month (Nov 2026) under "Todas" maps ProjectedOpeningBalance & ProjectedEndingBalance for Dec 2026
+        // RealBalance(Nov 24) = 260.39, no pending Nov items -> Opening(Dec) = 260.39
+        // Dec total (all conditions): +2275 - (470.99 fixed + 300 direct + 265.99 own card + 500 others card) = +738.02
+        // Ending(Dec) = 260.39 + 738.02 = 998.41
+        var currentAllDto = await _handler.ExecuteAsync(new GetMonthlyDashboardQuery(
+            account.Id,
+            YearMonth.Of(2026, 11),
+            ConditionId: null));
+        Assert.NotNull(currentAllDto.NextMonthEstimate);
+        Assert.Equal(260.39m, currentAllDto.NextMonthEstimate!.ProjectedOpeningBalance);
+        Assert.Equal(998.41m, currentAllDto.NextMonthEstimate.ProjectedEndingBalance);
     }
 
     [Fact]
@@ -192,7 +208,6 @@ public sealed class GetMonthlyDashboardHandlerTests
 
         // Income in Nov -> excluded from Dashboard RecentActivities (only expenses & purchases made in that month)
         var income = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 3), Money.FromDecimal(1500m), "Reembolso");
-        income.MarkAsReceived(new DateOnly(2026, 11, 3), _clock.Today);
         await _incomes.AddAsync(income);
 
         // Card purchase made on Nov 10 (due Dec 14) -> appears in Nov recent activities (and NOT in Dec!)
@@ -232,9 +247,7 @@ public sealed class GetMonthlyDashboardHandlerTests
 
         var paiId = Guid.NewGuid();
         var ownIncome = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 5), Money.FromDecimal(2000m), "Salário", SystemPurchaseConditions.OwnId);
-        ownIncome.MarkAsReceived(new DateOnly(2026, 11, 5), _clock.Today);
         var paiReimbursement = Income.Create(Guid.NewGuid(), account.Id, new DateOnly(2026, 11, 10), Money.FromDecimal(950m), "Reembolso Pai", paiId);
-        paiReimbursement.MarkAsReceived(new DateOnly(2026, 11, 10), _clock.Today);
         await _incomes.AddAsync(ownIncome);
         await _incomes.AddAsync(paiReimbursement);
 
@@ -265,6 +278,43 @@ public sealed class GetMonthlyDashboardHandlerTests
         Assert.Equal(1700m, ownDto.Balance.Amount);
         var onlyOwnIncomeEntry = Assert.Single(ownDto.CurrentMonthFlow.IncomeEntries!);
         Assert.Equal("Salário", onlyOwnIncomeEntry.Description);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IncludesFixedIncomesInBalanceFlowIncomeEntriesAndNextMonthEstimate()
+    {
+        var account = Account.Create(
+            Guid.NewGuid(),
+            FakeCurrentUser.DefaultUserId,
+            "Conta Principal",
+            Money.FromDecimal(500m),
+            TestTime.UtcOn(new DateOnly(2026, 10, 1)),
+            isInitialBalanceConfirmed: true);
+        await _accounts.AddAsync(account);
+
+        var salary = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 10), null, 5, Money.FromDecimal(4000m), "Salário Fixo");
+        salary.ChangeAmountFrom(YearMonth.Of(2026, 12), Money.FromDecimal(4400m));
+        salary.ConfirmReceipt(account, YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5), Money.FromDecimal(4250m), _clock.Today);
+        await _fixedIncomes.AddAsync(salary);
+
+        var rental = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 11), null, 28, Money.FromDecimal(800m), "Aluguel Fixo");
+        await _fixedIncomes.AddAsync(rental);
+
+        var dto = await _handler.ExecuteAsync(new GetMonthlyDashboardQuery(account.Id, YearMonth.Of(2026, 11)));
+
+        // Cash = 500 + 4250 (confirmed salary receipt) = 4750
+        Assert.Equal(4750m, dto.Balance.Amount);
+        // Monthly income = 4250 (actual) + 800 (expected) = 5050
+        Assert.Equal(5050m, dto.CurrentMonthFlow.MonthlyIncome);
+        Assert.Equal(2, dto.CurrentMonthFlow.IncomeEntries!.Count);
+        Assert.Contains(dto.CurrentMonthFlow.IncomeEntries, e => e.Description == "Salário Fixo" && e.Amount == 4250m && e.IsReceived);
+        Assert.Contains(dto.CurrentMonthFlow.IncomeEntries, e => e.Description == "Aluguel Fixo" && e.Amount == 800m && !e.IsReceived);
+        // Dec estimate = 4400 + 800 = 5200; Opening = 4750 + 800 = 5550; Ending = 5550 + 5200 = 10750
+        Assert.Equal(5200m, dto.NextMonthEstimate!.EstimatedIncome);
+        Assert.Equal(5550m, dto.NextMonthEstimate.ProjectedOpeningBalance);
+        Assert.Equal(10750m, dto.NextMonthEstimate.ProjectedEndingBalance);
     }
 
     [Fact]

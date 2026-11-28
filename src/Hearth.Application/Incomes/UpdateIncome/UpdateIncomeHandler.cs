@@ -46,7 +46,7 @@ public sealed class UpdateIncomeHandler
         var account = await _accountAccess.EnsureCanAccessEntityAsync(
             income.AccountId, nameof(Income), income.Id, cancellationToken);
 
-        account.EnsureCanRegisterOn(command.ExpectedDate);
+        account.EnsureCanRegisterOn(command.Date);
 
         if (command.ConditionId is { } newConditionId && newConditionId != income.ConditionId)
         {
@@ -55,9 +55,9 @@ public sealed class UpdateIncomeHandler
             income.UpdateCondition(newConditionId);
         }
 
-        if (command.ExpectedDate != income.ExpectedDate)
+        if (command.Date != income.Date)
         {
-            income.UpdateExpectedDate(account, command.ExpectedDate);
+            income.UpdateDate(account, command.Date);
         }
 
         if (amount != income.Amount)

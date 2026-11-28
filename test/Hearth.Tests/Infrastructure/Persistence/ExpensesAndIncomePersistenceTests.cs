@@ -135,8 +135,7 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
                 directId, accountId, new DateOnly(2026, 10, 15), Money.FromDecimal(89.90m), "Mercado", categoryId));
 
             var income = Income.Create(
-                incomeId, accountId, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário", conditionId);
-            income.MarkAsReceived(new DateOnly(2026, 11, 2), new DateOnly(2026, 12, 31));
+                incomeId, accountId, new DateOnly(2026, 11, 2), Money.FromDecimal(5000.00m), "Salário", conditionId);
             await incomes.AddAsync(income);
 
             await purchases.AddAsync(CreditCardPurchase.Create(
@@ -168,8 +167,10 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
 
             var income = await incomes.GetByIdAsync(incomeId);
             Assert.NotNull(income);
-            Assert.True(income.IsReceived);
-            Assert.Equal(new DateOnly(2026, 11, 2), income.ReceivedOn);
+            Assert.Equal(new DateOnly(2026, 11, 2), income.Date);
+            Assert.Equal(YearMonth.Of(2026, 11), income.Month);
+            Assert.True(income.IsReceivedOn(new DateOnly(2026, 11, 2)));
+            Assert.False(income.IsReceivedOn(new DateOnly(2026, 11, 1)));
             Assert.Equal(conditionId, income.ConditionId);
             Assert.False(income.IsOwn);
 
@@ -181,6 +182,77 @@ public sealed class ExpensesAndIncomePersistenceTests : IAsyncLifetime
             Assert.Equal(2, purchase.InitialInstallment);
             Assert.True(await purchases.AnyByCategoryAsync(categoryId));
             Assert.True(await purchases.AnyByCreditCardAsync(cardId));
+        }
+    }
+
+    [Fact]
+    public async Task FixedIncomeRepository_PersistsAmountHistoryReceiptsUpdatesAndCascadeDeleteViaSplitQuery()
+    {
+        var (accountId, _, _, conditionId) = await SeedAccountCardAndCategoryAsync();
+        var incomeId = Guid.CreateVersion7();
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            var fixedIncome = FixedIncome.Create(
+                incomeId, accountId, YearMonth.Of(2026, 1), null, 5, Money.FromDecimal(4000.00m), "Salário", conditionId);
+            fixedIncome.ChangeAmountFrom(YearMonth.Of(2026, 7), Money.FromDecimal(4500.00m));
+            fixedIncome.ConfirmReceipt(YearMonth.Of(2026, 1), new DateOnly(2026, 1, 5), Money.FromDecimal(4200.00m), new DateOnly(2026, 12, 31));
+
+            await repo.AddAsync(fixedIncome);
+            await uow.SaveChangesAsync();
+        }
+
+        // Reload via split query, mutate collections (add receipt, revert old receipt, update details & stop)
+        await using (var scope = _fixture.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            var loaded = await repo.GetByIdAsync(incomeId);
+            Assert.NotNull(loaded);
+            Assert.Equal(2, loaded.AmountHistory.Count);
+            Assert.Single(loaded.Receipts);
+            Assert.Equal(Money.FromDecimal(4200.00m), loaded.GetReceiptFor(YearMonth.Of(2026, 1))!.ActualAmount);
+
+            loaded.UpdateDetails("Salário CLT", 6, conditionId);
+            loaded.ConfirmReceipt(YearMonth.Of(2026, 7), new DateOnly(2026, 7, 6), Money.FromDecimal(4800.00m), new DateOnly(2026, 12, 31));
+            loaded.RevertReceipt(YearMonth.Of(2026, 1));
+            loaded.StopAt(YearMonth.Of(2026, 12));
+
+            await repo.UpdateAsync(loaded);
+            await uow.SaveChangesAsync();
+        }
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>();
+            var uow = scope.ServiceProvider.GetRequiredService<IUnitOfWork>();
+
+            var byAccount = await repo.GetByAccountAsync(accountId);
+            var reloaded = Assert.Single(byAccount);
+            Assert.Equal("Salário CLT", reloaded.Description);
+            Assert.Equal(6, reloaded.ExpectedDayOfMonth);
+            Assert.Equal(YearMonth.Of(2026, 12), reloaded.EndMonth);
+            Assert.Equal(2, reloaded.AmountHistory.Count);
+            Assert.Equal(Money.FromDecimal(4000.00m), reloaded.GetExpectedAmountFor(YearMonth.Of(2026, 6)));
+            Assert.Equal(Money.FromDecimal(4500.00m), reloaded.GetExpectedAmountFor(YearMonth.Of(2026, 7)));
+            Assert.False(reloaded.IsReceivedIn(YearMonth.Of(2026, 1)));
+            var julReceipt = reloaded.GetReceiptFor(YearMonth.Of(2026, 7));
+            Assert.NotNull(julReceipt);
+            Assert.Equal(new DateOnly(2026, 7, 6), julReceipt.ReceivedOn);
+            Assert.Equal(Money.FromDecimal(4800.00m), julReceipt.ActualAmount);
+
+            await repo.DeleteAsync(reloaded);
+            await uow.SaveChangesAsync();
+        }
+
+        await using (var scope = _fixture.CreateScope())
+        {
+            var repo = scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>();
+            Assert.Null(await repo.GetByIdAsync(incomeId));
         }
     }
 }

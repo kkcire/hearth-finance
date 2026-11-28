@@ -14,12 +14,13 @@ public class ListIncomesHandlerTests
     private readonly FakeCurrentUser _currentUser = new();
     private readonly AccountAccessGuard _accountAccess;
     private readonly InMemoryIncomeRepository _incomes = new();
+    private readonly FakeClock _clock = new(new DateOnly(2026, 10, 20));
     private readonly ListIncomesHandler _handler;
 
     public ListIncomesHandlerTests()
     {
         _accountAccess = new AccountAccessGuard(_accounts, _currentUser);
-        _handler = new ListIncomesHandler(_accountAccess, _incomes);
+        _handler = new ListIncomesHandler(_accountAccess, _incomes, _clock);
     }
 
     private async Task<Account> SeedAccountAsync(string name = "Conta")
@@ -35,35 +36,40 @@ public class ListIncomesHandlerTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_ReturnsOnlyAccountIncomesOrderedByExpectedDateDescending()
+    public async Task ExecuteAsync_ReturnsOnlyAccountIncomesOrderedByDateDescending_WithTimeDerivedIsReceived()
     {
         var account = await SeedAccountAsync("Minha");
         var otherAccount = await SeedAccountAsync("Outra");
 
-        var older = Income.Create(
+        var past = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 5), Money.FromDecimal(200.00m), "Pix");
-        older.MarkAsReceived(new DateOnly(2026, 10, 6), new DateOnly(2026, 12, 31));
-
-        var newer = Income.Create(
+        var onToday = Income.Create(
+            Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 20), Money.FromDecimal(800.00m), "Freela hoje");
+        var future = Income.Create(
             Guid.NewGuid(), account.Id, new DateOnly(2026, 10, 28), Money.FromDecimal(5000.00m), "Salário");
-
         var other = Income.Create(
             Guid.NewGuid(), otherAccount.Id, new DateOnly(2026, 10, 30), Money.FromDecimal(9000.00m), "Outro");
 
-        await _incomes.AddAsync(older);
-        await _incomes.AddAsync(newer);
+        await _incomes.AddAsync(past);
+        await _incomes.AddAsync(onToday);
+        await _incomes.AddAsync(future);
         await _incomes.AddAsync(other);
 
         var result = await _handler.ExecuteAsync(new ListIncomesQuery(account.Id));
 
-        Assert.Equal(2, result.Count);
-        Assert.Equal(newer.Id, result[0].Id);
-        Assert.False(result[0].IsReceived);
-        Assert.Null(result[0].ReceivedOn);
+        Assert.Equal(3, result.Count);
 
-        Assert.Equal(older.Id, result[1].Id);
+        Assert.Equal(future.Id, result[0].Id);
+        Assert.Equal(new DateOnly(2026, 10, 28), result[0].Date);
+        Assert.False(result[0].IsReceived);
+
+        Assert.Equal(onToday.Id, result[1].Id);
+        Assert.Equal(new DateOnly(2026, 10, 20), result[1].Date);
         Assert.True(result[1].IsReceived);
-        Assert.Equal(new DateOnly(2026, 10, 6), result[1].ReceivedOn);
+
+        Assert.Equal(past.Id, result[2].Id);
+        Assert.Equal(new DateOnly(2026, 10, 5), result[2].Date);
+        Assert.True(result[2].IsReceived);
     }
 
     [Fact]
@@ -87,7 +93,8 @@ public class ListIncomesHandlerTests
     [Fact]
     public void Constructor_NullDependencies_Throw()
     {
-        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(null!, _incomes));
-        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(_accountAccess, null!));
+        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(null!, _incomes, _clock));
+        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(_accountAccess, null!, _clock));
+        Assert.Throws<ArgumentNullException>(() => new ListIncomesHandler(_accountAccess, _incomes, null!));
     }
 }

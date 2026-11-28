@@ -188,7 +188,7 @@ public class AccountTests
             Guid.NewGuid(), account, YearMonth.Of(2026, 12), null, M(200m), "Aluguel", SystemCategories.ServicesId);
 
         Assert.Equal(new DateOnly(2026, 12, 1), expense.Date);
-        Assert.Equal(new DateOnly(2026, 12, 1), income.ExpectedDate);
+        Assert.Equal(new DateOnly(2026, 12, 1), income.Date);
         Assert.Equal(YearMonth.Of(2026, 12), fixedExp.StartMonth);
     }
 

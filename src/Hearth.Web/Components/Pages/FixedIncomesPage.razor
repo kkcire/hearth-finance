@@ -1,0 +1,837 @@
+@page "/receitas-fixas"
+@attribute [Authorize]
+@inherits AccountPageBase
+@using Hearth.Application.FixedIncomes
+@using Hearth.Application.FixedIncomes.ConfirmFixedIncomeReceipt
+@using Hearth.Application.FixedIncomes.CreateFixedIncome
+@using Hearth.Application.FixedIncomes.DeleteFixedIncome
+@using Hearth.Application.FixedIncomes.ListFixedIncomes
+@using Hearth.Application.FixedIncomes.RevertFixedIncomeReceipt
+@using Hearth.Application.FixedIncomes.StopFixedIncome
+@using Hearth.Application.FixedIncomes.UpdateFixedIncome
+@using Hearth.Application.PurchaseConditions
+@using Hearth.Application.PurchaseConditions.ListPurchaseConditions
+@using Hearth.Web.Components.Shared
+
+<div class="hearth-page">
+    <PageHeader Title="Receitas fixas"
+                Subtitle="Salários e entradas recorrentes com histórico de reajustes e confirmação mensal de recebimento.">
+        <Actions>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       Class="hearth-btn-clean"
+                       StartIcon="@Icons.Material.Filled.Add"
+                       OnClick="StartCreate"
+                       Disabled="_saving"
+                       data-testid="new-fixed-income-button">
+                Nova receita fixa
+            </MudButton>
+        </Actions>
+    </PageHeader>
+
+    <div class="hearth-command-bar">
+        <div class="hearth-command-controls">
+            <MonthNavigator Month="_selectedMonth" MinMonth="TrackingStartPeriod" MonthChanged="OnMonthChangedAsync" Disabled="_saving" />
+            <MudSwitch T="bool" @bind-Value="_showInactiveInMonth" Color="Color.Primary" Label="Mostrar inativas no mês" />
+        </div>
+
+        @if (!_loading)
+        {
+            <div class="hearth-summary-metrics hearth-money">
+                <span class="hearth-summary-metric">Ativas: <strong>@ActiveInSelectedMonthCount</strong></span>
+                <span class="hearth-summary-metric">
+                    Previsto: <strong>@HearthFormat.Money(TotalExpectedInSelectedMonth)</strong>
+                </span>
+                <span class="hearth-summary-metric is-positive">
+                    Recebido: <strong>@HearthFormat.Money(TotalReceivedInSelectedMonth)</strong>
+                </span>
+            </div>
+        }
+    </div>
+
+    @if (_showCreateForm)
+    {
+        <section class="hearth-form-panel" data-testid="create-fixed-income-form">
+            <h2 class="hearth-card-title">Nova receita fixa</h2>
+            <MudGrid Spacing="3">
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_description"
+                                  Label="Descrição"
+                                  Variant="Variant.Outlined"
+                                  Required="true"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Counter="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="fixed-income-description-input" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudSelect T="Guid"
+                               @bind-Value="_conditionId"
+                               Label="Condição"
+                               Variant="Variant.Outlined"
+                               HelperText="Própria = sua renda pessoal; outras condições = repasses recorrentes de terceiros."
+                               Disabled="_saving"
+                               data-testid="fixed-income-condition-select">
+                        @foreach (var condition in ActiveConditions)
+                        {
+                            <MudSelectItem T="Guid" Value="@condition.Id">@condition.Name</MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_amount"
+                                     Label="Valor mensal previsto"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     Disabled="_saving"
+                                     data-testid="fixed-income-amount-input" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int"
+                                     @bind-Value="_expectedDay"
+                                     Label="Dia previsto"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="31"
+                                     Disabled="_saving"
+                                     data-testid="fixed-income-day-input" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int" @bind-Value="_startMonth" Label="Mês início" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int" @bind-Value="_startYear" Label="Ano início" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
+                </MudItem>
+                <MudItem xs="12" sm="4" Class="d-flex align-center">
+                    <MudSwitch T="bool" @bind-Value="_hasEndMonth" Color="Color.Primary" Label="Definir fim?" Disabled="_saving" />
+                </MudItem>
+                @if (_hasEndMonth)
+                {
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_endMonth" Label="Mês fim" Variant="Variant.Outlined" Min="1" Max="12" Disabled="_saving" />
+                    </MudItem>
+                    <MudItem xs="6" sm="4">
+                        <MudNumericField T="int" @bind-Value="_endYear" Label="Ano fim" Variant="Variant.Outlined" Min="2000" Max="2100" Disabled="_saving" />
+                    </MudItem>
+                }
+                <MudItem xs="12">
+                    <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="2">
+                        <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Primary"
+                                   Class="hearth-btn-clean"
+                                   OnClick="CreateAsync"
+                                   Disabled="_saving || string.IsNullOrWhiteSpace(_description) || _amount <= 0 || _expectedDay < 1 || _expectedDay > 31"
+                                   data-testid="create-fixed-income-submit">
+                            @(_saving ? "Salvando…" : "Salvar")
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
+
+    @if (_editingIncome is not null)
+    {
+        <section class="hearth-form-panel" data-testid="edit-fixed-income-panel">
+            <div class="hearth-module-head">
+                <div>
+                    <h2 class="hearth-card-title">Editar receita fixa — @_editingIncome.Description</h2>
+                    <p class="hearth-card-meta">Atualize detalhes, aplique reajustes a partir de um mês ou gerencie o encerramento da vigência.</p>
+                </div>
+                <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Fechar</MudButton>
+            </div>
+
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="12" sm="5">
+                    <MudTextField @bind-Value="_editDescription"
+                                  Label="Descrição"
+                                  Variant="Variant.Outlined"
+                                  MaxLength="@DomainValidation.MaxDescriptionLength"
+                                  Immediate="true"
+                                  Disabled="_saving"
+                                  data-testid="edit-fixed-income-description-input" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int"
+                                     @bind-Value="_editExpectedDay"
+                                     Label="Dia previsto"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="31"
+                                     Disabled="_saving"
+                                     data-testid="edit-fixed-income-day-input" />
+                </MudItem>
+                <MudItem xs="6" sm="5">
+                    <MudSelect T="Guid"
+                               @bind-Value="_editConditionId"
+                               Label="Condição"
+                               Variant="Variant.Outlined"
+                               Disabled="_saving"
+                               data-testid="edit-fixed-income-condition-select">
+                        @foreach (var condition in AvailableConditionsForEdit)
+                        {
+                            <MudSelectItem T="Guid" Value="@condition.Id">
+                                @(condition.IsArchived ? $"{condition.Name} (Arquivada)" : condition.Name)
+                            </MudSelectItem>
+                        }
+                    </MudSelect>
+                </MudItem>
+                <MudItem xs="12" sm="5">
+                    <MudNumericField T="decimal?"
+                                     @bind-Value="_editNewAmount"
+                                     Label="Reajuste de valor (opcional)"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     HelperText="Se informado, vale a partir do mês de vigência escolhido sem alterar meses anteriores."
+                                     Disabled="_saving"
+                                     data-testid="edit-fixed-income-amount-input" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int"
+                                     @bind-Value="_editEffectiveMonth"
+                                     Label="Mês vigência"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="12"
+                                     Disabled="_saving || !_editNewAmount.HasValue"
+                                     data-testid="edit-fixed-income-effective-month-input" />
+                </MudItem>
+                <MudItem xs="6" sm="2">
+                    <MudNumericField T="int"
+                                     @bind-Value="_editEffectiveYear"
+                                     Label="Ano vigência"
+                                     Variant="Variant.Outlined"
+                                     Min="2000"
+                                     Max="2100"
+                                     Disabled="_saving || !_editNewAmount.HasValue"
+                                     data-testid="edit-fixed-income-effective-year-input" />
+                </MudItem>
+                <MudItem xs="12" sm="3">
+                    <MudButton Variant="Variant.Filled"
+                               Color="Color.Primary"
+                               Class="hearth-btn-clean"
+                               FullWidth="true"
+                               OnClick="SaveUpdateAsync"
+                               Disabled="_saving || string.IsNullOrWhiteSpace(_editDescription) || _editExpectedDay < 1 || _editExpectedDay > 31 || (_editNewAmount.HasValue && _editNewAmount.Value <= 0)"
+                               data-testid="save-fixed-income-update">
+                        Salvar alterações
+                    </MudButton>
+                </MudItem>
+            </MudGrid>
+
+            <div class="hearth-form-divider"></div>
+
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int"
+                                     @bind-Value="_stopEndMonth"
+                                     Label="Último mês"
+                                     Variant="Variant.Outlined"
+                                     Min="1"
+                                     Max="12"
+                                     Disabled="_saving"
+                                     data-testid="stop-fixed-income-month-input" />
+                </MudItem>
+                <MudItem xs="6" sm="3">
+                    <MudNumericField T="int"
+                                     @bind-Value="_stopEndYear"
+                                     Label="Último ano"
+                                     Variant="Variant.Outlined"
+                                     Min="2000"
+                                     Max="2100"
+                                     Disabled="_saving"
+                                     data-testid="stop-fixed-income-year-input" />
+                </MudItem>
+                <MudItem xs="12" sm="6">
+                    <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                        @if (_editingIncome.EndYear.HasValue)
+                        {
+                            <MudButton Variant="Variant.Outlined"
+                                       Color="Color.Success"
+                                       Class="hearth-btn-clean"
+                                       OnClick="ReactivateAsync"
+                                       Disabled="_saving"
+                                       data-testid="reactivate-fixed-income">
+                                Reativar sem fim
+                            </MudButton>
+                        }
+                        <MudButton Variant="Variant.Outlined"
+                                   Color="Color.Warning"
+                                   Class="hearth-btn-clean"
+                                   OnClick="SaveStopAsync"
+                                   Disabled="_saving"
+                                   data-testid="save-fixed-income-stop">
+                            Encerrar vigência
+                        </MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
+
+    @if (_confirmingIncome is not null)
+    {
+        <section class="hearth-form-panel" data-testid="confirm-fixed-income-panel">
+            <h2 class="hearth-card-title">
+                Confirmar recebimento — @_confirmingIncome.Description (@HearthFormat.MonthYear(_selectedMonth))
+            </h2>
+            <MudGrid Spacing="3" Class="align-center">
+                <MudItem xs="12" sm="4">
+                    <MudNumericField T="decimal"
+                                     @bind-Value="_confirmActualAmount"
+                                     Label="Valor recebido"
+                                     Variant="Variant.Outlined"
+                                     Culture="@HearthFormat.PtBr"
+                                     Format="N2"
+                                     Adornment="Adornment.Start"
+                                     AdornmentText="R$"
+                                     HideSpinButtons="true"
+                                     HelperText="Ajuste se houve bônus, comissão ou desconto neste mês."
+                                     Disabled="_saving"
+                                     data-testid="confirm-fixed-income-amount-input" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudDatePicker @bind-Date="_confirmReceivedOn"
+                                   Label="Data de recebimento"
+                                   Variant="Variant.Outlined"
+                                   DateFormat="dd/MM/yyyy"
+                                   Culture="@HearthFormat.PtBr"
+                                   Editable="true"
+                                   Disabled="_saving"
+                                   data-testid="confirm-fixed-income-date-input" />
+                </MudItem>
+                <MudItem xs="12" sm="4">
+                    <MudStack Row="true" Spacing="2" Justify="Justify.FlexEnd">
+                        <MudButton Variant="Variant.Filled"
+                                   Color="Color.Success"
+                                   Class="hearth-btn-clean"
+                                   OnClick="ConfirmReceiptAsync"
+                                   Disabled="_saving || _confirmActualAmount <= 0 || !_confirmReceivedOn.HasValue"
+                                   data-testid="confirm-fixed-income-submit">
+                            Confirmar recebimento
+                        </MudButton>
+                        <MudButton Variant="Variant.Text" OnClick="CancelPanels" Disabled="_saving">Cancelar</MudButton>
+                    </MudStack>
+                </MudItem>
+            </MudGrid>
+        </section>
+    }
+
+    @if (_loading)
+    {
+        <div class="hearth-card hearth-skeleton-panel"></div>
+    }
+    else
+    {
+        <section class="hearth-table-shell" aria-label="Lista de receitas fixas">
+            <MudTable Items="VisibleIncomes" Hover="true" Dense="true" Elevation="0" Class="hearth-data-table">
+                <HeaderContent>
+                    <MudTh>Descrição</MudTh>
+                    <MudTh Style="width: 130px;">Condição</MudTh>
+                    <MudTh Style="width: 110px;">Dia previsto</MudTh>
+                    <MudTh Style="width: 150px; text-align: right;">Previsto</MudTh>
+                    <MudTh Style="width: 240px;">Status (@HearthFormat.ShortMonthYear(_selectedMonth))</MudTh>
+                    <MudTh Style="width: 156px; text-align: right;">Ações</MudTh>
+                </HeaderContent>
+                <RowTemplate>
+                    <MudTd DataLabel="Descrição" Class="hearth-cell-title">
+                        @context.Description
+                        @if (context.EndYear.HasValue && context.EndMonth.HasValue)
+                        {
+                            <div class="hearth-cell-sub">
+                                Até @HearthFormat.ShortMonthYear(YearMonth.Of(context.EndYear.Value, context.EndMonth.Value))
+                            </div>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Condição">
+                        <span class="hearth-condition-chip">@context.ConditionName</span>
+                    </MudTd>
+                    <MudTd DataLabel="Dia previsto" Class="hearth-money hearth-cell-muted">
+                        Dia @context.ExpectedDayOfMonth.ToString("00")
+                    </MudTd>
+                    <MudTd DataLabel="Previsto" Class="hearth-cell-amount">
+                        @(context.ExpectedAmount.HasValue ? HearthFormat.Money(context.ExpectedAmount.Value) : "—")
+                    </MudTd>
+                    <MudTd DataLabel="Status">
+                        @if (context.IsReceivedForMonth)
+                        {
+                            <div class="d-flex flex-column gap-1">
+                                <span class="hearth-status-pill is-positive" data-testid="@($"fixed-income-status-{context.Id}")">
+                                    Recebida
+                                </span>
+                                <span class="hearth-cell-sub hearth-money" data-testid="@($"fixed-income-actual-{context.Id}")">
+                                    @HearthFormat.Money(context.ActualAmount ?? 0m) em @HearthFormat.Date(context.ReceivedOn)
+                                </span>
+                            </div>
+                        }
+                        else if (context.IsActiveForMonth)
+                        {
+                            <span class="hearth-status-pill is-warning" data-testid="@($"fixed-income-status-{context.Id}")">
+                                Prevista
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="hearth-status-pill is-muted" data-testid="@($"fixed-income-status-{context.Id}")">
+                                Inativa
+                            </span>
+                        }
+                    </MudTd>
+                    <MudTd DataLabel="Ações" Style="text-align: right;">
+                        @if (_confirmDeleteId == context.Id)
+                        {
+                            <MudStack Row="true" Justify="Justify.FlexEnd" Spacing="1">
+                                <MudButton Size="Size.Small"
+                                           Variant="Variant.Filled"
+                                           Color="Color.Error"
+                                           OnClick="() => DeleteAsync(context.Id)"
+                                           Disabled="_saving"
+                                           data-testid="@($"confirm-delete-fixed-income-{context.Id}")">
+                                    Confirmar
+                                </MudButton>
+                                <MudButton Size="Size.Small" Variant="Variant.Text" OnClick="() => _confirmDeleteId = null" Disabled="_saving">
+                                    Cancelar
+                                </MudButton>
+                            </MudStack>
+                        }
+                        else
+                        {
+                            <div class="hearth-row-actions">
+                                @if (context.IsReceivedForMonth)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.Undo"
+                                                   Size="Size.Small"
+                                                   Class="hearth-action-btn is-warning"
+                                                   title="Reverter recebimento"
+                                                   aria-label="Reverter recebimento"
+                                                   OnClick="() => RevertReceiptAsync(context.Id)"
+                                                   Disabled="_saving"
+                                                   data-testid="@($"revert-fixed-income-{context.Id}")" />
+                                }
+                                else if (context.IsActiveForMonth)
+                                {
+                                    <MudIconButton Icon="@Icons.Material.Filled.CheckCircle"
+                                                   Size="Size.Small"
+                                                   Class="hearth-action-btn is-positive"
+                                                   title="Confirmar recebimento"
+                                                   aria-label="Confirmar recebimento"
+                                                   OnClick="() => StartConfirmReceipt(context)"
+                                                   Disabled="_saving"
+                                                   data-testid="@($"confirm-fixed-income-{context.Id}")" />
+                                }
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn"
+                                               title="Editar receita fixa"
+                                               aria-label="Editar receita fixa"
+                                               OnClick="() => StartEdit(context)"
+                                               Disabled="_saving"
+                                               data-testid="@($"edit-fixed-income-{context.Id}")" />
+
+                                <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                               Size="Size.Small"
+                                               Class="hearth-action-btn is-danger"
+                                               title="Excluir receita fixa"
+                                               aria-label="Excluir receita fixa"
+                                               OnClick="() => _confirmDeleteId = context.Id"
+                                               Disabled="_saving"
+                                               data-testid="@($"delete-fixed-income-{context.Id}")" />
+                            </div>
+                        }
+                    </MudTd>
+                </RowTemplate>
+                <NoRecordsContent>
+                    <EmptyState Compact="true"
+                                CssClass="ma-4"
+                                Title="Nenhuma receita fixa neste período"
+                                Description="Navegue para outro mês ou cadastre uma nova receita recorrente acima." />
+                </NoRecordsContent>
+            </MudTable>
+        </section>
+    }
+</div>
+
+@code
+{
+    private IReadOnlyList<FixedIncomeDto> _incomes = [];
+    private IReadOnlyList<PurchaseConditionDto> _allConditions = [];
+    private YearMonth _selectedMonth = YearMonth.Of(2026, 1);
+    private bool _showInactiveInMonth;
+    private bool _loading = true;
+    private bool _saving;
+
+    private bool _showCreateForm;
+    private string _description = string.Empty;
+    private Guid _conditionId = SystemPurchaseConditions.OwnId;
+    private decimal _amount;
+    private int _expectedDay = 5;
+    private int _startMonth;
+    private int _startYear;
+    private bool _hasEndMonth;
+    private int _endMonth;
+    private int _endYear;
+
+    private FixedIncomeDto? _editingIncome;
+    private string _editDescription = string.Empty;
+    private int _editExpectedDay = 5;
+    private Guid _editConditionId = SystemPurchaseConditions.OwnId;
+    private decimal? _editNewAmount;
+    private int _editEffectiveMonth;
+    private int _editEffectiveYear;
+    private int _stopEndMonth;
+    private int _stopEndYear;
+
+    private FixedIncomeDto? _confirmingIncome;
+    private decimal _confirmActualAmount;
+    private DateTime? _confirmReceivedOn;
+
+    private Guid? _confirmDeleteId;
+
+    private IReadOnlyList<PurchaseConditionDto> ActiveConditions =>
+        _allConditions.Where(c => !c.IsArchived).ToList();
+
+    private IReadOnlyList<PurchaseConditionDto> AvailableConditionsForEdit =>
+        _allConditions
+            .Where(c => !c.IsArchived || (_editingIncome is not null && c.Id == _editingIncome.ConditionId))
+            .ToList();
+
+    private IReadOnlyList<FixedIncomeDto> VisibleIncomes =>
+        _showInactiveInMonth
+            ? _incomes
+            : _incomes.Where(item => item.IsActiveForMonth || item.IsReceivedForMonth).ToList();
+
+    private int ActiveInSelectedMonthCount =>
+        _incomes.Count(item => item.IsActiveForMonth);
+
+    private decimal TotalExpectedInSelectedMonth =>
+        _incomes.Where(item => item.IsActiveForMonth).Sum(item => item.ExpectedAmount ?? 0m);
+
+    private decimal TotalReceivedInSelectedMonth =>
+        _incomes.Where(item => item.IsReceivedForMonth).Sum(item => item.ActualAmount ?? 0m);
+
+    protected override void OnInitialized()
+    {
+        _selectedMonth = YearMonth.From(Clock.Today);
+    }
+
+    protected override async Task LoadDataAsync(CancellationToken cancellationToken)
+    {
+        _loading = true;
+
+        var result = await Executor.ExecuteAsync<ListFixedIncomesHandler, IReadOnlyList<FixedIncomeDto>>(
+            (handler, ct) => handler.ExecuteAsync(
+                new ListFixedIncomesQuery(AccountId, _selectedMonth.Year, _selectedMonth.Month), ct),
+            cancellationToken: cancellationToken);
+
+        var conditionsResult = await Executor.ExecuteAsync<ListPurchaseConditionsHandler, IReadOnlyList<PurchaseConditionDto>>(
+            (handler, ct) => handler.ExecuteAsync(new ListPurchaseConditionsQuery(IncludeArchived: true), ct),
+            cancellationToken: cancellationToken);
+
+        if (result.IsSuccess && result.Value is not null)
+        {
+            _incomes = result.Value;
+        }
+
+        if (conditionsResult.IsSuccess && conditionsResult.Value is not null)
+        {
+            _allConditions = conditionsResult.Value;
+        }
+
+        _loading = false;
+    }
+
+    private async Task OnMonthChangedAsync(YearMonth month)
+    {
+        _selectedMonth = month;
+        CancelPanels();
+        await LoadDataAsync(ComponentCancellationToken);
+    }
+
+    private void CancelPanels()
+    {
+        _showCreateForm = false;
+        _editingIncome = null;
+        _confirmingIncome = null;
+        _confirmDeleteId = null;
+    }
+
+    private void StartCreate()
+    {
+        CancelPanels();
+        _description = string.Empty;
+        _conditionId = SystemPurchaseConditions.OwnId;
+        _amount = 0m;
+        _expectedDay = 5;
+        _startMonth = _selectedMonth.Month;
+        _startYear = _selectedMonth.Year;
+        _hasEndMonth = false;
+        _endMonth = _selectedMonth.Month;
+        _endYear = _selectedMonth.Year;
+        _showCreateForm = true;
+    }
+
+    private void StartEdit(FixedIncomeDto income)
+    {
+        CancelPanels();
+        _editingIncome = income;
+        _editDescription = income.Description;
+        _editExpectedDay = income.ExpectedDayOfMonth;
+        _editConditionId = income.ConditionId;
+        _editNewAmount = null;
+        _editEffectiveMonth = _selectedMonth.Month;
+        _editEffectiveYear = _selectedMonth.Year;
+        _stopEndMonth = income.EndMonth ?? _selectedMonth.Month;
+        _stopEndYear = income.EndYear ?? _selectedMonth.Year;
+    }
+
+    private void StartConfirmReceipt(FixedIncomeDto income)
+    {
+        CancelPanels();
+        _confirmingIncome = income;
+        _confirmActualAmount = income.ExpectedAmount ?? 0m;
+
+        var day = Math.Min(income.ExpectedDayOfMonth, DateTime.DaysInMonth(_selectedMonth.Year, _selectedMonth.Month));
+        var expectedDate = new DateOnly(_selectedMonth.Year, _selectedMonth.Month, day);
+        var defaultDate = expectedDate <= Clock.Today ? expectedDate : Clock.Today;
+        _confirmReceivedOn = HearthFormat.ToDateTime(defaultDate);
+    }
+
+    private async Task CreateAsync()
+    {
+        if (_saving || string.IsNullOrWhiteSpace(_description) || _amount <= 0)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var result = await Executor.ExecuteAsync<CreateFixedIncomeHandler, Guid>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new CreateFixedIncomeCommand(
+                        AccountId,
+                        _startYear,
+                        _startMonth,
+                        _hasEndMonth ? _endYear : null,
+                        _hasEndMonth ? _endMonth : null,
+                        _expectedDay,
+                        _amount,
+                        _description.Trim(),
+                        _conditionId),
+                    ct),
+                successMessage: "Receita fixa registrada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelPanels();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveUpdateAsync()
+    {
+        if (_saving || _editingIncome is null || string.IsNullOrWhiteSpace(_editDescription))
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var incomeId = _editingIncome.Id;
+            var result = await Executor.ExecuteAsync<UpdateFixedIncomeHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new UpdateFixedIncomeCommand(
+                        incomeId,
+                        _editDescription.Trim(),
+                        _editExpectedDay,
+                        _editConditionId,
+                        _editNewAmount,
+                        _editNewAmount.HasValue ? _editEffectiveYear : null,
+                        _editNewAmount.HasValue ? _editEffectiveMonth : null),
+                    ct),
+                successMessage: "Receita fixa atualizada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelPanels();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task SaveStopAsync()
+    {
+        if (_saving || _editingIncome is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var incomeId = _editingIncome.Id;
+            var result = await Executor.ExecuteAsync<StopFixedIncomeHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new StopFixedIncomeCommand(incomeId, _stopEndYear, _stopEndMonth), ct),
+                successMessage: "Vigência da receita fixa encerrada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelPanels();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ReactivateAsync()
+    {
+        if (_saving || _editingIncome is null)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var incomeId = _editingIncome.Id;
+            var result = await Executor.ExecuteAsync<StopFixedIncomeHandler>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new StopFixedIncomeCommand(incomeId, null, null), ct),
+                successMessage: "Receita fixa reativada.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelPanels();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task ConfirmReceiptAsync()
+    {
+        if (_saving || _confirmingIncome is null || _confirmActualAmount <= 0 || !_confirmReceivedOn.HasValue)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var incomeId = _confirmingIncome.Id;
+            var receivedOn = HearthFormat.ToDateOnly(_confirmReceivedOn.Value);
+
+            var result = await Executor.ExecuteAsync<ConfirmFixedIncomeReceiptHandler, FixedIncomeReceiptDto>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new ConfirmFixedIncomeReceiptCommand(
+                        incomeId,
+                        _selectedMonth.Year,
+                        _selectedMonth.Month,
+                        receivedOn,
+                        _confirmActualAmount),
+                    ct),
+                successMessage: "Recebimento confirmado.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                CancelPanels();
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task RevertReceiptAsync(Guid incomeId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            await Executor.ExecuteAsync<RevertFixedIncomeReceiptHandler, bool>(
+                (handler, ct) => handler.ExecuteAsync(
+                    new RevertFixedIncomeReceiptCommand(incomeId, _selectedMonth.Year, _selectedMonth.Month), ct),
+                successMessage: "Recebimento revertido.",
+                cancellationToken: ComponentCancellationToken);
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private async Task DeleteAsync(Guid incomeId)
+    {
+        if (_saving)
+        {
+            return;
+        }
+
+        _saving = true;
+        try
+        {
+            var result = await Executor.ExecuteAsync<DeleteFixedIncomeHandler>(
+                (handler, ct) => handler.ExecuteAsync(new DeleteFixedIncomeCommand(incomeId), ct),
+                successMessage: "Receita fixa excluída.",
+                cancellationToken: ComponentCancellationToken);
+
+            if (result.IsSuccess)
+            {
+                _confirmDeleteId = null;
+            }
+
+            await LoadDataAsync(ComponentCancellationToken);
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+}

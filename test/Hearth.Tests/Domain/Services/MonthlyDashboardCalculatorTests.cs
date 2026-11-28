@@ -19,9 +19,8 @@ public sealed class MonthlyDashboardCalculatorTests
         var account = CreateAccount(initialBalance: 1000m, initialDate: new DateOnly(2026, 10, 1));
         var card = CreditCard.Create(CardId, AccountId, Rule, "Cartão BB", Money.FromDecimal(5000m));
 
-        // Realized income before cutoff (+500) + unreceived expected income (+2000, must be ignored in SALDO)
+        // Realized income before cutoff (+500, Date <= today) + future expected income (+2000, Date > today, ignored in SALDO)
         var realizedIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 5), Money.FromDecimal(500m), "Freela");
-        realizedIncome.MarkAsReceived(new DateOnly(2026, 11, 5), today);
         var expectedIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 28), Money.FromDecimal(2000m), "Salário previsto");
 
         // Paid direct before cutoff (-200) + future direct after cutoff (-150, must be ignored)
@@ -76,7 +75,8 @@ public sealed class MonthlyDashboardCalculatorTests
         // Current month (Nov) isolated: 5000 - 500 = 4500 (does NOT add initialBalance 500)
         Assert.Equal(Money.FromDecimal(4500m), novSnapshot.CurrentMonthFlow.MonthlyResult);
 
-        // Next month estimate (Dec) strictly isolated to M+1: 2000 - (500 fixed + 200 scheduled direct) = 1300, SavingsRate = 65.0%
+        // Next month estimate (Dec): isolated monthly flow = 2000 - (500 fixed + 200 scheduled direct) = 1300, SavingsRate = 65.0%
+        // Cash projection from current month (Nov): RealBalance(500) + pending Nov(+5000 - 500) = 5000 opening -> 5000 + 1300 = 6300 ending
         Assert.NotNull(novSnapshot.NextMonthEstimate);
         Assert.Equal(YearMonth.Of(2026, 12), novSnapshot.NextMonthEstimate!.NextYearMonth);
         Assert.Equal(Money.FromDecimal(2000m), novSnapshot.NextMonthEstimate.EstimatedIncome);
@@ -86,6 +86,8 @@ public sealed class MonthlyDashboardCalculatorTests
         Assert.Equal(Money.FromDecimal(700m), novSnapshot.NextMonthEstimate.EstimatedCommitments);
         Assert.Equal(Money.FromDecimal(1300m), novSnapshot.NextMonthEstimate.ProjectedResult);
         Assert.Equal(65.0m, novSnapshot.NextMonthEstimate.EstimatedSavingsRatePercentage);
+        Assert.Equal(Money.FromDecimal(5000m), novSnapshot.NextMonthEstimate.ProjectedOpeningBalance);
+        Assert.Equal(Money.FromDecimal(6300m), novSnapshot.NextMonthEstimate.ProjectedEndingBalance);
     }
 
     [Theory]
@@ -287,7 +289,6 @@ public sealed class MonthlyDashboardCalculatorTests
             SystemPurchaseConditions.OwnId, "Jaqueta", SystemCategories.ShoppingId);
 
         var novIncome = Income.Create(Guid.NewGuid(), account, new DateOnly(2026, 11, 5), Money.FromDecimal(1000m), "Salário");
-        novIncome.MarkAsReceived(account, new DateOnly(2026, 11, 5), today);
 
         var novSnapshot = MonthlyDashboardCalculator.Calculate(
             account, YearMonth.Of(2026, 11), today, today, card,
@@ -411,7 +412,6 @@ public sealed class MonthlyDashboardCalculatorTests
             SystemPurchaseConditions.OwnId, "Mercado Livre", SystemCategories.ShoppingId);
 
         var novIncome = Income.Create(Guid.NewGuid(), account, new DateOnly(2026, 11, 5), Money.FromDecimal(2000m), "Salário");
-        novIncome.MarkAsReceived(account, new DateOnly(2026, 11, 5), today);
 
         CreditCardPurchase[] purchases = [marchPurchase, juneToApril2027Purchase];
 
@@ -458,9 +458,7 @@ public sealed class MonthlyDashboardCalculatorTests
 
         // R$ 2.000 own income + R$ 950 third-party reimbursement (Pai)
         var ownIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 5), Money.FromDecimal(2000m), "Salário", SystemPurchaseConditions.OwnId);
-        ownIncome.MarkAsReceived(new DateOnly(2026, 11, 5), today);
         var paiReimbursement = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 10), Money.FromDecimal(950m), "Reembolso Pai", paiId);
-        paiReimbursement.MarkAsReceived(new DateOnly(2026, 11, 10), today);
 
         // R$ 300 own direct expense + R$ 950 Pai card expense due Nov 14 (paid on Nov 24)
         var ownExpense = DirectExpense.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 8), Money.FromDecimal(300m), "Mercado", SystemCategories.FoodId);
@@ -518,6 +516,145 @@ public sealed class MonthlyDashboardCalculatorTests
             monthlyIncome: Money.FromDecimal(2950m),
             totalExpenses: Money.FromDecimal(300m),
             ownMonthlyIncome: Money.FromDecimal(2000m)));
+    }
+
+    [Fact]
+    public void Calculate_NextMonthProjectedBalance_IncludesUnsettledCurrentMonthAndPreventsDoubleCountingEarlySettlements()
+    {
+        // Today is Nov 10 (before Nov 14 invoice due date!)
+        var today = new DateOnly(2026, 11, 10);
+        var account = CreateAccount(initialBalance: 1000m, initialDate: new DateOnly(2026, 10, 1));
+        var card = CreditCard.Create(CardId, AccountId, Rule, "Cartão", Money.FromDecimal(5000m));
+
+        // Realized in Nov (<= Nov 10): +500 income, -200 direct, -100 paid fixed => RealBalance(Nov 10) baseline = 1200
+        var novPaidIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 5), Money.FromDecimal(500m), "Freela");
+        var novPaidDirect = DirectExpense.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 6), Money.FromDecimal(200m), "Mercado", SystemCategories.FoodId);
+        var novPaidFixed = FixedExpense.Create(Guid.NewGuid(), AccountId, YearMonth.Of(2026, 11), YearMonth.Of(2026, 11), Money.FromDecimal(100m), "Academia", SystemCategories.HealthId);
+        novPaidFixed.MarkAsPaid(YearMonth.Of(2026, 11), new DateOnly(2026, 11, 8), today);
+
+        // Unsettled in Nov (> Nov 10 or unpaid): +1500 expected income, -150 future direct, -300 unpaid fixed, -400 invoice due Nov 14
+        var novPendingIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 25), Money.FromDecimal(1500m), "Salário Nov");
+        var novFutureDirect = DirectExpense.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 20), Money.FromDecimal(150m), "Viagem", SystemCategories.TransportId);
+        var recurringFixed = FixedExpense.Create(Guid.NewGuid(), AccountId, YearMonth.Of(2026, 11), null, Money.FromDecimal(300m), "Internet", SystemCategories.ServicesId);
+        // Purchase Oct 20 -> 2x 400: inst 1 due Nov 14 (> Nov 10, pending), inst 2 due Dec 14
+        var purchase = CreditCardPurchase.Create(
+            Guid.NewGuid(), AccountId, CardId, new DateOnly(2026, 10, 20), Money.FromDecimal(800m), 2, 1, Rule,
+            SystemPurchaseConditions.OwnId, "Notebook", SystemCategories.ShoppingId);
+
+        // Dec items: +2300 expected income (always > today) + -200 Dec fixed ALREADY paid early on Nov 9
+        var decPendingIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 12, 5), Money.FromDecimal(2000m), "Salário Dez");
+        var decBonusIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 12, 10), Money.FromDecimal(300m), "Bônus Dez");
+        var decEarlyFixed = FixedExpense.Create(Guid.NewGuid(), AccountId, YearMonth.Of(2026, 12), YearMonth.Of(2026, 12), Money.FromDecimal(200m), "Seguro Dez", SystemCategories.ServicesId);
+        decEarlyFixed.MarkAsPaid(YearMonth.Of(2026, 12), new DateOnly(2026, 11, 9), today);
+
+        // RealBalance(Nov 10) = 1000 + 500 - 200 - 100 - 200 (early Dec fixed) = 1000
+        // Pending Nov net = +1500 - 150 - 300 - 400 = +650 => ProjectedOpeningBalance(Dec) = 1000 + 650 = 1650
+        // Dec isolated ProjectedResult = (2000 + 300) - (300 recurring + 200 early fixed + 400 card) = 2300 - 900 = +1400
+        // Unsettled Dec net (no double-count of -200 early fixed already in RealBalance) = +2300 - 300 - 400 = +1600
+        // ProjectedEndingBalance(Dec) = 1650 + 1600 = 3250
+        var snapshot = MonthlyDashboardCalculator.Calculate(
+            account,
+            YearMonth.Of(2026, 11),
+            asOfDate: new DateOnly(2026, 11, 5), // Earlier cutoff must NOT distort M+1 balance projection anchored on today
+            today: today,
+            activeCard: card,
+            incomes: [novPaidIncome, novPendingIncome, decPendingIncome, decBonusIncome],
+            directExpenses: [novPaidDirect, novFutureDirect],
+            fixedExpenses: [novPaidFixed, recurringFixed, decEarlyFixed],
+            purchases: [purchase]);
+
+        var next = snapshot.NextMonthEstimate;
+        Assert.NotNull(next);
+        Assert.Equal(Money.FromDecimal(2300m), next!.EstimatedIncome);
+        Assert.Equal(Money.FromDecimal(900m), next.EstimatedCommitments);
+        Assert.Equal(Money.FromDecimal(1400m), next.ProjectedResult);
+        Assert.Equal(Money.FromDecimal(1650m), next.ProjectedOpeningBalance);
+        Assert.Equal(Money.FromDecimal(3250m), next.ProjectedEndingBalance);
+    }
+
+    [Fact]
+    public void Calculate_NextMonthProjectedBalance_IsNullForNonCurrentMonthsAndWhenConditionFilterActive()
+    {
+        var today = new DateOnly(2026, 11, 24);
+        var account = CreateAccount(initialBalance: 1500m, initialDate: new DateOnly(2026, 10, 1));
+        var decIncome = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 12, 5), Money.FromDecimal(2000m), "Salário Dez");
+
+        // Current month with condition filter -> ProjectedOpeningBalance/EndingBalance are null
+        var filteredCurrent = MonthlyDashboardCalculator.Calculate(
+            account, YearMonth.Of(2026, 11), today, today, activeCard: null,
+            [decIncome], [], [], [], conditionId: SystemPurchaseConditions.OwnId);
+        Assert.Null(filteredCurrent.NextMonthEstimate!.ProjectedOpeningBalance);
+        Assert.Null(filteredCurrent.NextMonthEstimate.ProjectedEndingBalance);
+
+        // Future month (Dec -> Jan) -> null (only calculated from current calendar month)
+        var futureMonth = MonthlyDashboardCalculator.Calculate(
+            account, YearMonth.Of(2026, 12), today, today, activeCard: null,
+            [decIncome], [], [], []);
+        Assert.Null(futureMonth.NextMonthEstimate!.ProjectedOpeningBalance);
+        Assert.Null(futureMonth.NextMonthEstimate.ProjectedEndingBalance);
+
+        // Past month (Oct -> Nov) -> null
+        var pastMonth = MonthlyDashboardCalculator.Calculate(
+            account, YearMonth.Of(2026, 10), today, today, activeCard: null,
+            [decIncome], [], [], []);
+        Assert.Null(pastMonth.NextMonthEstimate!.ProjectedOpeningBalance);
+        Assert.Null(pastMonth.NextMonthEstimate.ProjectedEndingBalance);
+    }
+
+    [Fact]
+    public void Calculate_FixedIncomes_UsesActualReceiptWhenConfirmed_ExpectedAmountWhenPending_AndProjectsNextMonthWithoutDoubleCounting()
+    {
+        var today = new DateOnly(2026, 11, 15);
+        var account = CreateAccount(initialBalance: 1000m, initialDate: new DateOnly(2026, 10, 1));
+
+        // Salary: 4000 in Oct/Nov, adjusted to 4500 starting Dec 2026.
+        // Nov confirmed with R$ 300 bonus -> actual 4300 received on Nov 5.
+        var salary = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 10), null, 5, Money.FromDecimal(4000m), "Salário");
+        salary.ChangeAmountFrom(YearMonth.Of(2026, 12), Money.FromDecimal(4500m));
+        salary.ConfirmReceipt(account, YearMonth.Of(2026, 11), new DateOnly(2026, 11, 5), Money.FromDecimal(4300m), today);
+
+        // Rental income: 1000/mo, NOT yet confirmed in Nov -> pending in Nov, projected in Dec.
+        var rental = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 11), null, 20, Money.FromDecimal(1000m), "Aluguel");
+
+        // Fixed expense: 500/mo, unpaid in Nov
+        var internet = FixedExpense.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 11), null, Money.FromDecimal(500m), "Internet", SystemCategories.ServicesId);
+
+        var snapshot = MonthlyDashboardCalculator.Calculate(
+            account,
+            YearMonth.Of(2026, 11),
+            asOfDate: today,
+            today: today,
+            activeCard: null,
+            incomes: [],
+            directExpenses: [],
+            fixedExpenses: [internet],
+            purchases: [],
+            fixedIncomes: [salary, rental]);
+
+        // Cash today = 1000 + 4300 (confirmed salary actual) = 5300 (pending rental NOT in cash yet)
+        Assert.Equal(Money.FromDecimal(4300m), snapshot.Balance.Incomes);
+        Assert.Equal(Money.FromDecimal(5300m), snapshot.Balance.Balance);
+
+        // Nov flow: 4300 (actual salary) + 1000 (expected rental) = 5300 income; 500 expense; +4800 result
+        Assert.Equal(Money.FromDecimal(5300m), snapshot.CurrentMonthFlow.MonthlyIncome);
+        Assert.Equal(Money.FromDecimal(5300m), snapshot.CurrentMonthFlow.OwnMonthlyIncome);
+        Assert.Equal(Money.FromDecimal(4800m), snapshot.CurrentMonthFlow.MonthlyResult);
+
+        // Oct history point uses pre-adjustment 4000 baseline (rental started in Nov)
+        Assert.Equal(Money.FromDecimal(4000m), snapshot.MonthlyResultHistory[0].MonthlyIncome);
+
+        // Dec estimate uses adjusted 4500 salary + 1000 rental = 5500 income; 500 fixed => +5000 result
+        // Opening(Dec) = Cash(5300) + pending Nov (+1000 rental - 500 internet) = 5800 (NO double-counting of 4300 salary!)
+        // Ending(Dec) = 5800 + 5500 - 500 = 10800
+        var next = snapshot.NextMonthEstimate;
+        Assert.NotNull(next);
+        Assert.Equal(Money.FromDecimal(5500m), next!.EstimatedIncome);
+        Assert.Equal(Money.FromDecimal(5000m), next.ProjectedResult);
+        Assert.Equal(Money.FromDecimal(5800m), next.ProjectedOpeningBalance);
+        Assert.Equal(Money.FromDecimal(10800m), next.ProjectedEndingBalance);
     }
 
     private static Account CreateAccount(decimal initialBalance, DateOnly initialDate) =>

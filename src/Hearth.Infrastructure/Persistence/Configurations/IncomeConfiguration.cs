@@ -22,8 +22,8 @@ internal sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasColumnName("account_id")
             .IsRequired();
 
-        builder.Property(income => income.ExpectedDate)
-            .HasColumnName("expected_date")
+        builder.Property(income => income.Date)
+            .HasColumnName("date")
             .IsRequired();
 
         builder.Property(income => income.Amount)
@@ -41,13 +41,8 @@ internal sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasDefaultValue(SystemPurchaseConditions.OwnId)
             .IsRequired();
 
-        builder.Property(income => income.ReceivedOn)
-            .HasColumnName("received_on");
-
         builder.Ignore(income => income.IsOwn);
-        builder.Ignore(income => income.IsReceived);
-        builder.Ignore(income => income.ExpectedMonth);
-        builder.Ignore(income => income.ReceivedMonth);
+        builder.Ignore(income => income.Month);
 
         builder.HasOne<Account>()
             .WithMany()
@@ -61,8 +56,8 @@ internal sealed class IncomeConfiguration : IEntityTypeConfiguration<Income>
             .HasConstraintName("fk_incomes_purchase_conditions_condition_id")
             .OnDelete(DeleteBehavior.Restrict);
 
-        builder.HasIndex(income => new { income.AccountId, income.ExpectedDate })
-            .HasDatabaseName("ix_incomes_account_id_expected_date");
+        builder.HasIndex(income => new { income.AccountId, income.Date })
+            .HasDatabaseName("ix_incomes_account_id_date");
 
         builder.HasIndex(income => income.ConditionId)
             .HasDatabaseName("ix_incomes_condition_id");

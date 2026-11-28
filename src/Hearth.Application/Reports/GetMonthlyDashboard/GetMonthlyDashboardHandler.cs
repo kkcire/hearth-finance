@@ -43,6 +43,7 @@ public sealed class GetMonthlyDashboardHandler
     private readonly ICategoryRepository _categories;
     private readonly ICategoryBudgetRepository _budgets;
     private readonly IIncomeRepository _incomes;
+    private readonly IFixedIncomeRepository _fixedIncomes;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IFixedExpenseRepository _fixedExpenses;
     private readonly ICreditCardPurchaseRepository _purchases;
@@ -54,6 +55,7 @@ public sealed class GetMonthlyDashboardHandler
         ICategoryRepository categories,
         ICategoryBudgetRepository budgets,
         IIncomeRepository incomes,
+        IFixedIncomeRepository fixedIncomes,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
         ICreditCardPurchaseRepository purchases,
@@ -64,6 +66,7 @@ public sealed class GetMonthlyDashboardHandler
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(budgets);
         ArgumentNullException.ThrowIfNull(incomes);
+        ArgumentNullException.ThrowIfNull(fixedIncomes);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
@@ -74,6 +77,7 @@ public sealed class GetMonthlyDashboardHandler
         _categories = categories;
         _budgets = budgets;
         _incomes = incomes;
+        _fixedIncomes = fixedIncomes;
         _directExpenses = directExpenses;
         _fixedExpenses = fixedExpenses;
         _purchases = purchases;
@@ -99,6 +103,7 @@ public sealed class GetMonthlyDashboardHandler
         var categories = await _categories.GetVisibleForUserAsync(account.OwnerUserId, cancellationToken);
         var budgets = await _budgets.GetByAccountAsync(account.Id, cancellationToken);
         var incomes = await _incomes.GetByAccountAsync(account.Id, cancellationToken);
+        var fixedIncomes = await _fixedIncomes.GetByAccountAsync(account.Id, cancellationToken);
         var directExpenses = await _directExpenses.GetByAccountAsync(account.Id, cancellationToken);
         var fixedExpenses = await _fixedExpenses.GetByAccountAsync(account.Id, cancellationToken);
         var purchases = await _purchases.GetByAccountAsync(account.Id, cancellationToken);
@@ -114,7 +119,8 @@ public sealed class GetMonthlyDashboardHandler
             fixedExpenses,
             purchases,
             query.ConditionId,
-            query.HistoryMonths);
+            query.HistoryMonths,
+            fixedIncomes);
 
         var categoryNames = categories.ToDictionary(c => c.Id, c => c.Name);
 
@@ -137,23 +143,7 @@ public sealed class GetMonthlyDashboardHandler
             fixedExpenses,
             purchases);
 
-        var incomeEntries = account.CanRegisterInMonth(query.Month)
-            ? incomes
-                .Where(income => income.AccountId == account.Id
-                                 && income.ExpectedMonth == query.Month
-                                 && account.CanRegisterOn(income.ExpectedDate)
-                                 && (!query.ConditionId.HasValue || income.ConditionId == query.ConditionId.Value))
-                .OrderByDescending(income => income.Amount.Amount)
-                .ThenBy(income => income.ExpectedDate)
-                .ThenBy(income => income.Description, StringComparer.OrdinalIgnoreCase)
-                .Select(income => new DashboardIncomeEntryDto(
-                    income.Id,
-                    income.Description,
-                    income.ReceivedOn ?? income.ExpectedDate,
-                    income.Amount.Amount,
-                    income.IsReceived))
-                .ToList()
-            : [];
+        var incomeEntries = BuildIncomeEntries(account, query.Month, today, query.ConditionId, incomes, fixedIncomes);
 
         var balanceHistory = account.BalanceAdjustments
             .OrderByDescending(entry => entry.CreatedAt)
@@ -214,8 +204,79 @@ public sealed class GetMonthlyDashboardHandler
                     next.EstimatedDirectExpenses.Amount,
                     next.EstimatedCommitments.Amount,
                     next.ProjectedResult.Amount,
-                    next.EstimatedSavingsRatePercentage)
+                    next.EstimatedSavingsRatePercentage,
+                    next.ProjectedOpeningBalance?.Amount,
+                    next.ProjectedEndingBalance?.Amount)
                 : null);
+    }
+
+    private static IReadOnlyList<DashboardIncomeEntryDto> BuildIncomeEntries(
+        Account account,
+        YearMonth month,
+        DateOnly today,
+        Guid? conditionId,
+        IReadOnlyCollection<Income> incomes,
+        IReadOnlyCollection<FixedIncome> fixedIncomes)
+    {
+        if (!account.CanRegisterInMonth(month))
+        {
+            return [];
+        }
+
+        var entries = new List<DashboardIncomeEntryDto>();
+
+        foreach (var income in incomes)
+        {
+            if (income.AccountId != account.Id
+                || income.Month != month
+                || !account.CanRegisterOn(income.Date)
+                || (conditionId.HasValue && income.ConditionId != conditionId.Value))
+            {
+                continue;
+            }
+
+            entries.Add(new DashboardIncomeEntryDto(
+                income.Id,
+                income.Description,
+                income.Date,
+                income.Amount.Amount,
+                income.IsReceivedOn(today)));
+        }
+
+        foreach (var fixedIncome in fixedIncomes)
+        {
+            if (fixedIncome.AccountId != account.Id
+                || (conditionId.HasValue && fixedIncome.ConditionId != conditionId.Value))
+            {
+                continue;
+            }
+
+            var receipt = fixedIncome.GetReceiptFor(month);
+            if (receipt is not null)
+            {
+                entries.Add(new DashboardIncomeEntryDto(
+                    fixedIncome.Id,
+                    fixedIncome.Description,
+                    receipt.ReceivedOn,
+                    receipt.ActualAmount.Amount,
+                    true));
+            }
+            else if (fixedIncome.IsActiveIn(month))
+            {
+                entries.Add(new DashboardIncomeEntryDto(
+                    fixedIncome.Id,
+                    fixedIncome.Description,
+                    fixedIncome.ExpectedDateIn(month),
+                    fixedIncome.GetExpectedAmountFor(month).Amount,
+                    false));
+            }
+        }
+
+        return entries
+            .OrderByDescending(entry => entry.Amount)
+            .ThenBy(entry => entry.Date)
+            .ThenBy(entry => entry.Description, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private static IReadOnlyList<DashboardCategorySpendingItemDto> BuildCategorySpending(

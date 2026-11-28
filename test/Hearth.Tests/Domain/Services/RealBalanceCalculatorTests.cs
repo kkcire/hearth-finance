@@ -57,9 +57,8 @@ public class RealBalanceCalculatorTests
     {
         var account = NewAccount(initialBalance: 1000.00m);
 
-        // Expected in Oct, actually received in Nov -> cash regime uses ReceivedOn (Nov 5), NOT ExpectedDate!
-        var income = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 10, 28), M(500m), "Salário");
-        income.MarkAsReceived(new DateOnly(2026, 11, 5), new DateOnly(2026, 12, 31));
+        // Income on Nov 5 (+500): expected before Nov 5, realized on/after Nov 5
+        var income = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 5), M(500m), "Salário");
 
         // Direct expense on Oct 10 (-100)
         var direct = DirectExpense.Create(
@@ -113,17 +112,13 @@ public class RealBalanceCalculatorTests
     {
         var account = NewAccount(initialBalance: 1000m);
 
-        // Exact InitialBalanceDate (Oct 1) counts; day before (Sep 30) is ignored; after until (Nov 11) is ignored
+        // Exact InitialBalanceDate (Oct 1) counts; day before (Sep 30) is ignored; after until (Nov 11+) is ignored
         var today = new DateOnly(2026, 11, 20);
         var incomeBefore = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 9, 30), M(111m), "Antes");
-        incomeBefore.MarkAsReceived(new DateOnly(2026, 9, 30), today);
         var incomeOnInitial = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 10, 1), M(400m), "Dia inicial");
-        incomeOnInitial.MarkAsReceived(new DateOnly(2026, 10, 1), today);
-        var incomeExpectedOnly = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 10, 5), M(999m), "Só prevista");
-        var incomeAfterUntil = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 15), M(888m), "Futura");
-        incomeAfterUntil.MarkAsReceived(new DateOnly(2026, 11, 15), today);
+        var incomeOnUntil = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 10), M(100m), "No limite");
+        var incomeAfterUntil = Income.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 11, 11), M(888m), "Futura");
         var incomeOtherAccount = Income.Create(Guid.NewGuid(), OtherAccountId, new DateOnly(2026, 10, 5), M(777m), "Outra conta");
-        incomeOtherAccount.MarkAsReceived(new DateOnly(2026, 10, 5), today);
 
         var directBefore = DirectExpense.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 9, 30), M(50m), "Antes", SystemCategories.FoodId);
         var directOnInitial = DirectExpense.Create(Guid.NewGuid(), AccountId, new DateOnly(2026, 10, 1), M(60m), "Inicial", SystemCategories.FoodId);
@@ -144,16 +139,16 @@ public class RealBalanceCalculatorTests
         var balance = RealBalanceCalculator.Calculate(
             account,
             new DateOnly(2026, 11, 10),
-            [incomeBefore, incomeOnInitial, incomeExpectedOnly, incomeAfterUntil, incomeOtherAccount],
+            [incomeBefore, incomeOnInitial, incomeOnUntil, incomeAfterUntil, incomeOtherAccount],
             [directBefore, directOnInitial, directOnUntil, directAfterUntil, directOtherAccount],
             [fixedWithHistory, fixedUnpaid, fixedOtherAccount],
             []);
 
-        Assert.Equal(M(400m), balance.Incomes);
+        Assert.Equal(M(500m), balance.Incomes);
         Assert.Equal(M(100m), balance.DirectExpenses);
         Assert.Equal(M(250m), balance.FixedExpenses);
         Assert.Equal(Money.Zero, balance.CardInvoices);
-        Assert.Equal(M(1050m), balance.Balance);
+        Assert.Equal(M(1150m), balance.Balance);
     }
 
     [Fact]
@@ -293,7 +288,6 @@ public class RealBalanceCalculatorTests
         var nov5Expense = DirectExpense.Create(Guid.NewGuid(), account, new DateOnly(2026, 11, 5), M(800m), "Mercado", SystemCategories.FoodId);
         var nov15Expense = DirectExpense.Create(Guid.NewGuid(), account, new DateOnly(2026, 11, 15), M(200m), "Farmácia", SystemCategories.HealthId);
         var dec5Income = Income.Create(Guid.NewGuid(), account, new DateOnly(2026, 12, 5), M(500m), "Freela");
-        dec5Income.MarkAsReceived(account, new DateOnly(2026, 12, 5), new DateOnly(2026, 12, 10));
 
         // Update single Day-1 manual balance to R$ 1.500,00 -> EVERY movement from Nov 1 onward still applies!
         account.SetBalance(Guid.NewGuid(), M(1500m), "Conferência extrato dia 1", TestTime.UtcOn(2026, 11, 20));
@@ -319,5 +313,37 @@ public class RealBalanceCalculatorTests
 
         account.SetBalance(Guid.NewGuid(), M(-350m), "Cheque especial dia 1", TestTime.UtcOn(2026, 12, 15));
         Assert.Equal(M(-850m), RealBalanceCalculator.Calculate(account, new DateOnly(2026, 12, 15), [dec5Income], [nov5Expense, nov15Expense], [], []).Balance);
+    }
+
+    [Fact]
+    public void Calculate_IncludesConfirmedFixedIncomeReceiptsUsingActualAmount_AndIgnoresUnconfirmedOrFutureReceipts()
+    {
+        var account = NewAccount(initialBalance: 1000m); // TrackingStartDate = 2026-10-01
+        var today = new DateOnly(2026, 11, 20);
+
+        var salary = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 10), null, 5, M(5000m), "Salário");
+        // Oct confirmed with R$ 400 bonus on Oct 5; Nov confirmed with R$ 200 discount on Nov 12; Dec unconfirmed
+        salary.ConfirmReceipt(account, YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5), M(5400m), today);
+        salary.ConfirmReceipt(account, YearMonth.Of(2026, 11), new DateOnly(2026, 11, 12), M(4800m), today);
+
+        var unconfirmed = FixedIncome.Create(
+            Guid.NewGuid(), account, YearMonth.Of(2026, 10), null, 10, M(1200m), "Aluguel pendente");
+
+        var otherAccountIncome = FixedIncome.Create(
+            Guid.NewGuid(), OtherAccountId, YearMonth.Of(2026, 10), null, 5, M(9000m), "Outra conta");
+        otherAccountIncome.ConfirmReceipt(YearMonth.Of(2026, 10), new DateOnly(2026, 10, 5), M(9000m), today);
+
+        // Cutoff Nov 10: only Oct receipt (+5400) counts; Nov 12 receipt is after cutoff; unconfirmed ignored
+        var onNov10 = RealBalanceCalculator.Calculate(
+            account, new DateOnly(2026, 11, 10), [], [], [], [], [salary, unconfirmed, otherAccountIncome]);
+        Assert.Equal(M(5400m), onNov10.Incomes);
+        Assert.Equal(M(6400m), onNov10.Balance);
+
+        // Cutoff Nov 20: Oct (+5400) + Nov (+4800) = 10200
+        var onNov20 = RealBalanceCalculator.Calculate(
+            account, today, [], [], [], [], [salary, unconfirmed, otherAccountIncome]);
+        Assert.Equal(M(10200m), onNov20.Incomes);
+        Assert.Equal(M(11200m), onNov20.Balance);
     }
 }

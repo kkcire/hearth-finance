@@ -2408,6 +2408,10 @@ html, body {
     justify-content: space-between;
 }
 
+.hearth-savings-card.is-deficit {
+    border-color: rgba(239, 107, 99, 0.36);
+}
+
 .hearth-savings-head {
     width: 100%;
     display: flex;
@@ -2444,6 +2448,12 @@ html, body {
     background-color: rgba(239, 107, 99, 0.14);
     border-color: rgba(239, 107, 99, 0.34);
     color: #FFB4AE;
+}
+
+.hearth-savings-status-pill.is-deficit {
+    background-color: rgba(239, 107, 99, 0.24);
+    border-color: rgba(239, 107, 99, 0.62);
+    color: #FF8E87;
 }
 
 .hearth-savings-status-pill.is-neutral {
@@ -2504,11 +2514,42 @@ html, body {
     stroke-width: 14;
 }
 
+.hearth-savings-ring-track.is-deficit {
+    stroke: rgba(239, 107, 99, 0.2);
+}
+
+.hearth-savings-ring-track.is-attention {
+    stroke: rgba(239, 107, 99, 0.18);
+}
+
 .hearth-savings-ring-progress {
     fill: none;
     stroke: #62C878;
     stroke-width: 14;
     stroke-linecap: round;
+}
+
+.hearth-savings-ring-progress.is-healthy {
+    stroke: #62C878;
+}
+
+.hearth-savings-ring-progress.is-balanced {
+    stroke: #5B9BF8;
+}
+
+.hearth-savings-ring-progress.is-attention {
+    stroke: #EF6B63;
+}
+
+.hearth-savings-ring-progress.is-deficit {
+    stroke: #EF6B63;
+}
+
+.hearth-savings-ring-progress.is-zero-alert {
+    stroke: #EF6B63;
+    stroke-opacity: 0.72;
+    stroke-dasharray: 8 8;
+    stroke-linecap: butt;
 }
 
 .hearth-savings-ring-center {
@@ -2524,6 +2565,37 @@ html, body {
     font-weight: 700;
     color: #F3F3F3;
     letter-spacing: -0.02em;
+}
+
+.hearth-savings-ring-value.is-deficit,
+.hearth-savings-ring-value.is-attention {
+    color: #EF6B63;
+}
+
+.hearth-savings-alert {
+    margin: 0;
+    width: 100%;
+    padding: 8px 11px;
+    border-radius: 9px;
+    font-size: 0.78125rem;
+    line-height: 1.4;
+    border: 1px solid transparent;
+}
+
+.hearth-savings-alert.is-deficit {
+    background-color: rgba(239, 107, 99, 0.16);
+    border-color: rgba(239, 107, 99, 0.45);
+    color: #FFB4AE;
+}
+
+.hearth-savings-alert.is-attention {
+    background-color: rgba(239, 107, 99, 0.1);
+    border-color: rgba(239, 107, 99, 0.3);
+    color: #FFB4AE;
+}
+
+.hearth-savings-alert strong {
+    color: #FF8E87;
 }
 
 .hearth-savings-footer {
@@ -2630,6 +2702,12 @@ html, body {
 .hearth-savings-band.is-attention {
     color: #FFB4AE;
     border-color: rgba(239, 107, 99, 0.28);
+}
+
+.hearth-savings-band.is-deficit {
+    color: #FF8E87;
+    border-color: rgba(239, 107, 99, 0.5);
+    background-color: rgba(239, 107, 99, 0.12);
 }
 
 /* Redesigned Executive Next Month Estimate Card */
@@ -2823,6 +2901,61 @@ html, body {
 
 .hearth-nm-summary-value.is-danger {
     color: #EF6B63;
+}
+
+.hearth-next-month-balance-block {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 11px 14px;
+    border-radius: 10px;
+    background-color: #19191C;
+    border: 1px solid #29292C;
+}
+
+.hearth-next-month-balance-block.is-danger {
+    border-color: rgba(239, 107, 99, 0.36);
+}
+
+.hearth-nm-balance-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 10px;
+    font-size: 0.8125rem;
+    color: #A1A1AA;
+}
+
+.hearth-nm-balance-row strong {
+    font-weight: 600;
+    color: #F3F3F3;
+}
+
+.hearth-nm-balance-row strong.is-positive {
+    color: #62C878;
+}
+
+.hearth-nm-balance-row strong.is-danger {
+    color: #EF6B63;
+}
+
+.hearth-nm-balance-row--ending {
+    padding-top: 6px;
+    border-top: 1px solid rgba(243, 243, 243, 0.08);
+    color: #E4E4E7;
+    font-weight: 500;
+}
+
+.hearth-nm-balance-row--ending strong {
+    font-size: 0.96875rem;
+    font-weight: 700;
+}
+
+.hearth-next-month-balance-note {
+    margin: 0;
+    font-size: 0.75rem;
+    color: #71717A;
+    text-align: center;
 }
 
 /* Dedicated Activities Page (/atividades) */

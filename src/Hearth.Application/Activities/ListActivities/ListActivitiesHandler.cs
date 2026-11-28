@@ -10,6 +10,7 @@ namespace Hearth.Application.Activities.ListActivities;
 public sealed class ListActivitiesHandler
 {
     public const string IncomeType = "Income";
+    public const string FixedIncomeType = "FixedIncome";
     public const string DirectExpenseType = "DirectExpense";
     public const string FixedExpenseType = "FixedExpense";
     public const string CardPurchaseType = "CardPurchase";
@@ -30,6 +31,7 @@ public sealed class ListActivitiesHandler
     private readonly AccountAccessGuard _accountAccess;
     private readonly ICategoryRepository _categories;
     private readonly IIncomeRepository _incomes;
+    private readonly IFixedIncomeRepository _fixedIncomes;
     private readonly IDirectExpenseRepository _directExpenses;
     private readonly IFixedExpenseRepository _fixedExpenses;
     private readonly ICreditCardPurchaseRepository _purchases;
@@ -39,6 +41,7 @@ public sealed class ListActivitiesHandler
         AccountAccessGuard accountAccess,
         ICategoryRepository categories,
         IIncomeRepository incomes,
+        IFixedIncomeRepository fixedIncomes,
         IDirectExpenseRepository directExpenses,
         IFixedExpenseRepository fixedExpenses,
         ICreditCardPurchaseRepository purchases,
@@ -47,6 +50,7 @@ public sealed class ListActivitiesHandler
         ArgumentNullException.ThrowIfNull(accountAccess);
         ArgumentNullException.ThrowIfNull(categories);
         ArgumentNullException.ThrowIfNull(incomes);
+        ArgumentNullException.ThrowIfNull(fixedIncomes);
         ArgumentNullException.ThrowIfNull(directExpenses);
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
@@ -55,6 +59,7 @@ public sealed class ListActivitiesHandler
         _accountAccess = accountAccess;
         _categories = categories;
         _incomes = incomes;
+        _fixedIncomes = fixedIncomes;
         _directExpenses = directExpenses;
         _fixedExpenses = fixedExpenses;
         _purchases = purchases;
@@ -104,8 +109,7 @@ public sealed class ListActivitiesHandler
                     continue;
                 }
 
-                var effectiveDate = income.ReceivedOn ?? income.ExpectedDate;
-                if (filterMonth is not null && YearMonth.From(effectiveDate) != filterMonth)
+                if (filterMonth is not null && income.Month != filterMonth)
                 {
                     continue;
                 }
@@ -113,13 +117,91 @@ public sealed class ListActivitiesHandler
                 items.Add(new ActivityItemDto(
                     income.Id,
                     income.Description,
-                    effectiveDate,
+                    income.Date,
                     income.Amount.Amount,
                     IncomeType,
                     "Receita",
                     "income",
-                    income.IsReceived ? "Efetivado" : "Previsto",
+                    income.IsReceivedOn(today) ? "Efetivado" : "Previsto",
                     null));
+            }
+        }
+
+        if (MatchesType(normalizedType, FixedIncomeType)
+            || string.Equals(normalizedType, IncomeType, StringComparison.OrdinalIgnoreCase))
+        {
+            var fixedIncomes = await _fixedIncomes.GetByAccountAsync(account.Id, cancellationToken);
+            foreach (var income in fixedIncomes)
+            {
+                if (income.AccountId != account.Id
+                    || (query.ConditionId.HasValue && income.ConditionId != query.ConditionId.Value))
+                {
+                    continue;
+                }
+
+                if (filterMonth is not null)
+                {
+                    var receipt = income.GetReceiptFor(filterMonth);
+                    if (receipt is not null)
+                    {
+                        items.Add(new ActivityItemDto(
+                            income.Id,
+                            income.Description,
+                            receipt.ReceivedOn,
+                            receipt.ActualAmount.Amount,
+                            FixedIncomeType,
+                            "Receita fixa",
+                            "income",
+                            "Efetivado",
+                            null));
+                    }
+                    else if (income.IsActiveIn(filterMonth))
+                    {
+                        items.Add(new ActivityItemDto(
+                            income.Id,
+                            income.Description,
+                            income.ExpectedDateIn(filterMonth),
+                            income.GetExpectedAmountFor(filterMonth).Amount,
+                            FixedIncomeType,
+                            "Receita fixa",
+                            "income",
+                            "Previsto",
+                            null));
+                    }
+                }
+                else
+                {
+                    foreach (var month in EnumerateFixedIncomeMonths(income, initialMonth, currentMonth))
+                    {
+                        var receipt = income.GetReceiptFor(month);
+                        if (receipt is not null)
+                        {
+                            items.Add(new ActivityItemDto(
+                                income.Id,
+                                income.Description,
+                                receipt.ReceivedOn,
+                                receipt.ActualAmount.Amount,
+                                FixedIncomeType,
+                                "Receita fixa",
+                                "income",
+                                "Efetivado",
+                                null));
+                        }
+                        else if (income.IsActiveIn(month))
+                        {
+                            items.Add(new ActivityItemDto(
+                                income.Id,
+                                income.Description,
+                                income.ExpectedDateIn(month),
+                                income.GetExpectedAmountFor(month).Amount,
+                                FixedIncomeType,
+                                "Receita fixa",
+                                "income",
+                                "Previsto",
+                                null));
+                        }
+                    }
+                }
             }
         }
 
@@ -251,6 +333,54 @@ public sealed class ListActivitiesHandler
             .ThenByDescending(item => Math.Abs(item.Amount))
             .ThenBy(item => item.Description, StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static IEnumerable<YearMonth> EnumerateFixedIncomeMonths(
+        FixedIncome income,
+        YearMonth initialMonth,
+        YearMonth currentMonth)
+    {
+        var start = income.StartMonth < initialMonth ? initialMonth : income.StartMonth;
+
+        var latestReceiptMonth = income.Receipts
+            .Select(receipt => receipt.Month)
+            .DefaultIfEmpty()
+            .Max();
+
+        YearMonth end;
+        if (income.EndMonth is { } endMonth)
+        {
+            end = endMonth;
+        }
+        else
+        {
+            end = currentMonth;
+            if (start > end)
+            {
+                end = start;
+            }
+            if (latestReceiptMonth is not null && latestReceiptMonth > end)
+            {
+                end = latestReceiptMonth;
+            }
+        }
+
+        if (start > end)
+        {
+            yield break;
+        }
+
+        var cursor = start;
+        while (true)
+        {
+            yield return cursor;
+            if (cursor == end)
+            {
+                break;
+            }
+
+            cursor = cursor.AddMonths(1);
+        }
     }
 
     private static IEnumerable<YearMonth> EnumerateFixedExpenseMonths(

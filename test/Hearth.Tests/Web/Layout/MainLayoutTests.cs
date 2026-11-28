@@ -1,10 +1,13 @@
 using System.Reflection;
 using Bunit;
+using Hearth.Web.Components;
 using Hearth.Web.Components.Layout;
 using Hearth.Web.Components.Shared;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components;
+using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Components.Rendering;
+using Microsoft.AspNetCore.Components.Web;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace Hearth.Tests.Web.Layout;
@@ -44,6 +47,7 @@ public sealed class MainLayoutTests : WebTestBase
         Assert.Contains("Cartão", cut.Markup);
         Assert.Contains("Lançamentos", cut.Markup);
         Assert.Contains("Atividades", cut.Markup);
+        Assert.Contains("Receitas Fixas", cut.Markup);
         Assert.Contains("Planejamento", cut.Markup);
         Assert.Contains("Conta", cut.Markup);
         Assert.Contains("Erick", cut.Find("[data-testid='user-name']").TextContent);
@@ -127,6 +131,59 @@ public sealed class MainLayoutTests : WebTestBase
         cut.Find("[data-testid='error-boundary-recover']").Click();
 
         cut.WaitForAssertion(() => Assert.Contains("Recuperado", cut.Markup));
+    }
+
+    [Fact]
+    public async Task NavigateBetweenPages_AlwaysRendersStaticHearthPageTitle()
+    {
+        var auth = this.AddAuthorization();
+        auth.SetAuthorized("Erick");
+        Services.AddSingleton<AuthenticationStateProvider>(AuthStateProvider);
+
+        await SeedAccountAsync("Conta Erick");
+
+        var navigation = Services.GetRequiredService<NavigationManager>();
+        var cut = Render<StaticTitleTestHost>();
+
+        var routesAndMarkers = new (string Path, string ExpectedHeading)[]
+        {
+            ("/", "Painel do Mês"),
+            ("/cartao", "Cartão de crédito"),
+            ("/receitas", "Receitas"),
+            ("/conta", "Conta"),
+            ("/onboarding", "Olá, Erick!"),
+            ("/login", "Entrar"),
+            ("/cadastro", "Criar conta"),
+        };
+
+        foreach (var (path, expectedHeading) in routesAndMarkers)
+        {
+            navigation.NavigateTo(path);
+
+            cut.WaitForAssertion(() =>
+            {
+                Assert.Contains(expectedHeading, cut.Markup);
+                var title = cut.Find("title");
+                Assert.Equal("Hearth Finance", title.TextContent);
+            });
+        }
+    }
+
+    private sealed class StaticTitleTestHost : ComponentBase
+    {
+        protected override void BuildRenderTree(RenderTreeBuilder builder)
+        {
+            builder.OpenComponent<HeadOutlet>(0);
+            builder.CloseComponent();
+
+            builder.OpenComponent<CascadingAuthenticationState>(1);
+            builder.AddAttribute(2, nameof(CascadingAuthenticationState.ChildContent), (RenderFragment)(childBuilder =>
+            {
+                childBuilder.OpenComponent<Routes>(0);
+                childBuilder.CloseComponent();
+            }));
+            builder.CloseComponent();
+        }
     }
 
     private sealed class FaultyChild : ComponentBase

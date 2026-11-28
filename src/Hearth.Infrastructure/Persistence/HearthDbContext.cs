@@ -34,6 +34,8 @@ public sealed class HearthDbContext : DbContext
 
     public DbSet<Income> Incomes => Set<Income>();
 
+    public DbSet<FixedIncome> FixedIncomes => Set<FixedIncome>();
+
     protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
     {
         configurationBuilder.Properties<Money>()

@@ -24,12 +24,12 @@ public sealed class DashboardPageTests : WebTestBase
         var accountId = await SeedAccountAsync(initialBalance: 1000m, initialBalanceDate: new DateOnly(2026, 10, 1));
         var cardId = await SeedCreditCardAsync(accountId, closingDay: 2, dueDay: 14, name: "Cartão BB", limit: 7000m);
 
-        // Nov realized income (+500) + Nov expected income (+1500) => RealBalance = 1500, MonthlyIncome(Nov) = 2000
+        // Nov realized income (+500, Date <= today) + Nov expected income (+1500, Date > today) => RealBalance = 1500, MonthlyIncome(Nov) = 2000
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 500m, "Freela", new DateOnly(2026, 11, 5)), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 500m, "Freela"), ct),
             showErrorSnackbar: false);
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 28), 1500m, "Salário", null), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 28), 1500m, "Salário"), ct),
             showErrorSnackbar: false);
 
         // Nov direct expense (-300) => RealBalance = 1200, Expenses(Nov) = 300 -> Result = 1700 -> SavingsRate = 85.0%
@@ -50,9 +50,10 @@ public sealed class DashboardPageTests : WebTestBase
                 SystemPurchaseConditions.OwnId, "Monitor", SystemCategories.ShoppingId), ct),
             showErrorSnackbar: false);
 
-        // Dec income (+2200) -> NextMonthEstimate(Dec): 2200 - 100 (Dec installment) = 2100, FinalBalance = 1200 + 2100 = 3300
+        // Dec income (+2200) -> NextMonthEstimate(Dec): 2200 - 100 (Dec installment) = 2100
+        // OpeningBalance(Dec) = RealBalance(1200) + pending Nov income(1500) = 2700 -> EndingBalance(Dec) = 2700 + 2100 = 4800
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 12, 5), 2200m, "Salário Dez", null), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 12, 5), 2200m, "Salário Dez"), ct),
             showErrorSnackbar: false);
 
         var cut = Render<DashboardPage>();
@@ -142,15 +143,18 @@ public sealed class DashboardPageTests : WebTestBase
         Assert.Contains("100,00", cut.Find("[data-testid='next-month-expenses']").TextContent);
         Assert.Contains("2.100,00", cut.Find("[data-testid='next-month-projected-result']").TextContent);
         Assert.Contains("95,5%", cut.Find("[data-testid='next-month-savings-rate']").TextContent);
-        Assert.Empty(cut.FindAll("[data-testid='next-month-final-balance']"));
+        Assert.Contains("2.700,00", cut.Find("[data-testid='next-month-opening-balance']").TextContent);
+        Assert.Contains("4.800,00", cut.Find("[data-testid='next-month-ending-balance']").TextContent);
 
         // Navigating to Dec 2026 updates isolated Monthly Result while keeping Real Balance (1200) untouched
+        // and omits cash balance projection (computed only from current calendar month)
         await cut.Find("[data-testid='month-next']").ClickAsync();
         Assert.Contains("Dezembro de 2026", cut.Find("[data-testid='month-label']").TextContent);
         Assert.Contains("1.200,00", cut.Find("[data-testid='real-balance-value']").TextContent);
         Assert.Contains("100,00", cut.Find("[data-testid='dashboard-invoice-amount']").TextContent);
         Assert.Contains("200,00", cut.Find("[data-testid='dashboard-future-installments']").TextContent);
         Assert.Contains("2.100,00", cut.Find("[data-testid='dashboard-monthly-result-value']").TextContent);
+        Assert.Empty(cut.FindAll("[data-testid='next-month-balance-projection']"));
     }
 
     [Fact]
@@ -186,10 +190,10 @@ public sealed class DashboardPageTests : WebTestBase
 
         // R$ 2.000 own income + R$ 950 third-party reimbursement (Pai)
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2000m, "Salário", new DateOnly(2026, 11, 5), SystemPurchaseConditions.OwnId), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2000m, "Salário", SystemPurchaseConditions.OwnId), ct),
             showErrorSnackbar: false);
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 10), 950m, "Reembolso Pai", new DateOnly(2026, 11, 10), paiId), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 10), 950m, "Reembolso Pai", paiId), ct),
             showErrorSnackbar: false);
 
         // R$ 300 own expense + R$ 950 Pai card expense due Nov 14
@@ -394,7 +398,7 @@ public sealed class DashboardPageTests : WebTestBase
         Clock.Today = new DateOnly(2026, 11, 24);
         var accountId = await SeedAccountAsync(initialBalance: 1000m, initialBalanceDate: new DateOnly(2026, 6, 1));
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2000m, "Salário", new DateOnly(2026, 11, 5)), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2000m, "Salário"), ct),
             showErrorSnackbar: false);
 
         var cut = Render<DashboardPage>();
@@ -473,5 +477,69 @@ public sealed class DashboardPageTests : WebTestBase
 
         Assert.NotEmpty(cut.FindAll("[data-testid='monthly-result-empty-state']"));
         Assert.Empty(cut.FindAll(".hearth-result-chart-svg"));
+    }
+
+    [Fact]
+    public void SavingsRateRing_DistinguishesDeficitBreakEvenAndBandColors()
+    {
+        // Deficit: red pill "Déficit", red full ring, red 0,0% and explicit deficit alert
+        var deficit = Render<SavingsRateRing>(parameters => parameters
+            .Add(p => p.Percentage, 0m)
+            .Add(p => p.HasActivity, true)
+            .Add(p => p.MonthlyResult, -450.25m));
+
+        Assert.Equal("Déficit", deficit.Find("[data-testid='savings-rate-status-cue']").TextContent.Trim());
+        Assert.Contains("is-deficit", deficit.Find("[data-testid='savings-rate-status-cue']").ClassList);
+        Assert.Contains("is-deficit", deficit.Find("[data-testid='savings-rate-value']").ClassList);
+        Assert.Contains("is-deficit", deficit.Find(".hearth-savings-ring-progress").ClassList);
+        Assert.Contains("450,25", deficit.Find("[data-testid='savings-rate-alert']").TextContent);
+
+        // Break-even: "No limite", dashed zero-alert ring, attention alert
+        var breakEven = Render<SavingsRateRing>(parameters => parameters
+            .Add(p => p.Percentage, 0m)
+            .Add(p => p.HasActivity, true)
+            .Add(p => p.MonthlyResult, 0m));
+
+        Assert.Equal("No limite", breakEven.Find("[data-testid='savings-rate-status-cue']").TextContent.Trim());
+        Assert.Contains("is-zero-alert", breakEven.Find(".hearth-savings-ring-progress").ClassList);
+        Assert.Contains("Empate", breakEven.Find("[data-testid='savings-rate-alert']").TextContent);
+
+        // Band colors: <10% attention, 10-20% balanced, >=20% healthy
+        var attention = Render<SavingsRateRing>(parameters => parameters
+            .Add(p => p.Percentage, 6.5m)
+            .Add(p => p.HasActivity, true)
+            .Add(p => p.MonthlyResult, 130m));
+        Assert.Contains("is-attention", attention.Find(".hearth-savings-ring-progress").ClassList);
+        Assert.Empty(attention.FindAll("[data-testid='savings-rate-alert']"));
+
+        var balanced = Render<SavingsRateRing>(parameters => parameters
+            .Add(p => p.Percentage, 15.0m)
+            .Add(p => p.HasActivity, true)
+            .Add(p => p.MonthlyResult, 300m));
+        Assert.Contains("is-balanced", balanced.Find(".hearth-savings-ring-progress").ClassList);
+
+        var healthy = Render<SavingsRateRing>(parameters => parameters
+            .Add(p => p.Percentage, 28.0m)
+            .Add(p => p.HasActivity, true)
+            .Add(p => p.MonthlyResult, 560m));
+        Assert.Contains("is-healthy", healthy.Find(".hearth-savings-ring-progress").ClassList);
+    }
+
+    [Fact]
+    public async Task Dashboard_NextMonthBalanceProjection_ShowsFilterNoteUnderConditionFilter()
+    {
+        Clock.Today = new DateOnly(2026, 11, 24);
+        var accountId = await SeedAccountAsync(initialBalance: 1500m, initialBalanceDate: new DateOnly(2026, 10, 1));
+        await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 12, 5), 2000m, "Salário Dez"), ct),
+            showErrorSnackbar: false);
+
+        var cut = Render<DashboardPage>();
+        Assert.Contains("1.500,00", cut.Find("[data-testid='next-month-opening-balance']").TextContent);
+        Assert.Contains("3.500,00", cut.Find("[data-testid='next-month-ending-balance']").TextContent);
+
+        await cut.Find("[data-testid='dashboard-condition-own']").ClickAsync();
+        Assert.Empty(cut.FindAll("[data-testid='next-month-balance-projection']"));
+        Assert.NotEmpty(cut.FindAll("[data-testid='next-month-balance-filter-note']"));
     }
 }

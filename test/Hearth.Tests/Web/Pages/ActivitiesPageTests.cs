@@ -2,6 +2,8 @@ using Bunit;
 using Hearth.Application.CreditCardPurchases.RegisterCreditCardPurchase;
 using Hearth.Application.DirectExpenses.RegisterDirectExpense;
 using Hearth.Application.FixedExpenses.RegisterFixedExpense;
+using Hearth.Application.FixedIncomes.ConfirmFixedIncomeReceipt;
+using Hearth.Application.FixedIncomes.CreateFixedIncome;
 using Hearth.Application.Incomes.RegisterIncome;
 using Hearth.Domain;
 using Hearth.Web.Components.Pages;
@@ -18,7 +20,14 @@ public sealed class ActivitiesPageTests : WebTestBase
         var cardId = await SeedCreditCardAsync(accountId, closingDay: 2, dueDay: 14, name: "Cartão BB", limit: 5000m);
 
         await Executor.ExecuteAsync<RegisterIncomeHandler, Guid>(
-            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2500m, "Salário Nov", new DateOnly(2026, 11, 5)), ct),
+            (h, ct) => h.ExecuteAsync(new RegisterIncomeCommand(accountId, new DateOnly(2026, 11, 5), 2500m, "Salário Nov"), ct),
+            showErrorSnackbar: false);
+
+        var fixedIncomeResult = await Executor.ExecuteAsync<CreateFixedIncomeHandler, Guid>(
+            (h, ct) => h.ExecuteAsync(new CreateFixedIncomeCommand(accountId, 2026, 11, null, null, 10, 1200m, "Aluguel Fixo"), ct),
+            showErrorSnackbar: false);
+        await Executor.ExecuteAsync<ConfirmFixedIncomeReceiptHandler, Hearth.Application.FixedIncomes.FixedIncomeReceiptDto>(
+            (h, ct) => h.ExecuteAsync(new ConfirmFixedIncomeReceiptCommand(fixedIncomeResult.Value, 2026, 11, new DateOnly(2026, 11, 10), 1250m), ct),
             showErrorSnackbar: false);
 
         await Executor.ExecuteAsync<RegisterDirectExpenseHandler, Guid>(
@@ -41,15 +50,17 @@ public sealed class ActivitiesPageTests : WebTestBase
         Assert.Equal("Atividades", cut.Find("h1").TextContent.Trim());
         var tableText = cut.Find("[data-testid='activities-table']").TextContent;
         Assert.Contains("Salário Nov", tableText);
+        Assert.Contains("Aluguel Fixo", tableText);
         Assert.Contains("Padaria Central", tableText);
         Assert.Contains("Fibra Óptica", tableText);
         Assert.Contains("Monitor Ultrawide", tableText);
         Assert.Contains("1/3", cut.Find("[data-testid='activity-installment-badge']").TextContent);
 
-        // Filter by Receitas only
+        // Filter by Receitas only (includes both one-off incomes and fixed incomes)
         await cut.Find("[data-testid='activities-type-income']").ClickAsync();
         var incomeOnlyText = cut.Find("[data-testid='activities-table']").TextContent;
         Assert.Contains("Salário Nov", incomeOnlyText);
+        Assert.Contains("Aluguel Fixo", incomeOnlyText);
         Assert.DoesNotContain("Padaria Central", incomeOnlyText);
 
         // Filter by Cartão only

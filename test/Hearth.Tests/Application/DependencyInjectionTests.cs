@@ -56,6 +56,7 @@ public sealed class DependencyInjectionTests
         var purchases = new InMemoryCreditCardPurchaseRepository();
         var creditCards = new InMemoryCreditCardRepository();
         var incomes = new InMemoryIncomeRepository();
+        var fixedIncomes = new InMemoryFixedIncomeRepository();
 
         services.AddSingleton<ICurrentUser>(new FakeCurrentUser());
         services.AddSingleton<IUserRepository>(users);
@@ -69,6 +70,7 @@ public sealed class DependencyInjectionTests
         services.AddSingleton<ICreditCardRepository>(creditCards);
         services.AddSingleton<ICreditCardPurchaseRepository>(purchases);
         services.AddSingleton<IIncomeRepository>(incomes);
+        services.AddSingleton<IFixedIncomeRepository>(fixedIncomes);
         services.AddSingleton<IUnitOfWork>(new FakeUnitOfWork());
         services.AddSingleton<IClock>(new FakeClock(new DateOnly(2026, 11, 20)));
     }

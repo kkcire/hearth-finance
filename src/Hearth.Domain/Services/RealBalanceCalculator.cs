@@ -17,7 +17,8 @@ public static class RealBalanceCalculator
         IEnumerable<Income> incomes,
         IEnumerable<DirectExpense> directExpenses,
         IEnumerable<FixedExpense> fixedExpenses,
-        IEnumerable<CreditCardPurchase> purchases)
+        IEnumerable<CreditCardPurchase> purchases,
+        IEnumerable<FixedIncome>? fixedIncomes = null)
     {
         ArgumentNullException.ThrowIfNull(account);
         ArgumentNullException.ThrowIfNull(incomes);
@@ -25,12 +26,23 @@ public static class RealBalanceCalculator
         ArgumentNullException.ThrowIfNull(fixedExpenses);
         ArgumentNullException.ThrowIfNull(purchases);
 
-        var receivedIncomes = Money.Sum(
+        var receivedOneOffIncomes = Money.Sum(
             incomes
                 .Where(income => income.AccountId == account.Id
-                                 && income.ReceivedOn is { } received
-                                 && CountsIn(account, received, until))
+                                 && account.CanRegisterOn(income.Date)
+                                 && income.IsReceivedOn(until))
                 .Select(income => income.Amount));
+
+        var receivedFixedIncomes = fixedIncomes is null
+            ? Money.Zero
+            : Money.Sum(
+                fixedIncomes
+                    .Where(income => income.AccountId == account.Id)
+                    .SelectMany(income => income.GetReceiptEntries())
+                    .Where(receipt => CountsIn(account, receipt.ReceivedOn, until))
+                    .Select(receipt => receipt.ActualAmount));
+
+        var receivedIncomes = receivedOneOffIncomes + receivedFixedIncomes;
 
         var directTotal = Money.Sum(
             directExpenses

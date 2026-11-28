@@ -90,7 +90,7 @@ builder.Services.AddRateLimiter(options =>
             <head>
                 <meta charset="utf-8" />
                 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-                <title>Muitas tentativas — Hearth</title>
+                <title>Hearth Finance</title>
                 <style>
                     body { margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; background: #121212; color: rgba(255,255,255,0.92); font-family: Roboto, system-ui, sans-serif; padding: 16px; }
                     .card { max-width: 420px; width: 100%; background: #1E1E1E; border: 1px solid rgba(255,255,255,0.08); border-radius: 12px; padding: 28px; }

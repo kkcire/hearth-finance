@@ -145,6 +145,7 @@ public sealed class InvoiceAndBudgetPersistenceTests : IAsyncLifetime
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryBudgetRepository>(),
                 scope.ServiceProvider.GetRequiredService<IIncomeRepository>(),
+                scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>(),
                 scope.ServiceProvider.GetRequiredService<IDirectExpenseRepository>(),
                 scope.ServiceProvider.GetRequiredService<IFixedExpenseRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICreditCardPurchaseRepository>(),

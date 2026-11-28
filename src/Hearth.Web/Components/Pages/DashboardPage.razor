@@ -9,8 +9,6 @@
 @using Hearth.Domain.ValueObjects
 @using Hearth.Web.Models
 
-<PageTitle>Painel do Mês — Hearth Finance</PageTitle>
-
 <div class="hearth-dash">
     @* Content Header: Painel do Mês + simple chart icon badge + Month Selector *@
     <PageHeader Title="Painel do Mês"
@@ -678,7 +676,8 @@
 
             @* 2. Center — Taxa de Poupança *@
             <SavingsRateRing Percentage="flow.SavingsRatePercentage"
-                             HasActivity="flow.OwnMonthlyIncome > 0m" />
+                             HasActivity="flow.OwnMonthlyIncome > 0m"
+                             MonthlyResult="flow.MonthlyResult" />
 
             @* 3. Right — Estimativa do próximo mês (Strictly Isolated M + 1 Horizon Card) *@
             <section class="hearth-card hearth-next-month-card" aria-labelledby="heading-next-month" data-testid="dashboard-next-month-card">
@@ -773,7 +772,7 @@
 
                     <div class="hearth-next-month-summary-footer">
                         <div class="hearth-nm-summary-cell">
-                            <span class="hearth-nm-summary-label">Resultado projetado</span>
+                            <span class="hearth-nm-summary-label">Resultado do mês</span>
                             <strong class="hearth-nm-summary-value hearth-nm-summary-value--hero hearth-money @(nextMonth.ProjectedResult > 0m ? "is-positive" : nextMonth.ProjectedResult < 0m ? "is-danger" : null)"
                                     data-testid="next-month-projected-result">
                                 @HearthFormat.Money(nextMonth.ProjectedResult)
@@ -788,6 +787,35 @@
                             </strong>
                         </div>
                     </div>
+
+                    @if (nextMonth.ProjectedOpeningBalance.HasValue && nextMonth.ProjectedEndingBalance.HasValue)
+                    {
+                        var openingBalance = nextMonth.ProjectedOpeningBalance.Value;
+                        var endingBalance = nextMonth.ProjectedEndingBalance.Value;
+                        <div class="hearth-next-month-balance-block @(endingBalance < 0m ? "is-danger" : null)"
+                             data-testid="next-month-balance-projection">
+                            <div class="hearth-nm-balance-row">
+                                <span>Saldo de entrada previsto</span>
+                                <strong class="hearth-money @(openingBalance > 0m ? "is-positive" : openingBalance < 0m ? "is-danger" : null)"
+                                        data-testid="next-month-opening-balance">
+                                    @HearthFormat.Money(openingBalance)
+                                </strong>
+                            </div>
+                            <div class="hearth-nm-balance-row hearth-nm-balance-row--ending">
+                                <span>Saldo previsto ao fim do mês</span>
+                                <strong class="hearth-money @(endingBalance > 0m ? "is-positive" : endingBalance < 0m ? "is-danger" : null)"
+                                        data-testid="next-month-ending-balance">
+                                    @HearthFormat.Money(endingBalance)
+                                </strong>
+                            </div>
+                        </div>
+                    }
+                    else if (_selectedMonth == YearMonth.From(Clock.Today) && _selectedConditionId.HasValue)
+                    {
+                        <p class="hearth-next-month-balance-note" data-testid="next-month-balance-filter-note">
+                            Saldo previsto disponível no filtro "Todas".
+                        </p>
+                    }
                 }
             </section>
         </div>

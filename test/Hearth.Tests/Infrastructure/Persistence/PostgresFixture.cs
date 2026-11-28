@@ -58,6 +58,9 @@ public sealed class PostgresFixture : IAsyncLifetime
                 credit_card_purchases,
                 credit_cards,
                 direct_expenses,
+                fixed_income_receipts,
+                fixed_income_amount_changes,
+                fixed_incomes,
                 incomes,
                 accounts
             RESTART IDENTITY CASCADE;

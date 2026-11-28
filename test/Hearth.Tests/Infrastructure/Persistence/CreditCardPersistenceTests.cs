@@ -396,6 +396,7 @@ public sealed class CreditCardPersistenceTests : IAsyncLifetime
                 scope.ServiceProvider.GetRequiredService<ICategoryRepository>(),
                 scope.ServiceProvider.GetRequiredService<ICategoryBudgetRepository>(),
                 incomes,
+                scope.ServiceProvider.GetRequiredService<IFixedIncomeRepository>(),
                 directs,
                 fixedExpenses,
                 purchases,

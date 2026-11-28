@@ -44,11 +44,16 @@ using Hearth.Application.FixedExpenses.MarkFixedExpenseAsPaid;
 using Hearth.Application.FixedExpenses.RegisterFixedExpense;
 using Hearth.Application.FixedExpenses.RevertFixedExpensePayment;
 using Hearth.Application.FixedExpenses.UpdateFixedExpenseDetails;
+using Hearth.Application.FixedIncomes.ConfirmFixedIncomeReceipt;
+using Hearth.Application.FixedIncomes.CreateFixedIncome;
+using Hearth.Application.FixedIncomes.DeleteFixedIncome;
+using Hearth.Application.FixedIncomes.ListFixedIncomes;
+using Hearth.Application.FixedIncomes.RevertFixedIncomeReceipt;
+using Hearth.Application.FixedIncomes.StopFixedIncome;
+using Hearth.Application.FixedIncomes.UpdateFixedIncome;
 using Hearth.Application.Incomes.DeleteIncome;
 using Hearth.Application.Incomes.ListIncomes;
-using Hearth.Application.Incomes.MarkIncomeAsReceived;
 using Hearth.Application.Incomes.RegisterIncome;
-using Hearth.Application.Incomes.RevertIncomeToExpected;
 using Hearth.Application.Incomes.UpdateIncome;
 using Hearth.Application.Invoices.GetInvoiceSummary;
 using Hearth.Application.PurchaseConditions.CreatePurchaseCondition;
@@ -129,11 +134,18 @@ public static class DependencyInjection
         services.AddScoped<CreatePurchaseConditionHandler>();
         services.AddScoped<ListPurchaseConditionsHandler>();
 
+        // Fixed incomes
+        services.AddScoped<CreateFixedIncomeHandler>();
+        services.AddScoped<UpdateFixedIncomeHandler>();
+        services.AddScoped<StopFixedIncomeHandler>();
+        services.AddScoped<DeleteFixedIncomeHandler>();
+        services.AddScoped<ConfirmFixedIncomeReceiptHandler>();
+        services.AddScoped<RevertFixedIncomeReceiptHandler>();
+        services.AddScoped<ListFixedIncomesHandler>();
+
         // Incomes
         services.AddScoped<RegisterIncomeHandler>();
         services.AddScoped<UpdateIncomeHandler>();
-        services.AddScoped<MarkIncomeAsReceivedHandler>();
-        services.AddScoped<RevertIncomeToExpectedHandler>();
         services.AddScoped<DeleteIncomeHandler>();
         services.AddScoped<ListIncomesHandler>();
 
